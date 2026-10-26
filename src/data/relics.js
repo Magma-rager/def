@@ -36,13 +36,18 @@ export const RELICS = {
   glitch_jar: { name: 'Glitch Jar', rarity: 'rare', icon: 'jar', tag: 'interference', text: 'Scrambled cards in your hand count as EX.' },
   kettle_drum: { name: 'Kettle Drum', rarity: 'rare', icon: 'drum', tag: 'ladder', text: 'Closers in combos of 5+ cards deal +25%.' },
   quiet_coil: { name: 'Quiet Coil', rarity: 'common', icon: 'spring', tag: 'guard', text: 'Guard decays 50% slower.' },
+  regent_mainspring: { name: "Regent's Mainspring", rarity: 'boss', icon: 'clock', tag: 'interference', boss: 'clockwork_regent', text: 'Enemy Locks last 1s less. Whenever a Lock expires, gain 1 Momentum.' },
+  scrap_heart: { name: 'Scrap Heart', rarity: 'boss', icon: 'shield', tag: 'guard', boss: 'scrap_tyrant', text: 'Start each battle with 10 Guard. Your Guard cap is raised by 20.' },
+  auditor_seal: { name: "Auditor's Seal", rarity: 'boss', icon: 'eye', tag: 'variant', boss: 'protocol_auditor', text: 'Citations can no longer be issued against you. Your first Perfect combo each battle grants +4 Momentum.' },
+  mirror_lens: { name: 'Mirror Lens', rarity: 'boss', icon: 'prism', tag: 'relay', boss: 'mirror_array', text: 'Echoes are 25% stronger.' },
+  root_key: { name: 'Root Key', rarity: 'boss', icon: 'jar', tag: 'interference', boss: 'the_corruptor', text: 'Glitch cards cannot be added to your deck. Scrambled cards deal +4 damage.' },
   overflow_valve: { name: 'Overflow Valve', rarity: 'uncommon', icon: 'gauge', tag: 'momentum', text: 'Momentum gained beyond the cap deals 3 damage per point to the target.' },
 };
 
 export const RELIC_IDS = Object.keys(RELICS);
 
 export function relicPool(exclude = []) {
-  return RELIC_IDS.filter((id) => RELICS[id].rarity !== 'starter' && !exclude.includes(id));
+  return RELIC_IDS.filter((id) => RELICS[id].rarity !== 'starter' && RELICS[id].rarity !== 'boss' && !exclude.includes(id));
 }
 
 // Relics that may be chosen as the starting relic once unlocked in the Museum.

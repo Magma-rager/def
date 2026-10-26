@@ -156,3 +156,15 @@ test('restarting or continuing a battle reuses the same encounter', () => {
   assert.deepEqual(a.enemies, c.enemies);
   assert.equal(a.seed, c.seed);
 });
+
+test('each boss offers its own trophy relic, and trophies never appear in normal pools', () => {
+  for (const [boss, trophy] of [['clockwork_regent', 'regent_mainspring'], ['scrap_tyrant', 'scrap_heart']]) {
+    const run = Run.create({ seed: 5 });
+    run.d.bosses[1] = boss;
+    const node = run.d.map.nodes.find((n) => n.type === 'boss');
+    const r = run.makeReward(node, 'boss', { scrapBonus: 0 });
+    assert.equal(r.relics[0], trophy);
+  }
+  const run = Run.create({ seed: 6 });
+  for (let i = 0; i < 50; i++) for (const id of run.randomRelics(run.rng('p', i), 3)) assert.notEqual(RELICS[id].rarity, 'boss');
+});

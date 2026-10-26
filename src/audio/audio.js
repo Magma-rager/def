@@ -197,10 +197,50 @@ export class AudioEngine {
     }
   }
 
+  // Low machinery ambience bed under the music (filtered noise + hum), tinted per context.
+  ambience(track) {
+    const c = this.ctx;
+    if (!this.amb) {
+      const src = c.createBufferSource();
+      src.buffer = this.noiseBuf;
+      src.loop = true;
+      const f = c.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.value = 260;
+      const lfo = c.createOscillator();
+      const lg = c.createGain();
+      lfo.frequency.value = 0.13;
+      lg.gain.value = 90;
+      lfo.connect(lg);
+      lg.connect(f.frequency);
+      const hum = c.createOscillator();
+      hum.type = 'sine';
+      hum.frequency.value = 55;
+      const hg = c.createGain();
+      hg.gain.value = 0.012;
+      const g = c.createGain();
+      g.gain.value = 0;
+      src.connect(f);
+      f.connect(g);
+      hum.connect(hg);
+      hg.connect(g);
+      g.connect(this.musicBus);
+      src.start();
+      lfo.start();
+      hum.start();
+      this.amb = { g, f, hum };
+    }
+    const level = track === 'title' ? 0.05 : track && track.startsWith('battle') ? 0.08 : track === 'boss' ? 0.1 : 0.06;
+    const hz = track === 'battle2' ? 70 : track === 'battle3' || track === 'boss' ? 41 : 55;
+    this.amb.g.gain.setTargetAtTime(level, c.currentTime, 0.8);
+    this.amb.hum.frequency.setTargetAtTime(hz, c.currentTime, 0.8);
+  }
+
   // ── music sequencer ──
   music(track) {
     this.wantTrack = track;
     if (!this.ctx) return;
+    this.ambience(track);
     if (this.track === track) return;
     this.track = track;
     this.step = 0;

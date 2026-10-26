@@ -298,6 +298,7 @@ export function rewardScreen(app, root) {
         b.addEventListener('click', () => {
           if (p.relicTaken) return;
           run.takeReward('relic', i);
+          app.toast(`Relic acquired: ${RELICS[id].name}`);
           app.audio.sfx('confirm');
           app.save();
           render();
@@ -352,6 +353,7 @@ export function shopScreen(app, root) {
       if (it.sold) b.classList.add('sold');
       else b.addEventListener('click', () => {
         const r = run.shopBuy('relic', i);
+        if (r.ok) app.toast(`Relic acquired: ${RELICS[it.id].name}`);
         app.audio.sfx(r.ok ? 'buy' : 'reject');
         if (!r.ok) app.toast(r.text || 'Not enough Scrap');
         app.save();
@@ -576,7 +578,7 @@ export function treasureScreen(app, root) {
       const b = relicBadge(app, id);
       b.append(h('span', { class: 'rb-text' }, RELICS[id].text));
       if (p.taken) b.classList.add(run.hasRelic(id) ? 'picked' : 'faded');
-      b.addEventListener('click', () => { if (run.treasureTake(i)) { app.audio.sfx('confirm'); app.save(); render(); } });
+      b.addEventListener('click', () => { if (run.treasureTake(i)) { app.toast(`Relic acquired: ${RELICS[id].name}`); app.audio.sfx('confirm'); app.save(); render(); } });
       row.append(b);
     });
     body.append(row, h('div', { class: 'row-btns end' }, btn(p.taken ? 'Continue' : 'Leave (take Scrap only)', () => { run.leaveNode(); app.save(); app.route(); }, 'primary')));

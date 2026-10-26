@@ -224,6 +224,7 @@ export class BattleView {
         case 'defeat': this.schedule(0.4, () => { this.dim = 1; }); break;
         case 'momentum': if (ev.delta > 0 && ev.why === 'Perfect') this.sfx('momentum'); break;
         case 'counter': this.floatAt('V', `COUNTER ${ev.amount}`, '#e6c779', 11); break;
+        case 'partyStatus': this.schedule(enemyImpact || 0.2, () => this.floatAt(ev.who, 'WEAK', '#9ec4d8', 13)); break;
         case 'enemyGuard': { const a = this.enemyActors.get(ev.uid); if (a) this.enemyNumber(a, `+${ev.amount}`, '#9ec4d8', 12, 'shield'); this.sfx('enemyGuard'); break; }
         case 'enemyHeal': { const a = this.enemyActors.get(ev.uid); if (a) this.enemyNumber(a, `+${ev.amount}`, '#8ed49a', 13); break; }
         case 'banner': this.hooks.banner && this.hooks.banner(ev.text, ev.sub, ev.tone); break;
@@ -1091,6 +1092,13 @@ export class BattleView {
       ctx.textAlign = 'right';
       ctx.fillStyle = '#efe2c6';
       ctx.fillText(`${Math.ceil(p.hp)}/${p.maxHp}`, bx + bw, by + (compact ? 6 : 9));
+      if (!p.ko && p.st.weak && p.st.weak > c.t) {
+        const left = p.st.weak - c.t;
+        drawIcon(ctx, 'down', bx - 9, by + 3, 12, '#9ec4d8');
+        ctx.textAlign = 'right';
+        ctx.fillStyle = '#9ec4d8';
+        ctx.fillText(`WEAK ${left.toFixed(0)}s`, bx - 16, by + (compact ? 6 : 9));
+      }
     }
     void t;
   }

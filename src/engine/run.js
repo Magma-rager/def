@@ -408,7 +408,11 @@ export class Run {
       kind: isBoss ? 'boss' : kind, boost: node.trait === 'STATIC', grafted: node.trait === 'WILD_SIGNAL',
     });
     let relics = [];
-    if (isBoss) relics = this.randomRelics(rng, 3, ['rare', 'uncommon']);
+    if (isBoss) {
+      const bossId = this.d.bosses[this.d.act];
+      const trophy = Object.keys(RELICS).find((id) => RELICS[id].boss === bossId && !this.d.relics.includes(id));
+      relics = [...(trophy ? [trophy] : []), ...this.randomRelics(rng, trophy ? 2 : 3, ['rare', 'uncommon'])];
+    }
     else if (kind === 'elite' || (node.trait === 'BLACKOUT' && rng.chance(0.5))) relics = this.randomRelics(rng, 1);
     return {
       type: 'reward', nodeId: node.id, boss: isBoss, scrap, scrapTaken: false, cards, cardTaken: false,

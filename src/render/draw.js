@@ -92,12 +92,34 @@ export function rad(ctx, x, y, r0, r1, stops) {
   return g;
 }
 
+// Additive soft glow. Uses cached radial-gradient sprites (one per color) for speed.
+const glowSprites = new Map();
+function glowSprite(color) {
+  let s = glowSprites.get(color);
+  if (s) return s;
+  if (typeof document === 'undefined') return null;
+  s = document.createElement('canvas');
+  s.width = s.height = 128;
+  const g = s.getContext('2d');
+  const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, color);
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  glowSprites.set(color, s);
+  return s;
+}
 export function glow(ctx, x, y, r, color, alpha = 1) {
+  if (r <= 0 || alpha <= 0) return;
+  const sprite = glowSprite(color);
   ctx.save();
-  ctx.globalAlpha *= alpha;
+  ctx.globalAlpha *= Math.min(1, alpha);
   ctx.globalCompositeOperation = 'lighter';
-  ctx.fillStyle = rad(ctx, x, y, 0, r, [color, 'rgba(0,0,0,0)']);
-  ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  if (sprite) ctx.drawImage(sprite, x - r, y - r, r * 2, r * 2);
+  else {
+    ctx.fillStyle = rad(ctx, x, y, 0, r, [color, 'rgba(0,0,0,0)']);
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
   ctx.restore();
 }
 

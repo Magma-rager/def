@@ -74,7 +74,11 @@ export const ENEMIES = {
   suit_scrambler: {
     name: 'Suit Scrambler', act: 2, tier: 'normal', hp: 44, actTime: 5.0, art: 'scrambler', size: 1,
     lore: 'Shuffles your intentions. Sometimes your cards too.',
-    intents: { flip: scramble('Suit Flip', 2, 'suit'), needle: atk('Needle', 8), reshuffle: scramble('Rank Shuffle', 2, 'rank', 3) },
+    intents: {
+      flip: scramble('Suit Flip', 2, 'suit'),
+      needle: { kind: 'atk', name: 'Hex Needle', dmg: 7, desc: 'Strike one ally for 7 and make them Weak for 4s (their cards deal -25%).', exec: (e, c, it) => { c.hitParty(e, it.target, c.edmg(e, 7)); c.weakenParty(e, it.target, 4); } },
+      reshuffle: scramble('Rank Shuffle', 2, 'rank', 3),
+    },
     ai: cycle('flip', 'needle', 'reshuffle', 'needle'),
   },
   needle_wing: {
@@ -190,7 +194,7 @@ export const ENEMIES = {
     lore: 'A parry mechanic with a sword attached.',
     intents: {
       parry: { kind: 'special', name: 'Parry Stance', desc: 'For 3s, reflects 50% of damage it takes back at the attacker. Hold your attacks!', exec: (e, c) => c.enemyStatus(e, 'parry', 3) },
-      cleave: aoe('Null Cleave', 10),
+      cleave: { kind: 'aoe', name: 'Null Cleave', dmg: 10, desc: 'Hit every ally for 10 and make them Weak for 3s.', exec: (e, c) => { c.hitAll(e, c.edmg(e, 10)); c.weakenParty(e, 'all', 3); } },
       execute: { kind: 'atk', name: 'Execute', dmg: 20, desc: 'Strike the most injured ally for 20.', exec: (e, c, it) => c.hitParty(e, it.target, c.edmg(e, 20)) },
     },
     targetMode: 'lowest',

@@ -137,6 +137,7 @@ export class Combat {
     if (this.prep.startGuard) this.addGuard(this.prep.startGuard, true);
     if (this.prep.churnBonus) this.churn.charges += this.prep.churnBonus;
     if (this.relics.has('signal_flare')) for (const e of this.enemies) e.st.exposed = 6;
+    if (this.relics.has('scrap_heart')) this.addGuard(10, true);
     for (const e of this.enemies) {
       if (e.tier !== 'boss') continue;
       if (this.prep.bossDelay) e.atb = -this.prep.bossDelay / e.actTime;
@@ -190,6 +191,9 @@ export class Combat {
   }
   churnMax() {
     return RULES.CHURN_MAX + (this.relics.has('churn_gear') ? 1 : 0) + (this.mutations.has('grinder') ? 2 : 0);
+  }
+  guardCap() {
+    return RULES.GUARD_CAP + (this.relics.has('scrap_heart') ? 20 : 0);
   }
   reserveMax() {
     return RULES.RESERVE + (this.relics.has('spare_pockets') ? 1 : 0) + (this.mutations.has('deep_pockets') ? 1 : 0);
@@ -474,7 +478,7 @@ export class Combat {
   }
 
   addGuard(n, silent) {
-    n = Math.max(0, Math.min(Math.round(n), RULES.GUARD_CAP - Math.floor(this.guard)));
+    n = Math.max(0, Math.min(Math.round(n), this.guardCap() - Math.floor(this.guard)));
     if (!n) return;
     this.guard += n;
     this.lastGuardT = this.t;
@@ -492,6 +496,7 @@ export class Combat {
     const wasLocked = this.wasLocked.has(uid);
     this.wasLocked.delete(uid);
     const disruptedAtPlay = this.disruptedCount() > 0;
+    const scrambledAtPlay = this.isScrambled(uid);
     // remove from its zone
     if (fromReserve) this.reserve.splice(this.reserve.indexOf(uid), 1);
     else this.hand[this.hand.indexOf(uid)] = null;
@@ -557,6 +562,7 @@ export class Combat {
     if (fromReserve && this.relics.has('spare_pockets')) bonus += 3;
     if (fromReserve && this.mutations.has('deep_pockets')) bonus += 4;
     if (kind === 'cross' && this.mutations.has('duality_engine')) bonus += 4;
+    if (scrambledAtPlay && this.relics.has('root_key')) bonus += 4;
     bonus += c.harness * 2;
 
     let mult = 1;
@@ -613,6 +619,7 @@ export class Combat {
     if (!e) return;
     const inst = this.cards.get(e.uid);
     const d = CARDS[e.id];
+    if (this.relics.has('mirror_lens')) mult *= 1.25;
     this.emit({ type: 'echo', who: e.owner, card: e.name, anim: d.anim, mult });
     const api = this.makeApi(e, inst, d, { mult, bonus: 0, echoing: true, creditEntry: creditEntry || null, ctx: c });
     d.fx(api);
@@ -886,6 +893,7 @@ export class Combat {
     if (type === 'perfect') {
       this.stats.perfect++;
       let m = 2 + (this.mutations.has('perfect_pitch') ? 2 : 0);
+      if (this.stats.perfect === 1 && this.relics.has('auditor_seal')) m += 4;
       this.gainMomentum(m, 'Perfect');
       if (this.mutations.has('perfect_pitch')) this.addGuard(6);
       this.gainChurn(1);
@@ -939,6 +947,7 @@ export class Combat {
 
   // ── Protocol Auditor / Core citation system ──
   auditPatterns(e) {
+    if (this.relics.has('auditor_seal')) { this.emit({ type: 'banner', text: 'AUDIT BLOCKED', sub: "Auditor's Seal", tone: 'good' }); return; }
     const h = this.history;
     if (h.length < 2) { this.emit({ type: 'banner', text: 'AUDIT: INSUFFICIENT DATA', sub: 'No citation issued', tone: 'info' }); return; }
     const a = h[h.length - 1], b = h[h.length - 2];
@@ -1197,6 +1206,14 @@ export class Combat {
     if (e.hp > before) this.emit({ type: 'enemyHeal', uid: e.uid, amount: e.hp - before });
   }
 
+  weakenParty(e, pid, dur) {
+    const targets = pid === 'all' ? this.party.filter((p) => !p.ko) : [this.member(pid) || this.pickTargetMember(e)].filter(Boolean);
+    for (const p of targets) {
+      p.st.weak = Math.max(p.st.weak || 0, this.t + dur);
+      this.emit({ type: 'partyStatus', who: p.id, kind: 'weak', dur });
+    }
+  }
+
   enemyStatus(e, kind, dur, pct) {
     e.st[kind] = dur;
     if (kind === 'parry') e.st.parryPct = pct || 0.5;
@@ -1214,6 +1231,7 @@ export class Combat {
     if (e && e.tier === 'boss' && this.adaptOn('lock_harden')) dur = 4.5;
     if (this.relics.has('grease_trap')) dur *= 0.5;
     if (this.relics.has('breach_clamp')) dur -= 1;
+    if (this.relics.has('regent_mainspring')) dur -= 1;
     dur = Math.max(1, dur);
     const pri = { close: 3, conv: 2, open: 1 };
     const cands = this.hand
@@ -1292,6 +1310,7 @@ export class Combat {
   }
 
   addGlitch(e, n) {
+    if (this.relics.has('root_key')) { this.emit({ type: 'banner', text: 'CORRUPTION BLOCKED', sub: 'Root Key', tone: 'good' }); return; }
     for (let i = 0; i < n; i++) {
       const uid = `g${++this.uidCounter}`;
       this.cards.set(uid, { uid, id: 'glitch', up: false, temp: true });
@@ -1385,7 +1404,12 @@ export class Combat {
       this.phase = 'PRE';
       this.emit({ type: 'ready' });
     }
-    for (const uid of Object.keys(this.locks)) if (this.locks[uid].until <= t) this.unlock(uid);
+    for (const uid of Object.keys(this.locks)) {
+      if (this.locks[uid].until <= t) {
+        this.unlock(uid);
+        if (this.relics.has('regent_mainspring')) this.gainMomentum(1, 'Mainspring');
+      }
+    }
     for (const uid of Object.keys(this.temp)) {
       if (this.temp[uid].until <= t) {
         delete this.temp[uid];
