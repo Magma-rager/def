@@ -11,6 +11,18 @@ Granraku, a cynical trash-game hunter, enters a malfunctioning experimental card
 - **Build:** `npm install && npm run build` writes `dist/index.html` (full PWA document), `dist/artifact.html` (page fragment for embedded hosting), `dist/sw.js`, the manifest and the icon.
 - **Tests:** `npm test` runs the engine, run-layer and archetype tests (Node built-in test runner).
 
+### iPad / iPhone App Store build (no Mac)
+
+`npm run build:ios` writes `dist/ios/SignalBreak.swiftpm.zip`: a Swift Playgrounds app project that runs the game offline in a full-screen web view (fonts and saves included).
+
+1. Create the app record in App Store Connect (web) with a bundle ID, e.g. `com.yourname.signalbreak`.
+2. Copy the zip to the iPad (AirDrop, iCloud Drive or Files), unzip it, and open `SignalBreak.swiftpm` in Swift Playgrounds.
+3. Tap Run to test on the iPad.
+4. In App Settings set your Team and the same Bundle ID; the custom icon and Games category are preset.
+5. Tap Upload to App Store Connect, then finish the listing and submit for review on the App Store Connect website.
+
+`tools/asc-upload.mjs` uploads an existing `.ipa` from any OS through Apple's Build Upload API (`npm run upload:ios -- --ipa App.ipa --app-id … --version … --build … --key AuthKey.p8 --key-id … --issuer …`, `--dry-run` to preview).
+
 ### Controls
 
 | Action | Touch | Keyboard |

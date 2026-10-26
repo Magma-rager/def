@@ -1,0 +1,4 @@
+Barlow Condensed (Jeremy Tribby), Big Shoulders Display (Patric King / Chicago Design System) and
+Spectral (Production Type) are licensed under the SIL Open Font License, Version 1.1.
+https://openfontlicense.org — the fonts may be bundled, embedded and redistributed with software.
+Files are the latin subsets served by Google Fonts.

@@ -4,7 +4,19 @@
 import { build } from 'esbuild';
 import fs from 'node:fs';
 
-const FONTS = '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Big+Shoulders+Display:wght@700;800;900&family=Spectral:ital,wght@0,400;0,600;1,400&display=swap">';
+// Fonts are embedded as base64 so every build (file, PWA, iOS app) renders identically offline.
+// Faces that share one variable-font file are merged into a single weight-range face.
+const faces = new Map();
+for (const block of fs.readFileSync('public/fonts/fonts.css', 'utf8').split('@font-face').slice(1)) {
+  const file = block.match(/url\(([^)]+\.woff2)\)/)[1];
+  const weight = +block.match(/font-weight: (\d+)/)[1];
+  const f = faces.get(file);
+  if (f) { f.min = Math.min(f.min, weight); f.max = Math.max(f.max, weight); } else faces.set(file, { block, min: weight, max: weight });
+}
+const fontCss = [...faces].map(([file, f]) => '@font-face' + f.block
+  .replace(/font-weight: \d+/, `font-weight: ${f.min === f.max ? f.min : `${f.min} ${f.max}`}`)
+  .replace(file, `data:font/woff2;base64,${fs.readFileSync('public/fonts/' + file).toString('base64')}`)).join('');
+const FONTS = `<style>${fontCss}</style>`;
 
 const res = await build({ entryPoints: ['src/main.js'], bundle: true, minify: true, format: 'iife', target: ['es2020', 'safari15'], write: false, legalComments: 'none' });
 const js = res.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
@@ -40,6 +52,24 @@ ${FONTS}
 <script>${js}</script>
 `;
 fs.writeFileSync('dist/artifact.html', fragment);
+
+// Page used inside native wrappers (iOS app): no manifest, icon or service worker links.
+const app = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>SIGNAL//BREAK</title>
+${FONTS}
+<style>${css}</style>
+</head>
+<body>
+<div id="app"></div>
+<script>${js}</script>
+</body>
+</html>
+`;
+fs.writeFileSync('dist/app.html', app);
 
 fs.copyFileSync('public/manifest.webmanifest', 'dist/manifest.webmanifest');
 fs.copyFileSync('public/icon.svg', 'dist/icon.svg');
