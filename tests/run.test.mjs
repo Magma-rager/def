@@ -143,3 +143,16 @@ test('shop purchases modify currency and inventory', () => {
   assert.ok(run.shopService('remove', victim.uid));
   assert.ok(!run.card(victim.uid));
 });
+
+test('restarting or continuing a battle reuses the same encounter', () => {
+  const run = Run.create({ seed: 77 });
+  run.d.pending = null;
+  run.enterNode(run.availableNodes()[0]);
+  const a = run.battleSetup();
+  const re = Run.load(JSON.parse(JSON.stringify(run.serialize())));
+  const b = re.battleSetup();
+  const c = run.battleSetup();
+  assert.deepEqual(a.enemies, b.enemies);
+  assert.deepEqual(a.enemies, c.enemies);
+  assert.equal(a.seed, c.seed);
+});

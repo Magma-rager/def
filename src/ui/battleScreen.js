@@ -409,19 +409,20 @@ export class BattleScreen {
     const c = this.combat;
     this.updateHand();
     this.updateReserve();
-    // flow strip
+    // flow strip (writes only when values change)
+    const set = (key, fn, val) => { if (this[key] !== val) { this[key] = val; fn(val); } };
     if (c.phase === 'ACTIVE' && c.combo) {
       const left = c.flowLeft();
       const cap = c.flowCap() - c.t;
-      this.flowFill.style.width = `${Math.min(100, (left / RULES.FLOW_ABS_MAX) * 100)}%`;
-      this.flowCap.style.width = `${Math.min(100, (cap / RULES.FLOW_ABS_MAX) * 100)}%`;
-      this.flowText.textContent = `FLOW ${left.toFixed(1)}s`;
-      this.flowBar.className = `flow-bar active${left < 1 ? ' low' : ''}`;
+      set('_ff', (v) => (this.flowFill.style.width = v), `${Math.min(100, (left / RULES.FLOW_ABS_MAX) * 100).toFixed(1)}%`);
+      set('_fc', (v) => (this.flowCap.style.width = v), `${Math.min(100, (cap / RULES.FLOW_ABS_MAX) * 100).toFixed(1)}%`);
+      set('_ft', (v) => (this.flowText.textContent = v), `FLOW ${left.toFixed(1)}s`);
+      set('_fb', (v) => (this.flowBar.className = v), `flow-bar active${left < 1 ? ' low' : ''}`);
     } else {
-      this.flowFill.style.width = '0%';
-      this.flowCap.style.width = '0%';
-      this.flowText.textContent = c.phase === 'RECOVER' ? 'RECOVERING…' : c.phase === 'END' ? '—' : 'PRE-COMBO · PLAY AN OPENER';
-      this.flowBar.className = `flow-bar ${c.phase === 'PRE' ? 'pre' : ''}`;
+      set('_ff', (v) => (this.flowFill.style.width = v), '0%');
+      set('_fc', (v) => (this.flowCap.style.width = v), '0%');
+      set('_ft', (v) => (this.flowText.textContent = v), c.phase === 'RECOVER' ? 'RECOVERING…' : c.phase === 'END' ? '—' : 'PRE-COMBO · PLAY AN OPENER');
+      set('_fb', (v) => (this.flowBar.className = v), `flow-bar ${c.phase === 'PRE' ? 'pre' : ''}`);
     }
     // combo chips
     const combo = c.combo;
@@ -453,17 +454,17 @@ export class BattleScreen {
     }
     const fc = c.momentumCostFlow();
     this.flowBtn.disabled = !(c.phase === 'ACTIVE' && c.momentum >= fc && c.combo && c.combo.deadline < c.flowCap() - 0.01);
-    this.flowBtn.querySelector('.ctl-sub').textContent = `${fc}M · +${c.flowSpendAmount()}s`;
+    set('_fbs', (v) => (this.flowBtn.querySelector('.ctl-sub').textContent = v), `${fc}M · +${c.flowSpendAmount()}s`);
     this.guardBtn.disabled = !(c.momentum >= RULES.MOMENTUM_COST && c.phase !== 'END');
-    this.guardBtn.querySelector('.ctl-sub').textContent = `${RULES.MOMENTUM_COST}M · +${c.guardSpendAmount()}`;
+    set('_gbs', (v) => (this.guardBtn.querySelector('.ctl-sub').textContent = v), `${RULES.MOMENTUM_COST}M · +${c.guardSpendAmount()}`);
     // guard & churn
     const g = Math.floor(c.guard);
-    this.guardEl.innerHTML = `<span class="ic">▣</span><b>${g}</b><span class="lbl">GUARD</span>${c.counter ? `<span class="counter">↺${c.counter}</span>` : ''}`;
+    set('_gh', (v) => (this.guardEl.innerHTML = v), `<span class="ic">▣</span><b>${g}</b><span class="lbl">GUARD</span>${c.counter ? `<span class="counter">↺${c.counter}</span>` : ''}`);
     const snared = c.churnJamUntil > c.t;
     let dots = '';
     for (let i = 0; i < c.churnMax(); i++) dots += `<i class="${i < c.churn.charges ? 'on' : ''}"></i>`;
     const free = c.relics.has('beta_badge') && !c.churn.freeUsed;
-    this.churnEl.innerHTML = `<span class="ic">⟲</span><span class="dots">${dots}</span><span class="lbl">${snared ? 'SNARED' : 'CHURN'}</span>${free && !snared ? '<span class="free">FREE</span>' : ''}`;
+    set('_ch', (v) => (this.churnEl.innerHTML = v), `<span class="ic">⟲</span><span class="dots">${dots}</span><span class="lbl">${snared ? 'SNARED' : 'CHURN'}</span>${free && !snared ? '<span class="free">FREE</span>' : ''}`);
     this.churnEl.classList.toggle('snared', snared);
     // cash out
     const can = c.canCashOut();
@@ -471,10 +472,10 @@ export class BattleScreen {
     const sub = this.cashBtn.querySelector('.ctl-sub');
     if (can) {
       const p = c.payoutAmount(1);
-      sub.textContent = `${p.quick ? 'QUICK · ' : ''}≈${p.amount} dmg +${p.guard}▣`;
+      set('_cs', (v) => (sub.textContent = v), `${p.quick ? 'QUICK · ' : ''}≈${p.amount} dmg +${p.guard}▣`);
       this.cashBtn.classList.toggle('quick', p.quick);
     } else {
-      sub.textContent = c.phase === 'ACTIVE' ? 'needs 2+ cards' : 'during a combo';
+      set('_cs', (v) => (sub.textContent = v), c.phase === 'ACTIVE' ? 'needs 2+ cards' : 'during a combo');
       this.cashBtn.classList.remove('quick');
     }
     // adaptation & citation
@@ -550,8 +551,12 @@ export class BattleScreen {
       if (locked) {
         const l = c.locks[uid];
         const left = Math.max(0, l.until - c.t);
-        s.lockTime.textContent = left.toFixed(1);
-        s.lockRing.style.strokeDashoffset = String(94.2 * (1 - left / l.dur));
+        const txt = left.toFixed(1);
+        if (s.lockTxt !== txt) {
+          s.lockTxt = txt;
+          s.lockTime.textContent = txt;
+          s.lockRing.style.strokeDashoffset = String(94.2 * (1 - left / l.dur));
+        }
       }
     }
   }

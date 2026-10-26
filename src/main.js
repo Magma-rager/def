@@ -225,6 +225,7 @@ class App {
       h('p', { class: 'dim' }, this.battle ? 'Combat time is frozen: Flow, ATB, locks and statuses are all stopped.' : 'Run saved.'),
       h('div', { class: 'pause-btns' },
         btn('Resume', () => { close(); }, 'primary big'),
+        this.battle ? btn('Restart encounter', () => this.confirm('Restart this encounter?', 'The fight restarts from the beginning with the same enemies. Your deck and HP are as they were when it began.', 'Restart', () => { this.closeAllModals(); this.startBattle(); }), '') : null,
         btn('View deck', () => this.viewDeck(), ''),
         btn('How to play', () => this.howToPlay(), ''),
         btn('Settings', () => this.openSettings(), ''),

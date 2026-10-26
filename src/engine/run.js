@@ -304,7 +304,10 @@ export class Run {
     let enemies;
     let tutorial = false;
     const isBoss = node.type === 'boss';
-    if (p.kind === 'boss' || node.type === 'boss') enemies = [this.d.bosses[act]];
+    if (p.enemies) {
+      enemies = p.enemies.slice();
+      tutorial = !!p.tutorial;
+    } else if (p.kind === 'boss' || node.type === 'boss') enemies = [this.d.bosses[act]];
     else if (p.kind === 'elite') {
       const opts = ELITES[act].filter((e) => e !== this.d.lastElite);
       enemies = [rng.pick(opts.length ? opts : ELITES[act])];
@@ -317,6 +320,8 @@ export class Run {
       enemies = rng.weighted(pool.map((f) => [f[1], f[0]]));
       this.d.lastFormation = enemies.join();
     }
+    p.enemies = enemies.slice();
+    p.tutorial = tutorial;
     const tierHp = isBoss ? 1.5 : p.kind === 'elite' ? 1.65 : 1.75;
     let hpMult = tierHp * (1 + node.depth * 0.035) * (1 + 0.08 * (act - 1));
     let dmgMult = 1.1 * (1 + node.depth * 0.02);
