@@ -50,7 +50,7 @@ export const Save = {
 };
 
 export function defaultSettings() {
-  return { master: 0.8, music: 0.55, sfx: 0.8, muted: false, reducedMotion: false, shake: true, hints: true };
+  return { master: 0.8, music: 0.55, sfx: 0.8, muted: false, reducedMotion: false, shake: true, hints: true, relaxed: false };
 }
 
 export function defaultMeta() {

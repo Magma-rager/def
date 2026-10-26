@@ -259,3 +259,16 @@ test('randomized soak: thousands of actions keep zones intact and timers sane', 
     }
   }
 });
+
+test('stand-in rule: when only knocked-out heroes own Openers, a standing ally plays them', () => {
+  const ids = ['scrapline', 'scrapline', 'step_up', 'splitter', 'bolt_volley', 'rethread', 'last_word'];
+  const c = new Combat({ deck: ids.map((id, i) => ({ uid: `s${i}`, id })), party: PARTY.map((p) => ({ ...p })), enemies: ['iron_maw'], seed: 4, act: 1 });
+  c.enemies[0].atb = -100;
+  c.koMember(c.member('S'));
+  const op = c.hand.find((u) => u && c.roleOf(u) === 'open');
+  assert.ok(op, 'opener still in hand');
+  assert.ok(c.check(op).ok, 'opener playable via stand-in');
+  c.playCard(op);
+  assert.notEqual(c.combo.owner, 'S');
+  assert.deepEqual(c.verifyZones(), { ok: true });
+});

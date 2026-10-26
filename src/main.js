@@ -121,6 +121,7 @@ class App {
   startRun(starterRelic) {
     const seed = (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0;
     this.run = Run.create({ seed, starterRelic, tutorial: !this.meta.tutorialDone });
+    if (this.meta.totalRuns > 0 && this.meta.tutorialDone) this.run.d.pending = { type: 'story', scene: 'intro_return', next: 'map' };
     this.save();
     this.route();
   }
@@ -140,7 +141,7 @@ class App {
     if (!p) { this.show(S.mapScreen); return; }
     switch (p.type) {
       case 'story': {
-        const lines = SCENES[p.scene] || [];
+        const lines = this.sceneLines(p.scene);
         this.show(S.mapScreen);
         S.storyDialog(this, lines, () => {
           if (p.next === 'map') run.d.pending = null;
@@ -170,8 +171,44 @@ class App {
     }
   }
 
+  // Story lines, with variations that react to cross-run memory and the current build.
+  sceneLines(scene) {
+    const m = this.meta;
+    const run = this.run;
+    if (scene === 'intro_return') {
+      const lines = [{ who: 'gran', text: `Shovelware Safari, episode ${212 + m.totalRuns}. Back in SIGNAL//BREAK. Run number ${m.totalRuns + 1}.` }];
+      if (m.wins > 0) lines.push({ who: 'dev', text: 'You again. The one who FINISHED it. I patched nothing. I was too busy staring at the telemetry.' });
+      else if (m.defeats >= 3) lines.push({ who: 'dev', text: `${m.defeats} defeats and you keep coming back. Is it... is it the Relay? It's the Relay, isn't it.` });
+      else lines.push({ who: 'dev', text: 'Oh. You came back. Nobody comes back. Please do not tell the publisher.' });
+      if (m.devTrust > 0) lines.push({ who: 'dev', text: 'I, um. Kept the napkin. The one with the baton diagram.' });
+      if (m.bestCombo >= 6) lines.push({ who: 'gran', text: `Personal best: a ${m.bestCombo}-card chain. Let's beat it.` });
+      lines.push({ who: 'V', text: 'Commander. Same formation as last time?' }, { who: 'gran', text: 'Same formation. New deck.' });
+      return lines;
+    }
+    const base = SCENES[scene] || [];
+    if (scene.startsWith('boss_win') && run) {
+      const arch = run.archetypeLabel();
+      const quip = {
+        'Rank Ladder': 'You climbed it rank by rank like a ladder I forgot to remove.',
+        'Suit Switching': 'All that suit switching. A, B, A, B. My eyes hurt. In a good way? No. Bad way.',
+        'Relay Echo': 'Echoes on echoes. The boss lost to its own reflection of your team.',
+        'Momentum Burst': 'You hoarded Momentum and spent it all at once. That is fiscally irresponsible.',
+        'Flow Extension': 'You squeezed every hundredth of a second out of the Flow window. I measured.',
+        'Churn Engine': 'You rerolled your way to victory. The Churn button has filed a complaint.',
+        'Reserve Strategy': 'You saved cards for later. Later came. It was bad for my boss.',
+        'Guard & Counter': 'You just... stood behind a shield and hit back? That is a valid strategy, apparently.',
+        'Cash Out': 'Cash Out, Cash Out, Cash Out. You treated my boss like an ATM.',
+        'Interference Exploit': 'You turned my interference into ammunition. That is MY interference.',
+      }[arch];
+      if (quip) return [{ who: 'dev', text: quip }, ...base];
+    }
+    return base;
+  }
+
   startBattle() {
     const setup = this.run.battleSetup();
+    setup.assist = !!this.settings.relaxed;
+    if (setup.assist) this.run.d.flags.assistUsed = true;
     this.save();
     this.show(() => {});
     const screen = new BattleScreen(this, setup, (outcome, combat) => this.onBattleEnd(outcome, combat, setup));
@@ -393,6 +430,7 @@ class App {
       }),
       toggle('shake', 'Screen shake', () => { if (this.battle) this.battle.view.shakeEnabled = s.shake; }),
       toggle('hints', 'Tutorial hints'),
+      toggle('relaxed', 'Assist: relaxed enemy speed (−25% enemy ATB; Flow rules unchanged)'),
       h('div', { class: 'row-btns' },
         btn('Replay tutorial hints', () => { this.meta.tut = {}; this.saveMeta(); this.toast('Tutorial hints reset.'); }, 'small'),
         btn('Erase all data', () => this.confirm('Erase everything?', 'Deletes the current run, Museum records and settings on this device.', 'Erase', () => {

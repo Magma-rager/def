@@ -1,8 +1,33 @@
 // Card DOM rendering (hand cards, reward cards, deck grids, reserve minis).
 import { CARDS, ROLE_NAMES, OWNER_NAMES, GRAFTS, cardValue } from '../data/cards.js';
 import { ICON_PATHS } from '../render/icons.js';
+import { LOOKS, POSES, drawCharacter } from '../render/rig.js';
 import { h, esc } from './dom.js';
 
+// Hero vignettes for card art: each owner rendered in the pose of the card's action, cached as data URLs.
+const VIGNETTE_POSE = { melee: 'strike', shoot: 'fire', cast: 'castRelease', guard: 'guard', buff: 'flourish' };
+const vignettes = {};
+function vignette(owner, anim) {
+  const key = owner + anim;
+  if (vignettes[key] !== undefined) return vignettes[key];
+  vignettes[key] = '';
+  try {
+    if (typeof document === 'undefined' || !LOOKS[owner]) return '';
+    const cv = document.createElement('canvas');
+    cv.width = 200;
+    cv.height = 150;
+    const ctx = cv.getContext('2d');
+    const pose = POSES[owner][VIGNETTE_POSE[anim] || 'idle'];
+    ctx.translate(owner === 'S' ? 62 : 70, 152);
+    const k = owner === 'S' ? 1.42 : 1.3;
+    ctx.scale(k, k);
+    drawCharacter(ctx, LOOKS[owner], { ...pose, x: 0, glow: Math.max(pose.glow || 0, 0.6) }, 0.4);
+    vignettes[key] = cv.toDataURL('image/png');
+  } catch (e) {
+    vignettes[key] = '';
+  }
+  return vignettes[key];
+}
 const GLYPH_MAP = { gear: 'summon', bolt: 'bolt', arrow: 'sword', shield: 'shield', hammer: 'sword', flame: 'flame', spiral: 'scramble', box: 'chest', star: 'star', eye: 'eye', coin: 'coin', ladder: 'up', wave: 'wave', prism: 'prism', hook: 'hook', clock: 'hourglass', chain: 'lock', glitch: 'glitch' };
 const ROLE_GLYPH = { open: '▶', conv: '⟳', close: '■', junk: '✕' };
 
@@ -43,7 +68,7 @@ export function cardEl(inst, opts = {}) {
         <span class="var">${variant}</span>
         <span class="role-tag"><i>${ROLE_GLYPH[def.role]}</i>${ROLE_NAMES[def.role]}</span>
       </div>
-      <div class="card-art">${artSvg(def)}<span class="owner-chip">${owner === 'X' ? '!' : owner}</span>${def.rarity === 'rare' ? '<span class="rare-gem"></span>' : ''}</div>
+      <div class="card-art"${def.owner && vignette(def.owner, def.anim) ? ` style="--vig:url(${vignette(def.owner, def.anim)})"` : ''}>${artSvg(def)}<span class="owner-chip">${owner === 'X' ? '!' : owner}</span>${def.rarity === 'rare' ? '<span class="rare-gem"></span>' : ''}</div>
       <div class="card-name">${esc(def.name)}${inst.up ? '<sup>+</sup>' : ''}</div>
       <div class="card-text">${cardText(def, inst.up)}</div>
       <div class="card-foot">${inst.graft ? `<span class="graft">${GRAFTS[inst.graft].name}</span>` : ''}${mods.join('')}<span class="reason"></span></div>

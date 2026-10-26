@@ -18,6 +18,7 @@
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
+html { touch-action: manipulation; }
 html, body { height: 100%; margin: 0; background: var(--char2); color: var(--cream); overflow: hidden; }
 body { font-family: var(--font-ui); font-size: 15px; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; overscroll-behavior: none; }
 #app { position: fixed; inset: 0; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); background: radial-gradient(ellipse at 50% 30%, #2a1a24, var(--char2) 70%); }
@@ -278,9 +279,12 @@ p { margin: 0 0 0.7em; line-height: 1.35; }
 .role-conv .role-tag { background: var(--brass-lo); }
 .role-close .role-tag { background: var(--rust); }
 .role-junk .role-tag { background: #333; }
-.card-art { position: relative; flex: 1 1 auto; min-height: calc(18px * var(--cs)); border-radius: calc(4px * var(--cs)); background: radial-gradient(circle at 70% 25%, color-mix(in srgb, var(--oc) 55%, #fff 10%), var(--oc2) 75%); border: 1px solid rgba(0, 0, 0, 0.35); overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.card-art { position: relative; flex: 1 1 auto; min-height: calc(18px * var(--cs)); border-radius: calc(4px * var(--cs)); background: radial-gradient(circle at 70% 25%, var(--oc), var(--oc2) 75%); background: radial-gradient(circle at 70% 25%, color-mix(in srgb, var(--oc) 55%, #fff 10%), var(--oc2) 75%); border: 1px solid rgba(0, 0, 0, 0.35); overflow: hidden; display: flex; align-items: center; justify-content: center; }
 .card-art::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.05) 0 2px, transparent 2px 7px); }
-.card-glyph { width: 70%; height: 82%; }
+.card-art::before { content: ''; position: absolute; inset: 0; background-image: var(--vig, none); background-repeat: no-repeat; background-size: auto 112%; background-position: left -4% bottom 0; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.45)); z-index: 0; }
+.card-glyph { width: 70%; height: 82%; position: relative; z-index: 1; }
+.card-art[style] .card-glyph { width: 44%; height: 70%; margin-left: auto; margin-right: 4%; }
+.compact .hand .card-art::before { background-size: auto 230%; background-position: left 10% top 18%; }
 .card-glyph .g-line { fill: none; stroke: #fff4dc; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5)); }
 .card-glyph .g-fill { fill: #fff4dc; filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5)); }
 .card-glyph .g-gear { fill: none; stroke: rgba(255, 230, 180, 0.25); stroke-width: 1.4; stroke-dasharray: 2 1.5; }

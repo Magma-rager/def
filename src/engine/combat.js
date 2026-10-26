@@ -171,6 +171,20 @@ export class Combat {
     const p = this.party.find((x) => x.id === owner);
     return p ? p.ko : false;
   }
+  // True when a standing ally owns at least one live card of this role. When none does,
+  // knocked-out heroes' cards become playable by a stand-in so the party can always act.
+  aliveRoleExists(role) {
+    for (const [uid, inst] of this.cards) {
+      const d = CARDS[inst.id];
+      if (d.role === role && !this.ownerKO(d.owner) && !this.exhaust.includes(uid)) return true;
+    }
+    return false;
+  }
+  actorFor(owner) {
+    if (!this.ownerKO(owner)) return owner;
+    const p = this.party.find((x) => !x.ko);
+    return p ? p.id : owner;
+  }
   member(id) {
     return this.party.find((p) => p.id === id);
   }
@@ -294,7 +308,7 @@ export class Combat {
     if (d.role === 'junk') return { ok: false, reason: 'junk', text: 'Glitch: swipe down' };
     if (zone === 'reserve' && this.reserveLatchUntil > this.t) return { ok: false, reason: 'latched', text: 'Reserve sealed' };
     if (this.isLocked(uid)) return { ok: false, reason: 'locked', text: `Locked ${this.lockLeft(uid).toFixed(1)}s` };
-    if (this.ownerKO(d.owner)) return { ok: false, reason: 'ko', text: `${PARTY_DEFS[d.owner].name} is down` };
+    if (this.ownerKO(d.owner) && this.aliveRoleExists(d.role)) return { ok: false, reason: 'ko', text: `${PARTY_DEFS[d.owner].name} is down` };
     if (this.phase === 'RECOVER') return { ok: false, reason: 'recover', text: 'Recovering' };
     if (this.phase === 'PRE') {
       if (d.role !== 'open') return { ok: false, reason: 'role', text: 'Needs an Opener' };
@@ -321,7 +335,7 @@ export class Combat {
     const d = this.def(uid);
     if (!d) return false;
     if (d.role === 'junk') return true;
-    return roles.includes(d.role) && !this.ownerKO(d.owner);
+    return roles.includes(d.role) && (!this.ownerKO(d.owner) || !this.aliveRoleExists(d.role));
   }
   drawMatching(roles, exclude) {
     let idx = this.draw.findIndex((u) => u !== exclude && this.matchesRoles(u, roles));
@@ -485,15 +499,16 @@ export class Combat {
     const isOpen = this.phase === 'PRE';
     if (isOpen) this.startCombo();
     const c = this.combo;
-    const relay = c.owner !== null && c.owner !== d.owner;
+    const owner = this.actorFor(d.owner);
+    const relay = c.owner !== null && c.owner !== owner;
     const kind = isOpen ? 'open' : chk.kind;
     const entry = {
-      uid, id: d.id, name: d.name, owner: d.owner, role: d.role, rank, variant, kind, relay, fromReserve,
+      uid, id: d.id, name: d.name, owner, role: d.role, rank, variant, kind, relay, fromReserve,
       dmg: 0, spent: 0, wasLocked, index: c.cards.length,
     };
     c.cards.push(entry);
     c.len = c.cards.length;
-    if (!c.owners.includes(d.owner)) c.owners.push(d.owner);
+    if (!c.owners.includes(owner)) c.owners.push(owner);
     if (!c.suits.includes(variant)) c.suits.push(variant);
     if (kind === 'step') { c.steps++; this.stats.steps++; }
     if (kind === 'cross') { c.crosses++; this.stats.crosses++; }
@@ -512,13 +527,13 @@ export class Combat {
     // sequence state set before fx so effects may override it (rewind, suit change)
     c.rank = rank;
     c.variant = variant;
-    c.owner = d.owner;
+    c.owner = owner;
     if (!isOpen) this.naturalRefund(entry.index);
 
     // sequencing momentum
     if (relay) {
       if (!this.adaptOn('relay_jam')) this.gainMomentum(1, 'Relay');
-      this.emit({ type: 'relay', to: d.owner });
+      this.emit({ type: 'relay', to: owner });
     }
     if (kind === 'cross') {
       let m = 1 + (this.relics.has('twin_dials') ? 1 : 0) + (this.mutations.has('duality_engine') ? 1 : 0);
@@ -531,7 +546,7 @@ export class Combat {
     c.nextRelayEcho = 0;
 
     this.emit({
-      type: 'act', who: d.owner, anim: d.anim, card: d.name, id: d.id, role: d.role, rank, variant, kind, relay,
+      type: 'act', who: owner, anim: d.anim, card: d.name, id: d.id, role: d.role, rank, variant, kind, relay,
       big: d.role === 'close', all: false, fromReserve,
     });
 
@@ -562,7 +577,7 @@ export class Combat {
     if (kind === 'step') {
       let sb = c.stepBonus + (this.relics.has('ladder_rungs') ? 3 : 0) + (this.mutations.has('ascendant_ladder') ? 3 : 0);
       const tgt = this.currentTarget();
-      if (sb > 0 && tgt) this.dealDamage(tgt, sb, { src: d.owner, entry, tag: 'step' });
+      if (sb > 0 && tgt) this.dealDamage(tgt, sb, { src: owner, entry, tag: 'step' });
     }
     // relay echoes
     if (relay && entry.index > 0) {
@@ -1342,6 +1357,7 @@ export class Combat {
     if (this.trait === 'HOTWIRE') s *= 1.15;
     if (this.trait === 'QUIET_CHANNEL') s *= 0.85;
     if (this.tutorial) s *= 0.6;
+    if (this.opts.assist) s *= 0.75;
     if (e.flags.prepHaste) s *= e.flags.prepHaste;
     return s;
   }
