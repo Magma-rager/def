@@ -26,6 +26,7 @@ export const RULES = {
   RECOVER: { perfect: 0.45, cashout: 0.3, forced: 0.9 },
   GUARD_DECAY_DELAY: 2.0,
   GUARD_DECAY_RATE: 1.0,
+  GUARD_CAP: 80,
   FINISHER_HOLD: 0.7,
 };
 
@@ -139,7 +140,7 @@ export class Combat {
     for (const e of this.enemies) {
       if (e.tier !== 'boss') continue;
       if (this.prep.bossDelay) e.atb = -this.prep.bossDelay / e.actTime;
-      if (this.prep.bossGuard) e.guard += this.prep.bossGuard;
+      if (this.prep.bossGuard) this.enemyGuard(e, this.prep.bossGuard);
       if (this.prep.bossHaste) e.flags.prepHaste = this.prep.bossHaste;
     }
     this.firstCombo = true;
@@ -459,7 +460,7 @@ export class Combat {
   }
 
   addGuard(n, silent) {
-    n = Math.max(0, Math.round(n));
+    n = Math.max(0, Math.min(Math.round(n), RULES.GUARD_CAP - Math.floor(this.guard)));
     if (!n) return;
     this.guard += n;
     this.lastGuardT = this.t;
@@ -547,7 +548,7 @@ export class Combat {
     if (fromReserve && inst.graft === 'cached') mult *= 1.5;
     if (wasLocked && this.mutations.has('signal_thief')) mult *= 1.5;
 
-    const api = this.makeApi(entry, inst, d, { mult, bonus, echoing: false, disruptedAtPlay });
+    const api = this.makeApi(entry, inst, d, { mult, bonus, echoing: false, disruptedAtPlay, ctx: c });
     d.fx(api);
 
     // grafts
@@ -598,7 +599,7 @@ export class Combat {
     const inst = this.cards.get(e.uid);
     const d = CARDS[e.id];
     this.emit({ type: 'echo', who: e.owner, card: e.name, anim: d.anim, mult });
-    const api = this.makeApi(e, inst, d, { mult, bonus: 0, echoing: true, creditEntry: creditEntry || null });
+    const api = this.makeApi(e, inst, d, { mult, bonus: 0, echoing: true, creditEntry: creditEntry || null, ctx: c });
     d.fx(api);
   }
 
@@ -606,7 +607,7 @@ export class Combat {
   // power; they never repeat rank/suit changes, Flow, Momentum, card movement, or other Echoes.
   makeApi(entry, inst, def, o) {
     const self = this;
-    const c = this.combo;
+    const c = o.ctx || this.combo;
     const echoing = o.echoing;
     const credit = echoing ? o.creditEntry : entry;
     let bonus = o.bonus || 0;
@@ -1168,6 +1169,8 @@ export class Combat {
   }
 
   enemyGuard(e, n) {
+    n = Math.max(0, Math.min(n, Math.max(30, Math.round(e.maxHp * 0.5)) - e.guard));
+    if (!n) return;
     e.guard += n;
     this.emit({ type: 'enemyGuard', uid: e.uid, amount: n });
   }
@@ -1398,7 +1401,7 @@ export class Combat {
     for (const e of this.enemies) {
       if (!e.alive) continue;
       for (const k of ['exposed', 'weak', 'shock', 'parry']) if (e.st[k] > 0) e.st[k] = Math.max(0, e.st[k] - dt);
-      if (!e.flags.regenGuard && e.guard > 0 && e.tier !== 'boss') e.guard = Math.max(0, e.guard - 0.5 * dt);
+      if (e.guard > 0) e.guard = Math.max(0, e.guard - (e.tier === 'boss' ? 0.4 : 0.5) * dt);
       if (e.st.scorch > 0) {
         e.st.scorchT -= dt;
         if (e.st.scorchT <= 0) {

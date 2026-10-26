@@ -303,6 +303,7 @@ export class Run {
     const rng = this.rng('enc', p.nodeId);
     let enemies;
     let tutorial = false;
+    const isBoss = node.type === 'boss';
     if (p.kind === 'boss' || node.type === 'boss') enemies = [this.d.bosses[act]];
     else if (p.kind === 'elite') {
       const opts = ELITES[act].filter((e) => e !== this.d.lastElite);
@@ -316,9 +317,9 @@ export class Run {
       enemies = rng.weighted(pool.map((f) => [f[1], f[0]]));
       this.d.lastFormation = enemies.join();
     }
-    const isBoss = node.type === 'boss';
-    let hpMult = (1 + node.depth * 0.035) * (1 + 0.08 * (act - 1));
-    let dmgMult = 1 + node.depth * 0.02;
+    const tierHp = isBoss ? 1.5 : p.kind === 'elite' ? 1.65 : 1.75;
+    let hpMult = tierHp * (1 + node.depth * 0.035) * (1 + 0.08 * (act - 1));
+    let dmgMult = 1.1 * (1 + node.depth * 0.02);
     if (this.d.nextBattleMod) { hpMult *= this.d.nextBattleMod.hpMult || 1; }
     let prep = {};
     if ((p.kind === 'elite' || isBoss) && this.d.prepToken) prep = { ...this.d.prepToken };
@@ -501,7 +502,7 @@ export class Run {
 
   advanceAct() {
     this.d.act++;
-    for (const m of this.d.party) m.hp = Math.min(m.maxHp, m.hp + Math.round((m.maxHp - m.hp) * 0.5));
+    for (const m of this.d.party) m.hp = Math.min(m.maxHp, m.hp + Math.round((m.maxHp - m.hp) * 0.75));
     this.generateMap(this.d.act);
     this.d.pending = { type: 'story', scene: `act${this.d.act}_intro`, next: 'map' };
   }

@@ -463,7 +463,7 @@ export class BattleScreen {
     let dots = '';
     for (let i = 0; i < c.churnMax(); i++) dots += `<i class="${i < c.churn.charges ? 'on' : ''}"></i>`;
     const free = c.relics.has('beta_badge') && !c.churn.freeUsed;
-    this.churnEl.innerHTML = `<span class="ic">⟲</span><span class="dots">${dots}</span><span class="lbl">${snared ? 'SNARED' : free ? 'CHURN · 1 FREE' : 'CHURN'}</span>`;
+    this.churnEl.innerHTML = `<span class="ic">⟲</span><span class="dots">${dots}</span><span class="lbl">${snared ? 'SNARED' : 'CHURN'}</span>${free && !snared ? '<span class="free">FREE</span>' : ''}`;
     this.churnEl.classList.toggle('snared', snared);
     // cash out
     const can = c.canCashOut();

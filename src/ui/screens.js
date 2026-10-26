@@ -46,7 +46,7 @@ export function titleScreen(app, root) {
       menu,
       h('div', { class: 'title-foot' }, `Runs ${m.totalRuns} · Wins ${m.wins} · Best combo ${m.bestCombo} cards`)));
   clear(root).append(el);
-  const sc = liveScene(canvas, { act: 1, party: true, enemy: null, dim: 0.25 });
+  const sc = liveScene(canvas, { act: 1, party: true, enemy: null, dim: 0.25, left: true });
   app.audio.music('title');
   return () => sc.stop();
 }
@@ -212,7 +212,8 @@ export function mapScreen(app, root) {
     for (const n of map.nodes) {
       const [x1, y1] = posOf(n);
       for (const eid of n.edges) {
-        const m = run.node(eid);
+        const m = map.nodes.find((q) => q.id === eid);
+        if (!m) continue;
         const [x2, y2] = posOf(m);
         const line = document.createElementNS(svgNS, 'path');
         const ax = x1 * r.width, ay = y1 * r.height, bx = x2 * r.width, by = y2 * r.height;

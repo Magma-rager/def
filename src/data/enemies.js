@@ -97,7 +97,7 @@ export const ENEMIES = {
     lore: 'Barks in packets.',
     intents: {
       howl: { kind: 'buff', name: 'Howl', desc: 'Every enemy gains +25% ATB.', exec: (e, c) => c.enemies.filter((x) => x.alive && x !== e).forEach((x) => (x.atb = Math.min(0.95, x.atb + 0.25))) },
-      bite: atk('Packet Bite', 7),
+      bite: atk('Packet Bite', 6),
     },
     ai: (e, c) => (c.enemies.filter((x) => x.alive).length > 1 && e.actCount % 3 === 1 ? 'howl' : 'bite'),
   },
@@ -262,7 +262,7 @@ export const ENEMIES = {
     lore: 'It plays exactly like you. It plays slightly worse. It is annoyed about that.',
     intents: {
       reflect: { kind: 'atk', name: 'Reflection', dmg: 8, desc: 'Fires back 60% of your last combo’s strongest card (min 8).', exec: (e, c, it) => c.hitParty(e, it.target, c.edmg(e, Math.max(8, Math.round(0.6 * c.lastStrongestHit())))) },
-      mguard: { kind: 'guard', name: 'Mirror Guard', desc: 'Gain Guard equal to your Guard + 6.', exec: (e, c) => c.enemyGuard(e, Math.floor(c.guard) + 6) },
+      mguard: { kind: 'guard', name: 'Mirror Guard', desc: 'Gain Guard equal to your Guard (max 30) + 6.', exec: (e, c) => c.enemyGuard(e, Math.min(30, Math.floor(c.guard)) + 6) },
       mlock: { kind: 'lock', name: 'Mirror Lock', desc: 'Lock up to 2 hand cards that match the suit of your last combo’s opener.', exec: (e, c) => { const v = c.lastOpenerSuit(); c.lockCards(e, 2, v ? (uid) => c.effVariant(uid) === v : null); } },
       shatter: aoe('Shatter Glare', 7),
     },
@@ -319,7 +319,7 @@ export const FORMATIONS = {
     [3, ['suit_scrambler', 'needle_wing'], 0],
     [3, ['needle_wing', 'needle_wing'], 0],
     [3, ['latch_wisp', 'signal_hound'], 0],
-    [2, ['signal_hound', 'signal_hound', 'rush_hound'], 1],
+    [2, ['signal_hound', 'rush_hound'], 1],
     [3, ['bulwark_signal', 'needle_wing'], 1],
     [3, ['bulwark_signal', 'suit_scrambler'], 2],
     [3, ['latch_wisp', 'suit_scrambler', 'interference_mite'], 3],
@@ -328,12 +328,12 @@ export const FORMATIONS = {
   ],
   3: [
     [3, ['predator_needle', 'interference_mite'], 0],
-    [3, ['scrap_overseer', 'rush_hound', 'rush_hound'], 0],
+    [3, ['scrap_overseer', 'rush_hound', 'interference_mite'], 0],
     [3, ['predator_needle', 'bulwark_signal'], 1],
     [2, ['scrap_overseer', 'iron_maw'], 1],
     [3, ['latch_wisp', 'predator_needle'], 2],
     [3, ['suit_scrambler', 'scrap_overseer', 'needle_wing'], 3],
-    [2, ['signal_hound', 'predator_needle', 'signal_hound'], 4],
+    [2, ['signal_hound', 'predator_needle'], 4],
     [2, ['churn_snare', 'scrap_overseer', 'wire_jammer'], 5],
   ],
 };

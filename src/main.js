@@ -63,7 +63,8 @@ class App {
     const ctlW = Math.round(Math.max(176, Math.min(290, W * 0.22)));
     const resW0 = H < 500 ? 58 : 82;
     let cardH = deckH - stripH - 14;
-    let cardW = Math.min(cardH * 0.72, (W - ctlW - resW0 - 16 - 7 * 6) / 6);
+    const ratio = H < 500 ? 0.86 : 0.72;
+    let cardW = Math.min(cardH * ratio, (W - ctlW - resW0 - 16 - 7 * 6) / 6);
     cardH = Math.min(cardH, cardW / 0.6);
     r.setProperty('--deck-h', deckH + 'px');
     r.setProperty('--strip-h', stripH + 'px');
@@ -86,6 +87,8 @@ class App {
   // ───────────────────────── routing ─────────────────────────
   show(fn, ...args) {
     if (this.cleanup) { try { this.cleanup(); } catch (e) { /* ignore */ } }
+    document.documentElement.classList.toggle('in-battle', false);
+    clear(this.layers.dialog);
     this.cleanup = null;
     if (this.battle) { this.battle.destroy(); this.battle = null; }
     this.paused = false;
@@ -174,6 +177,7 @@ class App {
     const screen = new BattleScreen(this, setup, (outcome, combat) => this.onBattleEnd(outcome, combat, setup));
     this.battle = screen;
     screen.mount(this.layers.screen);
+    document.documentElement.classList.toggle('in-battle', true);
   }
 
   onBattleEnd(outcome, combat, setup) {

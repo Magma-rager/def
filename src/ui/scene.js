@@ -13,7 +13,7 @@ const EVENT_ICONS = {
 };
 
 // A living scene: background + optional party + optional enemy. Returns a controller with stop().
-export function liveScene(canvas, { act = 1, party = false, enemy = null, icon = null, partyPose = 'idle', dim = 0 }) {
+export function liveScene(canvas, { act = 1, party = false, enemy = null, icon = null, partyPose = 'idle', dim = 0, left = false }) {
   const ctx = canvas.getContext('2d');
   const bg = new Background(act, 2);
   const actors = party ? { V: new Actor('V'), C: new Actor('C'), S: new Actor('S') } : null;
@@ -38,7 +38,7 @@ export function liveScene(canvas, { act = 1, party = false, enemy = null, icon =
     bg.draw(ctx, t, w, h, dpr);
     const k = Math.min(h * 0.0036, w * 0.0024);
     if (actors) {
-      const slots = { C: [0.14, 0.76], S: [0.24, 0.9], V: [0.34, 0.82] };
+      const slots = enemy || left ? { C: [0.14, 0.76], S: [0.24, 0.9], V: [0.34, 0.82] } : { C: [0.3, 0.76], S: [0.45, 0.9], V: [0.6, 0.82] };
       for (const id of ['C', 'V', 'S']) {
         const a = actors[id];
         a.update(dt);

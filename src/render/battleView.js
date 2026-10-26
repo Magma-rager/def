@@ -140,7 +140,7 @@ export class BattleView {
   }
 
   unit() {
-    return Math.min(this.h * 0.0034, this.w * 0.0021);
+    return Math.min(this.h * 0.0037, this.w * 0.0021);
   }
 
   partyPos(id) {
