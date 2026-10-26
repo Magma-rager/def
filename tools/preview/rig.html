@@ -1,0 +1,15 @@
+<!doctype html><html><body style="margin:0;background:#2a2230">
+<canvas id="c" width="1400" height="900"></canvas>
+<script type="module">
+import { LOOKS, POSES, drawCharacter, drawPortrait } from '../../src/render/rig.js';
+const ctx = document.getElementById('c').getContext('2d');
+const names = ['idle','windup','dash','strike','follow','guard','flourish','hurt','stagger','ko','victory','castWind','castRelease','aim','fire'];
+['V','C','S'].forEach((id, row) => {
+  names.forEach((n, i) => {
+    ctx.save(); ctx.translate(60 + i*88, 230 + row*250); ctx.scale(1.4,1.4);
+    drawCharacter(ctx, LOOKS[id], POSES[id][n], 0); ctx.restore();
+    ctx.fillStyle='#ddd'; ctx.font='11px sans-serif'; ctx.fillText(n, 30 + i*88, 250 + row*250);
+  });
+});
+['V','C','S','gran','dev','sys'].forEach((id,i)=>{ ctx.save(); ctx.translate(20+i*130, 760); ctx.fillStyle='#443'; ctx.fillRect(0,0,120,120); ctx.beginPath(); ctx.rect(0,0,120,120); ctx.clip(); drawPortrait(ctx,id,120,120,1); ctx.restore(); });
+</script></body></html>

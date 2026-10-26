@@ -1,0 +1,15 @@
+{
+  "name": "signal-break",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SIGNAL//BREAK - a real-time party-based roguelite deckbuilding JRPG",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "serve": "node tools/serve.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.0"
+  }
+}

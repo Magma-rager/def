@@ -1,0 +1,7 @@
+<!doctype html><html><body style="margin:0;background:#2a2230">
+<canvas id="c" width="900" height="500"></canvas>
+<script type="module">
+import { LOOKS, POSES, drawCharacter } from '../../src/render/rig.js';
+const ctx = document.getElementById('c').getContext('2d');
+['V','C','S'].forEach((id,i)=>{ ctx.save(); ctx.translate(140+i*280, 470); ctx.scale(3.6,3.6); drawCharacter(ctx, LOOKS[id], POSES[id][location.hash.slice(1)||'idle'], 0); ctx.restore(); });
+</script></body></html>

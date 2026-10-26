@@ -1,0 +1,11 @@
+{
+  "name": "SIGNAL//BREAK",
+  "short_name": "SIGNAL//BREAK",
+  "description": "A real-time party-based roguelite deckbuilding JRPG.",
+  "start_url": "./index.html",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#120e14",
+  "theme_color": "#1c1018",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

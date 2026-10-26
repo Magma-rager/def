@@ -1,0 +1,17 @@
+<!doctype html><html><body style="margin:0;background:#2a2230">
+<canvas id="c" width="1500" height="900"></canvas>
+<script type="module">
+import { ENEMY_ART } from '../../src/render/enemyArt.js';
+const ctx = document.getElementById('c').getContext('2d');
+const keys = Object.keys(ENEMY_ART);
+const st = location.hash.slice(1);
+keys.forEach((k, i) => {
+  const col = i % 9, row = Math.floor(i / 9);
+  ctx.save(); ctx.translate(90 + col * 160, 230 + row * 290);
+  const big = ['regent','tyrant','auditor','mirror','corruptor','core'].includes(k) ? 1.2 : ['warden','houndmother','censor','choir','knight','eater'].includes(k)?1.3:1.5;
+  ctx.scale(big, big);
+  ENEMY_ART[k](ctx, { t: 1.3, wind: st==='wind'?1:0, atk: st==='atk'?0.5:0, hurt: 0, phase: st==='p2'?3:1 });
+  ctx.restore();
+  ctx.fillStyle = '#ddd'; ctx.font = '12px sans-serif'; ctx.fillText(k, 60 + col*160, 255 + row*290);
+});
+</script></body></html>
