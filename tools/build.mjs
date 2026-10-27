@@ -3,6 +3,14 @@
 //   dist/artifact.html — page fragment for hosting inside an artifact frame
 import { build } from 'esbuild';
 import fs from 'node:fs';
+import { execSync } from 'node:child_process';
+
+// Build stamp shown on the title screen: build date plus the commit it was built from
+// ("+" when built with uncommitted changes). Not a version number.
+const git = (cmd) => { try { return execSync(`git ${cmd}`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch (e) { return ''; } };
+const commit = git('rev-parse --short HEAD');
+const dirty = commit && git('status --porcelain -- src') ? '+' : '';
+const BUILD = `Build ${new Date().toISOString().slice(0, 10)}${commit ? ` · ${commit}${dirty}` : ''}`;
 
 // Fonts are embedded as base64 so every build (file, PWA, iOS app) renders identically offline.
 // Faces that share one variable-font file are merged into a single weight-range face.
@@ -18,7 +26,7 @@ const fontCss = [...faces].map(([file, f]) => '@font-face' + f.block
   .replace(file, `data:font/woff2;base64,${fs.readFileSync('public/fonts/' + file).toString('base64')}`)).join('');
 const FONTS = `<style>${fontCss}</style>`;
 
-const res = await build({ entryPoints: ['src/main.js'], bundle: true, minify: true, format: 'iife', target: ['es2020', 'safari15'], write: false, legalComments: 'none' });
+const res = await build({ entryPoints: ['src/main.js'], bundle: true, minify: true, format: 'iife', target: ['es2020', 'safari15'], write: false, legalComments: 'none', define: { __BUILD__: JSON.stringify(BUILD) } });
 const js = res.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
 const css = fs.readFileSync('src/styles.css', 'utf8');
 fs.mkdirSync('dist', { recursive: true });

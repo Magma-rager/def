@@ -29,6 +29,9 @@ export function relicBadge(app, id, extra = {}) {
 }
 
 // ───────────────────────── TITLE ─────────────────────────
+// Build stamp injected by tools/build.mjs; running the sources directly shows "Development build".
+const BUILD = typeof __BUILD__ !== 'undefined' ? __BUILD__ : 'Development build';
+
 export function titleScreen(app, root) {
   const canvas = h('canvas', { class: 'scene-canvas' });
   const has = app.hasSave();
@@ -42,9 +45,10 @@ export function titleScreen(app, root) {
   const el = h('div', { class: 'title screen' }, canvas,
     h('div', { class: 'title-inner' },
       h('div', { class: 'logo' }, h('span', { class: 'logo-a' }, 'SIGNAL'), h('span', { class: 'logo-sl' }, '//'), h('span', { class: 'logo-b' }, 'BREAK')),
-      h('div', { class: 'tagline' }, 'A Relay-driven card saga. Patched to version 0.3.1. Probably.'),
+      h('div', { class: 'tagline' }, 'A Relay-driven card saga. Patched. Probably.'),
       menu,
-      h('div', { class: 'title-foot' }, `Runs ${m.totalRuns} · Wins ${m.wins} · Best combo ${m.bestCombo} cards`)));
+      h('div', { class: 'title-foot' }, `Runs ${m.totalRuns} · Wins ${m.wins} · Best combo ${m.bestCombo} cards`),
+      h('div', { class: 'title-build' }, BUILD)));
   clear(root).append(el);
   const sc = liveScene(canvas, { act: 1, party: true, enemy: null, dim: 0.25, left: true });
   app.audio.music('title');

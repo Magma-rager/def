@@ -65,6 +65,7 @@ p { margin: 0 0 0.7em; line-height: 1.35; }
 .tagline { font-family: var(--font-story); font-style: italic; color: var(--cream2); }
 .title-menu { display: flex; flex-direction: column; gap: 8px; }
 .title-foot { font-size: 0.85em; color: var(--cream3); }
+.title-build { font-size: 0.75em; color: var(--cream3); opacity: 0.7; margin-top: -8px; }
 .starter-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
 .starter-opt { display: flex; gap: 10px; align-items: center; text-align: left; padding: 10px; border: 1px solid var(--char3); border-radius: 5px; background: rgba(255, 255, 255, 0.03); cursor: pointer; }
 .starter-opt.sel { border-color: var(--brass-hi); background: rgba(201, 162, 74, 0.12); }
