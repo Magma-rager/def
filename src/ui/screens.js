@@ -16,6 +16,7 @@ import { themeName } from '../render/backgrounds.js';
 import { drawIcon, ICON_PATHS } from '../render/icons.js';
 import { STARTER_OPTIONS } from '../data/relics.js';
 import { unlocks } from '../engine/save.js';
+import { VERSION } from '../version.js';
 
 function iconSvg(name, cls = '') {
   const filled = ['burst', 'shield', 'heal', 'flame', 'skull', 'crown', 'coin', 'chest', 'star'].includes(name);
@@ -45,7 +46,7 @@ export function titleScreen(app, root) {
   const el = h('div', { class: 'title screen' }, canvas,
     h('div', { class: 'title-inner' },
       h('div', { class: 'logo' }, h('span', { class: 'logo-a' }, 'SIGNAL'), h('span', { class: 'logo-sl' }, '//'), h('span', { class: 'logo-b' }, 'BREAK')),
-      h('div', { class: 'tagline' }, 'A Relay-driven card saga. Patched. Probably.'),
+      h('div', { class: 'tagline' }, `A Relay-driven card saga. Patched to version ${VERSION}. Probably.`),
       menu,
       h('div', { class: 'title-foot' }, `Runs ${m.totalRuns} · Wins ${m.wins} · Best combo ${m.bestCombo} cards`),
       h('div', { class: 'title-build' }, BUILD)));

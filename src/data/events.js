@@ -2,6 +2,8 @@
 // A choice may return { text, select: { title, filter, action } } to ask the player to pick a card.
 // Selection actions: remove | upgrade | transform | duplicate | recut | graft:<id> | ex | rankup | rankdown
 
+import { VERSION } from '../version.js';
+
 export const EVENTS = [
   // ───────────── ACT I ─────────────
   {
@@ -31,7 +33,7 @@ export const EVENTS = [
     ],
   },
   {
-    id: 'patch_notes', acts: [1, 2, 3], title: 'Patch Notes v0.3.1', art: 'notes',
+    id: 'patch_notes', acts: [1, 2, 3], title: `Patch Notes v${VERSION}`, art: 'notes',
     text: 'A floating scroll unrolls: "BALANCE CHANGES: Relay is now worse (it was already bad?). Fixed a bug where players had fun." It offers to apply a hotfix to you.',
     choices: [
       { label: 'Accept the nerf', hint: 'Remove a card. Gain 30 Scrap.', run: (R) => { R.gain(30); return { text: 'Ozmund: "See? Healthy for the meta."', select: { title: 'Nerf (remove) a card', filter: 'removable', action: 'remove' } }; } },

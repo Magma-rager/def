@@ -5,6 +5,9 @@ import { Combat, RULES } from '../src/engine/combat.js';
 import { Run, VOLATILE_OUTCOMES } from '../src/engine/run.js';
 import { STARTER_DECK } from '../src/data/cards.js';
 import { unlocks, defaultMeta, recordRun } from '../src/engine/save.js';
+import { VERSION } from '../src/version.js';
+import { EVENT_MAP } from '../src/data/events.js';
+import fs from 'node:fs';
 
 const PARTY = [{ id: 'V', hp: 300, maxHp: 300 }, { id: 'C', hp: 300, maxHp: 300 }, { id: 'S', hp: 300, maxHp: 300 }];
 function mk(ids = STARTER_DECK, enemies = ['foundry_warden'], extra = {}) {
@@ -134,4 +137,11 @@ test('Museum: an Act I boss kill unlocks a starter relic for later runs', () => 
   assert.equal(unlocks(meta).boss1, true);
   const next = Run.create({ seed: 52, starterRelic: 'stopwatch_gear' });
   assert.ok(next.d.relics.includes('stopwatch_gear'));
+});
+
+test('one version number everywhere: package.json, iOS project, in-game text', () => {
+  assert.match(VERSION, /^\d+\.\d+\.\d+$/);
+  assert.equal(JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url))).version, VERSION);
+  assert.match(fs.readFileSync(new URL('../ios/SignalBreak.swiftpm/Package.swift', import.meta.url), 'utf8'), new RegExp(`displayVersion: "${VERSION.replace(/\./g, '\\.')}"`));
+  assert.equal(EVENT_MAP.patch_notes.title, `Patch Notes v${VERSION}`);
 });

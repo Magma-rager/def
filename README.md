@@ -74,6 +74,16 @@ tools         build, dev server, headless full-run simulator, Playwright UI chec
 
 The combat engine is the single source of truth. The UI asks `combat.check(uid)` for each card's legality and renders from engine state. Presentation consumes engine events and never decides mechanics. All timers use combat time, which advances only when unpaused.
 
+## Version
+
+The version follows the development roadmap, and the title screen shows it ("Patched to version 0.1.0. Probably.").
+
+- `0.N.x`: N is the highest roadmap phase whose exit gate has passed, with the evidence recorded in `docs/AUDIT.md`.
+- `0.N.P`: P counts published builds with changes since that gate.
+- `1.0.0`: the Phase 9 release.
+
+Current: **0.1.0**. Phase 0 (audit) and Phase 1 (Act I → Act II with saves) have passed. Phase 2's gate requires a playthrough to reach the credits, and the game has an ending scene but no credits yet. The number lives in `src/version.js`; `package.json` and the iOS project must match it, and a test enforces that. The line under the title menu shows the build date and source commit.
+
 ## Verification tools
 
 - `node tools/simulate.mjs [runs] [reactionSeconds]` runs complete runs through all three Acts with a heuristic bot. It checks zone integrity and save round-trips at every step, and reports win rates, battle durations and HP loss.

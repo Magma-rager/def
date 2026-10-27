@@ -131,13 +131,26 @@ Totals: 7 runs, 5 natural victories, 2 final-boss defeats, 242 of 242 checks pas
 - Two elites not yet met through the UI: Null Knight and Rank Eater (Act III; the bot takes elites only in Acts I–II). Shop services (remove/upgrade/surgery/heal) through the UI.
 - Human testers, a physical iPad or iPhone, Safari/WebKit, and audio by ear.
 
+## Version
+
+Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exit gate has passed with evidence here; the patch number counts published builds with changes since that gate; `1.0.0` is the Phase 9 release. The title tagline, the "Patch Notes" event, `package.json` and the iOS project all show the same number (enforced by a test).
+
+| Phase | Exit gate | Status |
+|---|---|---|
+| 0 | Every major system has a recorded implementation and verification status | Passed (this document) |
+| 1 | Fresh run → Act I boss by ordinary play → mutation → Act II, state preserved through save/load | Passed (milestone runs 1–7) |
+| 2 | Normal playthrough reaches the credits and returns to the main loop; victory and defeat resolve | Not passed: victory, ending scene, defeat and return to the main loop are shown, but there are no credits |
+| 3 | Four distinct build families demonstrated through play | Not passed (all bot runs ended as Momentum Burst) |
+
+Current version: **0.1.0**.
+
 ## Not present in this build
 
 These roadmap references have no counterpart in this repository:
 
 - **"Junk Realm" setting.** The story here is set inside the fictional game itself (the Scrapworks, the Broken Protocol, the Severed Signal).
 - **Earlier Replit project assets.** Nothing from it exists in this repo.
-- **"Version 0.3.1"** was in-story flavor text in the title tagline, not a real version. It has been removed from the title; the title screen now shows a factual build stamp (build date and source commit). "Patch Notes v0.3.1" remains as the name of an in-story event. `package.json` says 1.0.0; no version number has been advanced.
+- **"Version 0.3.1"** was in-story flavor text in the title tagline, not a real version, and `package.json` said 1.0.0. Both now carry the real version, **0.1.0**, defined by roadmap gates (see "Version" above).
 
 ## Content inventory
 
