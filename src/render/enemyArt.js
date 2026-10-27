@@ -1,6 +1,7 @@
 // Procedural enemy art. Every function draws facing LEFT with origin at the feet center.
 // a = { t, wind (0..1 telegraph), atk (0..1 attack), hurt (0..1), phase }
 import { capsule, fillStroke, circle, ellipse, poly, rivets, lin, rad, glow, gear, eye, roundRect, INK } from './draw.js';
+import { t as tr } from '../i18n/index.js';
 
 const RUST = '#9a3f2a', RUST2 = '#6a2a1c', RUSTHI = '#c0603f';
 const BRASS = '#c9a24a', BRASS2 = '#8f6d2a', BRASSHI = '#e6c779';
@@ -627,7 +628,7 @@ function warden(ctx, a) {
   ctx.fillStyle = '#b8321e';
   ctx.font = 'bold 9px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('REJECT', 0, -64 + bob);
+  ctx.fillText(tr('REJECT'), 0, -64 + bob);
   rivets(ctx, [-21, -82 + bob, 21, -82 + bob, -21, -40 + bob, 21, -40 + bob], 1.6);
   // head
   roundRect(ctx, -14, -106 + bob, 28, 20, 4);
@@ -1050,7 +1051,7 @@ function auditor(ctx, a) {
   ctx.fillStyle = INK;
   ctx.font = 'bold 7px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(p2 ? 'STRICT' : 'AUDIT', 0, y0 - 46.5);
+  ctx.fillText(p2 ? tr('STRICT') : tr('AUDIT'), 0, y0 - 46.5);
 }
 
 function mirror(ctx, a) {

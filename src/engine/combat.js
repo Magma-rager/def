@@ -220,7 +220,7 @@ export class Combat {
     this.adapt.progress = Math.min(this.adapt.need, this.adapt.progress + n);
     if (this.adapt.progress >= this.adapt.need) {
       this.adapt.broken = true;
-      this.emit({ type: 'banner', text: 'ADAPTATION BROKEN', sub: `${this.adapt.name} disabled`, tone: 'good' });
+      this.emit({ type: 'banner', text: 'ADAPTATION BROKEN', sub: { k: '{adapt} disabled', p: { adapt: { adapt: this.adapt.id } } }, tone: 'good' });
     }
   }
   inHand(uid) {
@@ -311,8 +311,8 @@ export class Combat {
     if (this.phase === 'END') return { ok: false, reason: 'end', text: 'Battle over' };
     if (d.role === 'junk') return { ok: false, reason: 'junk', text: 'Glitch: swipe down' };
     if (zone === 'reserve' && this.reserveLatchUntil > this.t) return { ok: false, reason: 'latched', text: 'Reserve sealed' };
-    if (this.isLocked(uid)) return { ok: false, reason: 'locked', text: `Locked ${this.lockLeft(uid).toFixed(1)}s` };
-    if (this.ownerKO(d.owner) && this.aliveRoleExists(d.role)) return { ok: false, reason: 'ko', text: `${PARTY_DEFS[d.owner].name} is down` };
+    if (this.isLocked(uid)) return { ok: false, reason: 'locked', text: { k: 'Locked {s}s', p: { s: { n: this.lockLeft(uid), d: 1 } } } };
+    if (this.ownerKO(d.owner) && this.aliveRoleExists(d.role)) return { ok: false, reason: 'ko', text: { k: '{hero} is down', p: { hero: { hero: d.owner } } } };
     if (this.phase === 'RECOVER') return { ok: false, reason: 'recover', text: 'Recovering' };
     if (this.phase === 'PRE') {
       if (d.role !== 'open') return { ok: false, reason: 'role', text: 'Needs an Opener' };
@@ -324,8 +324,8 @@ export class Combat {
     const r = seqCheck(this.combo.rank, this.combo.variant, this.effRank(uid), this.effVariant(uid), this.crossGap());
     if (!r.ok) {
       return r.reason === 'rank'
-        ? { ok: false, reason: 'rank', text: `Needs rank ${this.combo.rank + 1}+` }
-        : { ok: false, reason: 'cross', text: `Cross needs rank ${this.combo.rank + 1}` };
+        ? { ok: false, reason: 'rank', text: { k: 'Needs rank {n}+', p: { n: this.combo.rank + 1 } } }
+        : { ok: false, reason: 'cross', text: { k: 'Cross needs rank {n}', p: { n: this.combo.rank + 1 } } };
     }
     return { ok: true, kind: r.kind, zone };
   }
@@ -620,7 +620,7 @@ export class Combat {
     const inst = this.cards.get(e.uid);
     const d = CARDS[e.id];
     if (this.relics.has('mirror_lens')) mult *= 1.25;
-    this.emit({ type: 'echo', who: e.owner, card: e.name, anim: d.anim, mult });
+    this.emit({ type: 'echo', who: e.owner, card: e.name, id: e.id, anim: d.anim, mult });
     const api = this.makeApi(e, inst, d, { mult, bonus: 0, echoing: true, creditEntry: creditEntry || null, ctx: c });
     d.fx(api);
   }
@@ -947,17 +947,17 @@ export class Combat {
 
   // ── Protocol Auditor / Core citation system ──
   auditPatterns(e) {
-    if (this.relics.has('auditor_seal')) { this.emit({ type: 'banner', text: 'AUDIT BLOCKED', sub: "Auditor's Seal", tone: 'good' }); return; }
+    if (this.relics.has('auditor_seal')) { this.emit({ type: 'banner', text: 'AUDIT BLOCKED', sub: { k: '{r}', p: { r: { relic: 'auditor_seal' } } }, tone: 'good' }); return; }
     const h = this.history;
     if (h.length < 2) { this.emit({ type: 'banner', text: 'AUDIT: INSUFFICIENT DATA', sub: 'No citation issued', tone: 'info' }); return; }
     const a = h[h.length - 1], b = h[h.length - 2];
     let reason = null;
-    if (a.openerSuit && a.openerSuit === b.openerSuit) reason = { kind: 'suit', value: a.openerSuit, text: `Opened with suit ${a.openerSuit} twice` };
-    else if (a.closerId && a.closerId === b.closerId) reason = { kind: 'closer', value: a.closerId, text: `Same Closer twice` };
+    if (a.openerSuit && a.openerSuit === b.openerSuit) reason = { kind: 'suit', value: a.openerSuit };
+    else if (a.closerId && a.closerId === b.closerId) reason = { kind: 'closer', value: a.closerId };
     if (!reason) { this.emit({ type: 'banner', text: 'AUDIT PASSED', sub: 'Your patterns varied', tone: 'good' }); return; }
     this.citation = reason;
     this.stats.interference++;
-    this.emit({ type: 'banner', text: 'CITATION ISSUED', sub: `${reason.text}: -40% damage until you vary`, tone: 'bad' });
+    this.emit({ type: 'banner', text: 'CITATION ISSUED', sub: reason.kind === 'suit' ? { k: 'Opened with suit {s} twice: -40% damage until you vary', p: { s: reason.value } } : 'Same Closer twice: -40% damage until you vary', tone: 'bad' });
     if (e.flags.strict) this.hitAll(e, this.edmg(e, 10));
   }
   updateCitation(s) {
@@ -1070,7 +1070,7 @@ export class Combat {
     if (next.pierceVuln) e.flags.pierceVuln = true;
     if (next.rootAccess) e.flags.rootAccess = true;
     e.flags.regenGuard = !!next.pierceVuln;
-    this.emit({ type: 'phase', uid: e.uid, name: next.name, text: next.text });
+    this.emit({ type: 'phase', uid: e.uid, id: e.id, idx: e.phase - 2, name: next.name, text: next.text });
     if (next.summon) for (const sid of next.summon) this.summon(sid, e);
     e.atb = Math.min(e.atb, 0.3);
     this.chooseIntent(e);
@@ -1149,7 +1149,7 @@ export class Combat {
     let hp = Math.round(def.hp * hpMult * scale * (this.prep.bossHpMult && def.tier === 'boss' ? this.prep.bossHpMult : 1));
     if (this.tutorial) hp = Math.round(hp * 0.8);
     const e = {
-      uid: `e${++this.uidCounter}`, id, name: def.name + (lvl > 0 ? ' Mk' + (lvl + 1) : ''), tier: def.tier, hp, maxHp: hp, guard: 0,
+      uid: `e${++this.uidCounter}`, id, lvl, name: def.name + (lvl > 0 ? ' Mk' + (lvl + 1) : ''), tier: def.tier, hp, maxHp: hp, guard: 0,
       atb: def.tier === 'boss' ? 0 : this.rng.next() * 0.3, actTime: def.actTime, dmgMult: dmgMult * (1 + 0.3 * lvl), alive: true,
       st: {}, flags: {}, actCount: 0, phase: 1, intent: null, summoned, size: def.size, art: def.art, hasteUntil: 0, hasteMult: 1,
     };
@@ -1241,9 +1241,9 @@ export class Combat {
       .slice(0, n);
     if (!cands.length) return 0;
     for (const { u } of cands) {
-      this.locks[u] = { until: this.t + dur, dur, source: e ? e.name : 'Interference' };
+      this.locks[u] = { until: this.t + dur, dur, source: e ? e.id : null };
       this.wasLocked.add(u);
-      this.emit({ type: 'lock', uid: u, dur, source: e ? e.name : '' });
+      this.emit({ type: 'lock', uid: u, dur, source: e ? e.id : null });
     }
     this.noteInterference();
     return cands.length;
@@ -1260,13 +1260,13 @@ export class Combat {
     const cands = this.rng.shuffle(this.hand.filter((u) => u && this.roleOf(u) !== 'junk' && this.cards.get(u).graft !== 'anchored')).slice(0, n);
     if (!cands.length) return 0;
     for (const u of cands) {
-      const m = { until: this.t + RULES.SCRAMBLE_DURATION, flip: false, rankDelta: 0, source: e ? e.name : '' };
+      const m = { until: this.t + RULES.SCRAMBLE_DURATION, flip: false, rankDelta: 0, source: e ? e.id : null };
       if (mode === 'suit' || mode === 'both') m.flip = true;
       if (mode === 'rank' || mode === 'both') m.rankDelta = this.rng.pick([-2, -1, 1, 2]);
       if (mode === 'rankup') { m.rankDelta = 2; m.until = this.t + 6; }
       this.temp[u] = m;
     }
-    this.emit({ type: 'scramble', uids: cands, source: e ? e.name : '', mode });
+    this.emit({ type: 'scramble', uids: cands, source: e ? e.id : null, mode });
     this.noteInterference();
     return cands.length;
   }
@@ -1277,8 +1277,8 @@ export class Combat {
     if (!free.length) return;
     const i = this.rng.pick(free);
     if (this.hand[i]) this.tuck(i);
-    this.jams[i] = { until: this.t + dur, source: e ? e.name : '' };
-    this.emit({ type: 'jam', slot: i, dur, source: e ? e.name : '' });
+    this.jams[i] = { until: this.t + dur, source: e ? e.id : null };
+    this.emit({ type: 'jam', slot: i, dur, source: e ? e.id : null });
     this.noteInterference();
   }
 
@@ -1286,7 +1286,7 @@ export class Combat {
     const before = this.churn.charges;
     this.churn.charges = Math.max(0, this.churn.charges - drain);
     if (dur) this.churnJamUntil = Math.max(this.churnJamUntil, this.t + dur);
-    this.emit({ type: 'snare', drained: before - this.churn.charges, dur, source: e ? e.name : '' });
+    this.emit({ type: 'snare', drained: before - this.churn.charges, dur, source: e ? e.id : null });
     this.noteInterference();
   }
 
@@ -1294,10 +1294,10 @@ export class Combat {
     if (this.reserve.length) {
       const u = this.reserve.pop();
       this.discard.push(u);
-      this.emit({ type: 'latch', uid: u, source: e ? e.name : '' });
+      this.emit({ type: 'latch', uid: u, source: e ? e.id : null });
     } else {
       this.reserveLatchUntil = Math.max(this.reserveLatchUntil, this.t + 5);
-      this.emit({ type: 'latch', uid: null, dur: 5, source: e ? e.name : '' });
+      this.emit({ type: 'latch', uid: null, dur: 5, source: e ? e.id : null });
     }
     this.noteInterference();
   }
@@ -1305,19 +1305,19 @@ export class Combat {
   drainFlow(e, sec) {
     if (!this.combo) return;
     this.combo.deadline = Math.max(this.t + 0.25, this.combo.deadline - sec);
-    this.emit({ type: 'drain', amount: sec, source: e ? e.name : '' });
+    this.emit({ type: 'drain', amount: sec, source: e ? e.id : null });
     this.noteInterference();
   }
 
   addGlitch(e, n) {
-    if (this.relics.has('root_key')) { this.emit({ type: 'banner', text: 'CORRUPTION BLOCKED', sub: 'Root Key', tone: 'good' }); return; }
+    if (this.relics.has('root_key')) { this.emit({ type: 'banner', text: 'CORRUPTION BLOCKED', sub: { k: '{r}', p: { r: { relic: 'root_key' } } }, tone: 'good' }); return; }
     for (let i = 0; i < n; i++) {
       const uid = `g${++this.uidCounter}`;
       this.cards.set(uid, { uid, id: 'glitch', up: false, temp: true });
       const pos = this.rng.int(Math.max(1, Math.ceil(this.draw.length / 2)) + 1);
       this.draw.splice(pos, 0, uid);
     }
-    this.emit({ type: 'glitch', n, source: e ? e.name : '' });
+    this.emit({ type: 'glitch', n, source: e ? e.id : null });
     this.noteInterference();
   }
 
@@ -1325,7 +1325,7 @@ export class Combat {
     if (this.combo) {
       this.combo.variant = this.rng.pick(['A', 'B']);
       this.combo.rank = Math.min(8, this.combo.rank + 1);
-      this.emit({ type: 'bleed', variant: this.combo.variant, rank: this.combo.rank, source: e.name });
+      this.emit({ type: 'bleed', variant: this.combo.variant, rank: this.combo.rank, source: e.id });
       this.noteInterference();
     } else this.scrambleCards(e, 3, 'both');
   }
@@ -1352,7 +1352,7 @@ export class Combat {
     const def = ENEMIES[e.id];
     const it = e.intent;
     const idef = def.intents[it.key];
-    this.emit({ type: 'enemyAct', uid: e.uid, kind: it.kind, name: it.name, target: it.target });
+    this.emit({ type: 'enemyAct', uid: e.uid, id: e.id, key: it.key, kind: it.kind, name: it.name, target: it.target });
     idef.exec(e, this, it);
     if (e.flags.rootAccess && this.phase !== 'END') this.addGlitch(e, 1);
     if (this.trait === 'STATIC' && this.phase !== 'END' && it.kind !== 'lock' && this.rng.chance(0.25)) this.lockCards(e, 1);

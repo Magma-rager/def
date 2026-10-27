@@ -50,7 +50,8 @@ export const Save = {
 };
 
 export function defaultSettings() {
-  return { master: 0.8, music: 0.55, sfx: 0.8, muted: false, reducedMotion: false, shake: true, hints: true, relaxed: false };
+  // lang: null until the player picks one; the browser language decides until then.
+  return { master: 0.8, music: 0.55, sfx: 0.8, muted: false, reducedMotion: false, shake: true, hints: true, relaxed: false, lang: null };
 }
 
 export function defaultMeta() {

@@ -1,6 +1,6 @@
 {
   "name": "signal-break",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "SIGNAL//BREAK - a real-time party-based roguelite deckbuilding JRPG",

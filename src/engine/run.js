@@ -8,6 +8,7 @@ import { EVENTS, EVENT_MAP } from '../data/events.js';
 import { MUTATIONS, MUTATION_IDS } from '../data/mutations.js';
 import { ADAPTATIONS } from '../data/adaptations.js';
 import { TRAIT_IDS } from '../data/traits.js';
+import { PREPARED_PLANS, VOLATILE_OUTCOMES } from '../data/acts.js';
 
 export const PARTY_BASE = { V: 46, C: 34, S: 38 };
 export const MAP_DEPTHS = 8; // depths 0..7, boss at depth 8
@@ -140,9 +141,10 @@ export class Run {
     return Object.entries(counts).sort((a, b) => b[1] - a[1]).map((x) => x[0]);
   }
 
-  archetypeLabel() {
+  // Dominant build archetype key (see ARCHETYPES), or 'balanced'.
+  archetypeKey() {
     const top = this.dominantTags()[0];
-    return top ? ARCHETYPES[top] : 'Balanced';
+    return top && ARCHETYPES[top] ? top : 'balanced';
   }
 
   // ───────────────────────── map ─────────────────────────
@@ -524,22 +526,22 @@ export class Run {
     const out = [];
     const add = (arch, score, evidence) => { if (score >= 1) out.push({ arch, score, evidence }); };
     if (S.combos >= 8) {
-      add('ladder', S.longCombos >= 4 ? (S.longCombos / combos) / 0.3 : 0, `${S.longCombos} of ${S.combos} combos ran 5+ cards`);
-      add('cashout', S.cashouts >= 5 ? (S.cashouts / combos) / 0.4 : 0, `${S.cashouts} of ${S.combos} combos ended in a Cash Out`);
-      add('relay', S.relays >= 15 ? (S.relays / combos) / 1.4 : 0, `${S.relays} Relays across ${S.combos} combos`);
+      add('ladder', S.longCombos >= 4 ? (S.longCombos / combos) / 0.3 : 0, { k: '{a} of {b} combos ran 5+ cards', p: { a: S.longCombos, b: S.combos } });
+      add('cashout', S.cashouts >= 5 ? (S.cashouts / combos) / 0.4 : 0, { k: '{a} of {b} combos ended in a Cash Out', p: { a: S.cashouts, b: S.combos } });
+      add('relay', S.relays >= 15 ? (S.relays / combos) / 1.4 : 0, { k: '{a} Relays across {b} combos', p: { a: S.relays, b: S.combos } });
     }
-    add('guard', S.guardAbsorbed >= 50 ? (S.guardGained / b) / 35 : 0, `${S.guardGained} Guard raised, ${S.guardAbsorbed} damage absorbed`);
-    add('churn', S.churns >= 12 ? (S.churns / b) / 4 : 0, `${S.churns} Churns over ${S.battles} battles`);
+    add('guard', S.guardAbsorbed >= 50 ? (S.guardGained / b) / 35 : 0, { k: '{a} Guard raised, {b} damage absorbed', p: { a: S.guardGained, b: S.guardAbsorbed } });
+    add('churn', S.churns >= 12 ? (S.churns / b) / 4 : 0, { k: '{a} Churns over {b} battles', p: { a: S.churns, b: S.battles } });
     const ab = S.variantPlays.A + S.variantPlays.B;
     if (ab >= 30) {
       const dom = S.variantPlays.A >= S.variantPlays.B ? 'A' : 'B';
       const share = S.variantPlays[dom] / ab;
-      add(`variant${dom}`, share / 0.68, `${Math.round(share * 100)}% of suited cards played were ${dom}`);
+      add(`variant${dom}`, share / 0.68, { k: '{a}% of suited cards played were {s}', p: { a: Math.round(share * 100), s: dom } });
     }
-    add('momentum', S.momentumSpent >= 25 ? (S.momentumSpent / b) / 6 : 0, `${S.momentumSpent} Momentum spent`);
-    add('flow', S.flowGained >= 5 ? (S.flowGained / b) / 1.2 : 0, `${S.flowGained.toFixed(1)}s of bonus Flow gained`);
-    add('reserve', S.reservePlays >= 6 ? (S.reservePlays / b) / 1.5 : 0, `${S.reservePlays} cards played from Reserve`);
-    add('interference', S.interferencePayoffs >= 8 ? (S.interferencePayoffs / b) / 2 : 0, `${S.interferencePayoffs} interference-payoff cards played`);
+    add('momentum', S.momentumSpent >= 25 ? (S.momentumSpent / b) / 6 : 0, { k: '{a} Momentum spent', p: { a: S.momentumSpent } });
+    add('flow', S.flowGained >= 5 ? (S.flowGained / b) / 1.2 : 0, { k: '{a}s of bonus Flow gained', p: { a: { n: S.flowGained, d: 1 } } });
+    add('reserve', S.reservePlays >= 6 ? (S.reservePlays / b) / 1.5 : 0, { k: '{a} cards played from Reserve', p: { a: S.reservePlays } });
+    add('interference', S.interferencePayoffs >= 8 ? (S.interferencePayoffs / b) / 2 : 0, { k: '{a} interference-payoff cards played', p: { a: S.interferencePayoffs } });
     return out.sort((a, b2) => b2.score - a.score);
   }
 
@@ -556,13 +558,12 @@ export class Run {
     const p = this.d.pending;
     if (!p || p.type !== 'bossprep' || p.choice) return null;
     let prep = {};
-    let text = '';
+    let rareCard = null;
     if (kind === 'prepared') {
       const plan = PREPARED_PLANS.find((x) => x.id === planId);
       if (!plan) return null;
       prep = { ...plan.prep };
       if (plan.healPct) this.healPct(plan.healPct);
-      text = plan.name;
     } else {
       const v = VOLATILE_OUTCOMES.find((x) => x.id === p.volatileId);
       prep = { ...v.prep };
@@ -570,12 +571,12 @@ export class Run {
       if (v.rareCard) {
         const pick = this.rng('volcard', this.d.act).pick(rewardPool().filter((c) => c.rarity === 'rare'));
         this.addCard({ id: pick.id });
-        text = `${v.name} (gained ${CARDS[pick.id].name})`;
-      } else text = v.name;
+        rareCard = pick.id;
+      }
     }
-    p.choice = { kind, planId: planId || p.volatileId, text };
+    p.choice = { kind, planId: planId || p.volatileId, rareCard };
     p.prep = prep;
-    this.d.bossDecisions.push({ act: this.d.act, boss: p.bossId, prep: kind, plan: text, adaptation: p.adaptation && !prep.noAdapt ? p.adaptation.name : null, evidence: p.profile[0] ? p.profile[0].evidence : null, result: null });
+    this.d.bossDecisions.push({ act: this.d.act, boss: p.bossId, prep: kind, planId: planId || p.volatileId, rareCard, adapt: p.adaptation && !prep.noAdapt ? p.arch : null, evidence: p.profile[0] ? p.profile[0].evidence : null, result: null });
     p.type = 'battle';
     p.kind = 'boss';
     return p;
@@ -678,7 +679,6 @@ export class Run {
   // Run API handed to event scripts.
   api(rng) {
     const run = this;
-    const name = (id) => CARDS[id].name;
     return {
       rng,
       get scrap() { return run.d.scrap; },
@@ -690,29 +690,29 @@ export class Run {
       healPct: (p) => run.healPct(p),
       healFlat: (n) => run.healFlat(n),
       gainMaxHp: (id, n) => { const m = run.member(id); m.maxHp += n; m.hp += n; },
-      loseMaxHpRandom: (n) => { const m = rng.pick(run.d.party); m.maxHp = Math.max(10, m.maxHp - n); m.hp = Math.min(m.hp, m.maxHp); return { V: 'Hessa', C: 'Corvin', S: 'Pin' }[m.id]; },
+      loseMaxHpRandom: (n) => { const m = rng.pick(run.d.party); m.maxHp = Math.max(10, m.maxHp - n); m.hp = Math.min(m.hp, m.maxHp); return m.id; },
       loseMaxHpPctAll: (p) => run.d.party.forEach((m) => { m.maxHp = Math.max(10, Math.round(m.maxHp * (1 - p))); m.hp = Math.min(m.hp, m.maxHp); }),
       upgradeRandom: (n) => {
         const c = rng.sample(run.d.deck.filter((x) => !x.up), n);
         c.forEach((x) => (x.up = true));
-        return c.map((x) => name(x.id));
+        return c.map((x) => x.id);
       },
       addRandomCards: (n, rarity) => {
         const pool = rewardPool().filter((c) => !rarity || c.rarity === rarity);
         const out = [];
-        for (let i = 0; i < n; i++) { const c = rng.pick(pool); run.addCard({ id: c.id }); out.push(c.name); }
+        for (let i = 0; i < n; i++) { const c = rng.pick(pool); run.addCard({ id: c.id }); out.push(c.id); }
         return out;
       },
-      offerCards: (n, minRarity, tag) => ({ text: 'Choose a card.', offer: run.cardChoices(rng, n, { minRarity, tag }) }),
+      offerCards: (n, minRarity, tag) => ({ text: { k: '$Choose a card.' }, offer: run.cardChoices(rng, n, { minRarity, tag }) }),
       offerGraft: () => {
         const g = rng.pick(Object.keys(GRAFTS));
-        return { text: `The Oracle prepares a ${GRAFTS[g].name} graft.`, select: { title: `Graft ${GRAFTS[g].name}`, filter: 'graftable', action: `graft:${g}` } };
+        return { text: { k: '$The Oracle prepares a {g} graft.', p: { g: { graft: g } } }, select: { title: { k: 'Graft {g}', p: { g: { graft: g } } }, filter: 'graftable', action: `graft:${g}` } };
       },
       addRandomRelic: () => {
         const r = run.randomRelics(rng, 1)[0];
-        if (!r) { run.d.scrap += 50; return '50 Scrap (no relics left)'; }
+        if (!r) { run.d.scrap += 50; return null; }
         run.addRelic(r);
-        return RELICS[r].name;
+        return r;
       },
       addRelic: (id) => run.addRelic(id),
       hasRelic: (id) => run.hasRelic(id),
@@ -721,14 +721,14 @@ export class Run {
         const c = run.d.relics.filter((r) => RELICS[r].rarity !== 'starter');
         const r = rng.pick(c);
         run.d.relics = run.d.relics.filter((x) => x !== r);
-        return RELICS[r].name;
+        return r;
       },
       mutateRandomRank: () => {
         const c = rng.pick(run.d.deck);
         const delta = rng.chance(0.5) ? 1 : -1;
         const before = run.effRank(c);
         c.rankMod = (c.rankMod || 0) + delta;
-        return `${name(c.id)} is now rank ${run.effRank(c)} (was ${before}).`;
+        return { k: '{card} is now rank {now} (was {was}).', p: { card: { card: c.id }, now: run.effRank(c), was: before } };
       },
       flag: (f) => { run.d.flags[f] = true; },
       setNextBattleMod: (m) => { run.d.nextBattleMod = m; },
@@ -820,7 +820,7 @@ export class Run {
       const up = this.api(this.rng('od', p.nodeId)).upgradeRandom(2);
       for (const m of this.d.party) m.hp = Math.max(1, m.hp - Math.round(m.hp * 0.15));
       p.done = 'overdrive';
-      return { text: `Overdrive! ${up.join(' and ') || 'No cards'} upgraded. Everyone pays for it in HP.` };
+      return { text: { k: 'Overdrive! {cards} upgraded. Everyone pays for it in HP.', p: { cards: { cards: up } } } };
     }
     if (option === 'tune') { p.select = { title: 'Upgrade a card', filter: 'upgradable', action: 'upgrade', then: 'tune' }; return { select: true }; }
     return null;
@@ -831,7 +831,7 @@ export class Run {
     if (!p || p.type !== 'surgery') return { ok: false };
     const cost = (p.ops === 0 ? 0 : 40) + (action === 'ex' ? 50 : 0);
     if (p.ops >= 2) return { ok: false, text: 'The surgeon is out of thread' };
-    if (this.d.scrap < cost) return { ok: false, text: `Need ${cost} Scrap` };
+    if (this.d.scrap < cost) return { ok: false, text: { k: 'Need {n} Scrap', p: { n: cost } } };
     if (!this.applySelect(action, uid)) return { ok: false, text: 'Not applicable' };
     this.d.scrap -= cost;
     p.ops++;
@@ -861,24 +861,11 @@ export class Run {
     return {
       result, act: this.d.act, floors: this.d.floors, bosses: this.d.bossesDefeated.slice(), elites: S.elites,
       deckSize: this.d.deck.length, relics: this.d.relics.slice(), mutations: this.d.mutations.slice(),
-      archetype: this.archetypeLabel(), longest: S.longest, maxHit: S.maxHit, damage: S.damage, combos: S.combos,
+      archetype: this.archetypeKey(), longest: S.longest, maxHit: S.maxHit, damage: S.damage, combos: S.combos,
       perfect: S.perfect, cashouts: S.cashouts, finishers: S.finishers, score, seed: this.d.seed,
       decisions: this.d.bossDecisions.slice(), date: Date.now(), flags: { ...this.d.flags },
     };
   }
 }
 
-export const PREPARED_PLANS = [
-  { id: 'brace', name: 'Brace Protocol', text: 'Start with 15 Guard and +1 Churn charge.', prep: { startGuard: 15, churnBonus: 1 } },
-  { id: 'scout', name: 'Scout Report', text: 'Adaptation break requirement halved. The boss acts 4s later at the start.', prep: { scout: true, bossDelay: 4 } },
-  { id: 'tuned', name: 'Tuned Opening', text: 'Heal 15% now and start with 4 Momentum.', prep: { startMomentum: 4 }, healPct: 0.15 },
-];
-
-export const VOLATILE_OUTCOMES = [
-  { id: 'overcharged', name: 'Overcharged', text: 'Your damage +25%, but the boss has +20% HP.', prep: { dmgMult: 1.25, bossHpMult: 1.2 } },
-  { id: 'redline', name: 'Redline', text: 'Start with 8 Momentum, but every ally takes 10% max HP damage now.', prep: { startMomentum: 8 }, partyDamagePct: 0.1 },
-  { id: 'wildcard', name: 'Wildcard', text: 'Gain a random rare card permanently, but the boss starts with 30 Guard.', prep: { bossGuard: 30 }, rareCard: true },
-  { id: 'scramble', name: 'Signal Scramble', text: 'Boss adaptation is removed, but the boss acts 15% faster.', prep: { noAdapt: true, bossHaste: 1.15 } },
-];
-
-export { ENEMIES };
+export { ENEMIES, PREPARED_PLANS, VOLATILE_OUTCOMES };

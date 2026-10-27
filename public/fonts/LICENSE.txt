@@ -1,4 +1,6 @@
-Barlow Condensed (Jeremy Tribby), Big Shoulders Display (Patric King / Chicago Design System) and
-Spectral (Production Type) are licensed under the SIL Open Font License, Version 1.1.
+Barlow Condensed (Jeremy Tribby), Big Shoulders Display (Patric King / Chicago Design System),
+Spectral (Production Type), Fira Sans Extra Condensed (Carrois Apostrophe / Mozilla) and
+Oswald (Vernon Adams, Kalapi Gajjar, Cyreal) are licensed under the SIL Open Font License, Version 1.1.
 https://openfontlicense.org — the fonts may be bundled, embedded and redistributed with software.
-Files are the latin subsets served by Google Fonts.
+Files are the latin and cyrillic subsets served by Google Fonts. The cyrillic Fira Sans Extra Condensed
+and Oswald faces supply Cyrillic glyphs for the Barlow Condensed and Big Shoulders Display families.

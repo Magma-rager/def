@@ -66,6 +66,12 @@ p { margin: 0 0 0.7em; line-height: 1.35; }
 .title-menu { display: flex; flex-direction: column; gap: 8px; }
 .title-foot { font-size: 0.85em; color: var(--cream3); }
 .title-build { font-size: 0.75em; color: var(--cream3); opacity: 0.7; margin-top: -8px; }
+.lang-switch { display: inline-flex; border: 1px solid var(--brass-lo); border-radius: 4px; overflow: hidden; background: rgba(30, 16, 24, 0.85); }
+.title > .lang-switch { position: absolute; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); z-index: 2; }
+.lang-opt { appearance: none; border: 0; background: transparent; color: var(--cream2); font: inherit; font-weight: 700; font-size: 0.9em; padding: 0 0.9em; min-height: 40px; cursor: pointer; }
+.lang-opt + .lang-opt { border-left: 1px solid var(--brass-lo); }
+.lang-opt.on { background: linear-gradient(var(--rust-hi), var(--rust)); color: #fff4e0; }
+.set-row.lang-row { align-items: center; }
 .starter-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
 .starter-opt { display: flex; gap: 10px; align-items: center; text-align: left; padding: 10px; border: 1px solid var(--char3); border-radius: 5px; background: rgba(255, 255, 255, 0.03); cursor: pointer; }
 .starter-opt.sel { border-color: var(--brass-hi); background: rgba(201, 162, 74, 0.12); }
@@ -292,9 +298,9 @@ p { margin: 0 0 0.7em; line-height: 1.35; }
 .card-glyph .g-gear { fill: none; stroke: rgba(255, 230, 180, 0.25); stroke-width: 1.4; stroke-dasharray: 2 1.5; }
 .owner-chip { position: absolute; left: calc(3px * var(--cs)); bottom: calc(2px * var(--cs)); font-family: var(--font-display); font-weight: 900; font-size: calc(11px * var(--cs)); color: #fff; text-shadow: 0 1px 0 #000; z-index: 1; }
 .rare-gem { position: absolute; right: calc(3px * var(--cs)); top: calc(3px * var(--cs)); width: calc(7px * var(--cs)); height: calc(7px * var(--cs)); background: #ffb35a; transform: rotate(45deg); box-shadow: 0 0 6px #ffb35a; z-index: 1; }
-.card-name { font-family: var(--font-display); font-weight: 800; font-size: calc(12.5px * var(--cs)); line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; color: var(--ink); }
+.card-name { font-family: var(--font-display); font-weight: 800; font-size: calc(12.5px * var(--cs) * var(--fit, 1)); line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; color: var(--ink); }
 .card-name sup { color: #2a8a4a; font-size: 0.8em; }
-.card-text { font-size: calc(9.4px * var(--cs)); line-height: 1.18; flex: none; color: #3a2420; max-height: calc(48px * var(--cs)); overflow: hidden; }
+.card-text { font-size: calc(9.4px * var(--cs) * var(--fit, 1)); line-height: 1.18; flex: none; color: #3a2420; max-height: calc(48px * var(--cs)); overflow: hidden; }
 .card-text b { font-weight: 800; color: var(--ink); }
 .card-text b.upv { color: #2a8a4a; }
 .card-foot { display: flex; gap: 2px; flex-wrap: wrap; min-height: calc(10px * var(--cs)); align-items: center; flex: none; }
@@ -403,7 +409,13 @@ p { margin: 0 0 0.7em; line-height: 1.35; }
 .res-card { flex: 1; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto 1fr; padding: 3px 5px; border-radius: 5px; background: linear-gradient(165deg, #f6ecd4, #d8c49a); color: var(--ink); border: 2px solid var(--oc); cursor: pointer; overflow: hidden; min-height: 0; }
 .res-card .rr { font-family: var(--font-display); font-weight: 900; font-size: 1.25em; line-height: 1; }
 .res-card .rv { justify-self: start; align-self: center; margin-left: 3px; font-weight: 900; font-size: 0.7em; color: #fff; background: var(--vc); padding: 0 3px; border-radius: 2px; }
-.res-card .rn { grid-column: 1 / 3; font-size: 0.68em; font-weight: 800; line-height: 1.05; overflow: hidden; }
+.res-card .rn { grid-column: 1 / 3; font-size: calc(0.68em * var(--fit, 1)); font-weight: 800; line-height: 1.05; overflow: hidden; }
+.reserve-slots.many { gap: 2px; }
+.res-card.dense { display: block; padding: 2px 3px; }
+.res-card.dense .rr, .res-card.dense .rv { float: left; clear: left; margin-right: 2px; text-align: center; }
+.res-card.dense .rr { font-size: 0.9em; min-width: 7px; }
+.res-card.dense .rv { margin: 0 2px 0 0; font-size: 0.5em; line-height: 1.1; padding: 0 1px; }
+.res-card.dense .rn { display: block; overflow: visible; }
 .res-card.legal { box-shadow: 0 0 0 2px var(--brass-hi), 0 0 10px rgba(255, 210, 120, 0.5); }
 .res-card.illegal { filter: saturate(0.35) brightness(0.62); }
 .reserve.latched .res-cell { border-color: #b48cf0; background: repeating-linear-gradient(45deg, rgba(180, 140, 240, 0.15) 0 4px, transparent 4px 8px); }
@@ -443,8 +455,10 @@ p { margin: 0 0 0.7em; line-height: 1.35; }
 .stat .lbl { font-size: 0.7em; font-weight: 800; letter-spacing: 0.08em; color: var(--cream3); }
 .stat .counter { color: #e6c779; font-weight: 800; margin-left: auto; }
 .stat.churn .ic { color: #ffb3a0; }
-.stat .dots { display: inline-flex; gap: 2px; }
-.stat .dots i { width: 8px; height: 8px; border-radius: 50%; background: #2a1820; border: 1px solid #8a5a4a; }
+.stat .dots { display: inline-flex; gap: 2px; flex: 0 1 auto; min-width: 0; align-items: center; }
+/* with many charges on a narrow panel the dots shrink, so the label always fits */
+.stat .dots i { flex: 0 1 8px; min-width: 4px; height: auto; aspect-ratio: 1; box-sizing: border-box; border-radius: 50%; background: #2a1820; border: 1px solid #8a5a4a; }
+.stat .ic, .stat .lblwrap, .stat b { flex: none; }
 .stat .dots i.on { background: #ffb3a0; border-color: #ffd0c0; }
 .stat.churn.snared { border-color: #b48cf0; }
 .stat.churn.snared .lbl { color: #b48cf0; }
@@ -476,10 +490,10 @@ p { margin: 0 0 0.7em; line-height: 1.35; }
 .compact .combo-next { font-size: 0.75em; }
 
 /* compact cards: thin art band, larger text */
-.compact .hand .card-art, .compact .res-card .card-art { flex: 0 0 calc(16px + 8px * var(--cs)); min-height: 0; }
+.compact .hand .card-art, .compact .res-card .card-art { flex: 0 1 calc(16px + 8px * var(--cs)); min-height: 4px; }
 .compact .hand .card-glyph { height: 90%; width: 40%; }
-.compact .hand .card-text { font-size: 10px; line-height: 1.12; max-height: 34px; }
-.compact .hand .card-name { font-size: 12px; }
+.compact .hand .card-text { font-size: calc(10px * var(--fit, 1)); line-height: 1.12; max-height: 34px; flex: 0 0 auto; }
+.compact .hand .card-name { font-size: calc(12px * var(--fit, 1)); }
 .compact .hand .card-top .rank { font-size: 20px; }
 .compact .hand .card-top .var { font-size: 11px; }
 .compact .hand .card-top .role-tag { font-size: 8px; padding: 1px 3px; }
@@ -502,3 +516,18 @@ p { margin: 0 0 0.7em; line-height: 1.35; }
 .reward-body > .row-btns.end, .shop-wrap > .row-btns.end, .surgery-wrap .row-btns.end, .event-body .row-btns.end, .rest-body .row-btns.end { position: sticky; bottom: -14px; z-index: 2; margin-top: auto; padding: 12px 0 8px; background: linear-gradient(rgba(28, 16, 24, 0), #1c1018 45%); }
 .panel .row-btns.end, .panel .select-foot { position: sticky; bottom: -18px; z-index: 2; padding: 12px 0 8px; background: linear-gradient(rgba(26, 16, 22, 0), #1a1016 40%); }
 .compact .panel .row-btns.end, .compact .panel .select-foot { bottom: -12px; }
+
+/* ── long translated text ── */
+.card-name.two-line { white-space: normal; text-overflow: clip; line-height: 0.98; max-height: 2em; overflow-wrap: anywhere; }
+html[lang="ru"] .card-text, html[lang="ru"] .event-text, html[lang="ru"] .event-result, html[lang="ru"] .choice span, html[lang="ru"] .rb-text,
+html[lang="ru"] .mi-desc, html[lang="ru"] .mi-tdesc, html[lang="ru"] .tut-body, html[lang="ru"] .htp-sec, html[lang="ru"] .adapt-card span,
+html[lang="ru"] .banner-sub, html[lang="ru"] .relic-cell span, html[lang="ru"] .mut-card span { hyphens: auto; -webkit-hyphens: auto; overflow-wrap: break-word; }
+/* Russian card text is longer: let it use more of the card and the art band give way */
+html[lang="ru"] .card-text { max-height: calc(62px * var(--cs)); line-height: 1.13; }
+html[lang="ru"] .card-art { min-height: calc(12px * var(--cs)); }
+html[lang="ru"] .compact .hand .card-text { max-height: 46px; }
+/* The Churn label and the FREE badge stack, so four charge dots and the badge fit a narrow panel */
+.stat .lblwrap { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 1px; line-height: 1; min-width: 0; }
+.stat .lblwrap .free { margin-left: 0; font-size: 0.58em; padding: 0 3px; }
+html[lang="ru"] .stat .lbl { letter-spacing: 0.02em; }
+

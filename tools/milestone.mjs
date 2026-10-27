@@ -9,9 +9,19 @@
 // preparation against the Act II boss, so those paths are exercised too.
 //
 // Usage: node tools/milestone.mjs [outDir] [minutes] [stopAtAct] [width] [height]
+// SB_LANG=ru     plays in Russian: switches the language with the title-screen toggle, finds buttons by
+//                their translated labels, and checks every screen (DOM and canvas text) for leftover
+//                English and for clipped text.
+// SB_FLOW=defeat after the first run, restarts a fight from the pause menu, loses the next run (the bot
+//                stops acting at its Act I boss), and starts a third run up to its first victory.
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
+import { findIssues } from './lib/text-issues.mjs';
+import { RU } from '../src/i18n/ru.js';
 const { chromium } = createRequire(import.meta.url)('playwright');
+const LANG = process.env.SB_LANG || 'en';
+const FLOW = process.env.SB_FLOW || 'full';
+const L = (s) => (LANG === 'ru' && RU.ui[s] !== undefined ? RU.ui[s] : s);
 
 const [outDir = 'milestone-out', minutes = 25, stopAtAct = 4, W = 1194, H = 834] = process.argv.slice(2);
 fs.mkdirSync(outDir, { recursive: true });
@@ -19,6 +29,12 @@ const URL = process.env.SB_URL || 'http://localhost:8123/index.html';
 
 const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: +W, height: +H }, hasTouch: true });
+// Record canvas text so the battle field can be checked for untranslated words too.
+await ctx.addInitScript(() => {
+  window.__drawn = new Set();
+  const fill = CanvasRenderingContext2D.prototype.fillText;
+  CanvasRenderingContext2D.prototype.fillText = function (txt, ...rest) { if (typeof txt === 'string' && txt.length > 1) window.__drawn.add(txt); return fill.call(this, txt, ...rest); };
+});
 const p = await ctx.newPage();
 const errors = [];
 p.on('pageerror', (e) => errors.push('PAGEERROR ' + e.message));
@@ -33,7 +49,7 @@ const check = (name, ok, detail = '') => { checks.push({ name, ok: !!ok, detail 
 const shot = (name) => p.screenshot({ path: `${outDir}/${name}.png` });
 
 const click = async (sel) => { const el = await p.$(sel); if (el) { await el.click({ timeout: 1500 }).catch(() => {}); return true; } return false; };
-const clickText = async (text) => { const el = p.getByRole('button', { name: text, exact: true }).first(); if (await el.count()) { await el.click({ timeout: 1500 }).catch(() => {}); return true; } return false; };
+const clickText = async (text) => { const el = p.getByRole('button', { name: L(text), exact: true }).first(); if (await el.count()) { await el.click({ timeout: 1500 }).catch(() => {}); return true; } return false; };
 
 const screen = () => p.evaluate(() => {
   if (document.querySelector('.dialog-layer')) return 'dialog';
@@ -56,13 +72,47 @@ const snap = () => p.evaluate(() => {
     bossDecisions: JSON.stringify(d.bossDecisions),
   };
 });
+// Words of 3+ Latin letters that may legitimately stay in Latin script in any language.
+// Language names in the switch are written in their own language on purpose.
+const LATIN_OK = /^(SIGNAL|BREAK|Signalbreak|EX|ATB|Mk\d*|Shift|Alt|Tab|Esc|JRPG|NPC|root|Root|give|rare|English)$/;
+const leftovers = new Map();
+const layoutIssues = new Map();
+async function scanScreen(name) {
+  if (LANG === 'en') return;
+  const r = await p.evaluate(() => {
+    const out = new Set();
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const n = walker.currentNode;
+      const el = n.parentElement;
+      if (!el || !el.getClientRects().length || el.closest('.dlg-text')) continue; // dialogue is typed out letter by letter
+      const t = n.textContent.replace(/\s+/g, ' ').trim();
+      if (t) out.add(t);
+    }
+    for (const el of document.querySelectorAll('[aria-label],[title]')) for (const a of ['aria-label', 'title']) { const v = el.getAttribute(a); if (v) out.add(v); }
+    const drawn = [...window.__drawn];
+    window.__drawn.clear();
+    return { dom: [...out], canvas: drawn };
+  });
+  for (const [src, list] of Object.entries(r)) {
+    for (const text of list) {
+      const bad = [...new Set((text.match(/[A-Za-z]{3,}/g) || []).filter((w) => !LATIN_OK.test(w)))];
+      if (bad.length && !leftovers.has(`${src}|${text}`)) leftovers.set(`${src}|${text}`, { screen: name, src, text: text.slice(0, 90), words: bad });
+    }
+  }
+  for (const i of await p.evaluate(findIssues)) {
+    const key = `${i.kind}|${i.where}|${i.text}`;
+    if (!layoutIssues.has(key)) layoutIssues.set(key, { screen: name, ...i });
+  }
+}
+
 const same = (a, b, keys) => keys.filter((k) => JSON.stringify(a[k]) !== JSON.stringify(b[k]));
 
 async function reloadAndContinue(label) {
   const before = await snap();
   await p.reload();
   await p.waitForTimeout(700);
-  const hasContinue = await p.getByRole('button', { name: 'Continue', exact: true }).count();
+  const hasContinue = await p.getByRole('button', { name: L('Continue'), exact: true }).count();
   check(`${label}: Continue offered after reload`, hasContinue > 0);
   await clickText('Continue');
   await p.waitForTimeout(800);
@@ -98,6 +148,7 @@ async function fightLog() {
     return `t=${c.t.toFixed(0)}s enemies ${c.enemies.filter((e) => e.alive).map((e) => `${e.id} ${Math.round(e.hp)}/${e.maxHp} g${Math.round(e.guard)}`).join(' ')} | party ${c.party.map((m) => (m.ko ? 'KO' : Math.round(m.hp))).join('/')} | ${c.phase} hand ${roles} | glitch in draw ${c.draw.filter((u) => c.roleOf(u) === 'junk').length} | churn ${c.churn.charges}`;
   });
   if (f) log(`fight ${f}`);
+  await scanScreen('battle');
 }
 
 async function battleTick() {
@@ -144,6 +195,19 @@ async function battleTick() {
 await p.goto(URL);
 await p.waitForFunction(() => window.__sb, null, { timeout: 15000 });
 await p.waitForTimeout(300);
+const titleState = () => p.evaluate(() => ({ lang: document.documentElement.lang, btn: document.querySelector('.title-menu .btn').textContent, tagline: document.querySelector('.tagline').textContent }));
+if (LANG !== 'en') {
+  await p.locator('.title .lang-switch .lang-opt[lang="' + LANG + '"]').click();
+  await p.waitForTimeout(400);
+  const a = await titleState();
+  check('Language switched from the title screen', a.lang === LANG && a.btn === L('New Run'), `${a.lang}: ${a.btn} · ${a.tagline}`);
+  await p.reload();
+  await p.waitForFunction(() => window.__sb, null, { timeout: 15000 });
+  await p.waitForTimeout(400);
+  const b2 = await titleState();
+  check('Language choice persists after reload', b2.lang === LANG && b2.btn === L('New Run'), `${b2.lang}: ${b2.btn}`);
+  await shot('00-title');
+}
 const deadline = Date.now() + minutes * 60000;
 let lastScreen = '';
 const done = new Set();
@@ -152,12 +216,64 @@ let firstRunSummary = null;
 const elitesTaken = new Set();
 let shopDone = false;
 let elitesChecked = 0;
+let runIndex = 1;
+const seenModals = new Set();
+let stallTicks = 0;
+let sawDefeatDialog = '';
 
 while (Date.now() < deadline) {
   const s = await screen();
   const st = await p.evaluate(() => { const r = window.__sb && window.__sb.run; const pd = r && r.d.pending; return r ? { act: r.d.act, pending: pd && pd.type, next: pd && pd.next, boss: !!(pd && pd.boss), bossFight: !!(pd && pd.type === 'battle' && pd.nodeId && r.node(pd.nodeId).type === 'boss'), floor: r.d.floors } : null; });
   if (s !== 'battle') fightStart = 0;
-  if (s !== lastScreen) { log(`screen ${s}${st ? ` (act ${st.act}, floor ${st.floor}, pending ${st.pending})` : ''}`); lastScreen = s; }
+  if (s !== lastScreen) {
+    log(`screen ${s}${st ? ` (act ${st.act}, floor ${st.floor}, pending ${st.pending})` : ''}`);
+    lastScreen = s;
+    await p.waitForTimeout(250);
+    await scanScreen(s === 'dialog' || s === 'modal' ? `${s}@${st ? `act${st.act}-floor${st.floor}-${st.pending}` : 'no run'}` : s);
+  }
+
+  // ── SB_FLOW=defeat: runs 2 and 3 ──
+  if (runIndex === 2 && s === 'battle' && st && !st.bossFight && !done.has('restart2')) {
+    done.add('restart2');
+    await p.waitForTimeout(2500);
+    const before = await p.evaluate(() => ({ t: window.__sb.battle.combat.t, enemies: window.__sb.battle.combat.enemies.map((e) => e.id) }));
+    await click('.pause-btn');
+    await p.waitForTimeout(300);
+    await shot('07-pause-menu');
+    await clickText('Restart encounter');
+    await p.waitForTimeout(300);
+    await shot('08-restart-confirm');
+    await p.locator('.modal .btn.danger', { hasText: L('Restart') }).click();
+    await p.waitForTimeout(800);
+    const after = await p.evaluate(() => ({ t: window.__sb.battle.combat.t, enemies: window.__sb.battle.combat.enemies.map((e) => e.id) }));
+    check('Restart encounter from the pause menu restarts the fight', (await screen()) === 'battle' && after.t < before.t && JSON.stringify(after.enemies) === JSON.stringify(before.enemies), `t ${before.t.toFixed(1)}s -> ${after.t.toFixed(1)}s, ${after.enemies.join('+')}`);
+    continue;
+  }
+  if (runIndex === 2 && s === 'dialog' && !st) {
+    sawDefeatDialog = await p.evaluate(() => { const n = document.querySelector('.dlg-name b'); const tx = document.querySelector('.dlg-text'); return n ? `${n.textContent}: ${tx.textContent}` : ''; });
+    await p.waitForTimeout(1200);
+    sawDefeatDialog = await p.evaluate(() => { const n = document.querySelector('.dlg-name b'); const tx = document.querySelector('.dlg-text'); return n ? `${n.textContent}: ${tx.textContent}` : ''; });
+    await shot('09-defeat-dialog');
+  }
+  if (runIndex === 2 && s === 'results' && !done.has('results2')) {
+    done.add('results2');
+    await shot('10-defeat-results');
+    const r = await p.evaluate(() => ({ title: document.querySelector('.results-body h1').textContent, runs: window.__sb.meta.totalRuns, last: window.__sb.meta.runs[0].result }));
+    check('Defeat ends the run on the results screen', r.title === L('RUN ENDED') && r.last === 'defeat' && r.runs === 2, `${r.title}, Museum runs ${r.runs}, last ${r.last}`);
+    check('Defeat dialogue shown', !!sawDefeatDialog, sawDefeatDialog);
+    await clickText('New Run');
+    await p.waitForTimeout(400);
+    await clickText('Begin');
+    await p.waitForTimeout(600);
+    runIndex = 3;
+    check('New run starts after the defeat', await p.evaluate(() => !!window.__sb.run && window.__sb.run.d.floors === 0));
+    continue;
+  }
+  if (runIndex === 3 && s === 'reward') {
+    check('New run after the defeat reaches its first victory', true, await p.evaluate(() => `floor ${window.__sb.run.d.floors}`));
+    await shot('11-run3-reward');
+    break;
+  }
 
   // ── checkpoints ──
   if (s === 'battle' && !done.has('midbattle') && st && st.act === 1 && st.floor >= 2) {
@@ -240,12 +356,12 @@ while (Date.now() < deadline) {
     check('Run ended and was recorded in the Museum', firstRunSummary.runs === 1, `${firstRunSummary.title}, bosses ${firstRunSummary.bosses.join(',')}`);
     await p.reload();
     await p.waitForTimeout(700);
-    check('Continue not offered after the run ended', (await p.getByRole('button', { name: 'Continue', exact: true }).count()) === 0);
+    check('Continue not offered after the run ended', (await p.getByRole('button', { name: L('Continue'), exact: true }).count()) === 0);
     check('Run recorded exactly once', (await p.evaluate(() => window.__sb.meta.totalRuns)) === 1);
     // next run: starter relic unlocked by the Act I boss kill must be selectable and applied
     await clickText('New Run');
     await p.waitForTimeout(400);
-    const opt = p.locator('.starter-opt', { hasText: 'Stopwatch Gear' });
+    const opt = p.locator('.starter-opt', { hasText: LANG === 'ru' ? RU.relics.stopwatch_gear.name : 'Stopwatch Gear' });
     const enabled = (await opt.count()) && !(await opt.isDisabled());
     check('Museum unlock (Stopwatch Gear) selectable in the next run', enabled);
     if (enabled) {
@@ -256,6 +372,7 @@ while (Date.now() < deadline) {
       check('Unlocked starter relic applied to the new run', relics.includes('stopwatch_gear'), relics.join(','));
     }
     await shot('06-next-run');
+    if (FLOW === 'defeat') { runIndex = 2; continue; }
     break;
   }
 
@@ -264,7 +381,12 @@ while (Date.now() < deadline) {
     case 'title': if (!(await clickText('New Run'))) await clickText('Continue'); await p.waitForTimeout(250); await clickText('Begin'); break;
     case 'dialog': await click('.dlg-skip'); break;
     case 'select': { const c = await p.$('.modal .deck-grid .card:not(.disabled)'); if (c) await c.click(); await p.waitForTimeout(80); await p.locator('.modal .select-foot .btn.primary').click({ timeout: 800 }).catch(() => {}); break; }
-    case 'modal': if (!(await click('.modal .btn.primary'))) await click('.modal-bg'); break;
+    case 'modal': {
+      const title = await p.evaluate(() => { const m = [...document.querySelectorAll('.modal h2')].pop(); return m ? m.textContent : ''; });
+      if (!seenModals.has(title)) { seenModals.add(title); log(`modal "${title}"`); await shot(`modal-${seenModals.size}`); }
+      if (!(await click('.modal .btn.primary'))) await click('.modal-bg');
+      break;
+    }
     case 'map': {
       // prefer rests when hurt, avoid elites when hurt
       const { hp, scrap } = await p.evaluate(() => ({ hp: window.__sb.run.d.party.reduce((a, m) => a + m.hp / m.maxHp, 0) / 3, scrap: window.__sb.run.d.scrap }));
@@ -277,7 +399,16 @@ while (Date.now() < deadline) {
       await clickText('Travel');
       break;
     }
-    case 'battle': battleSeen++; await fightLog(); await battleTick(); break;
+    case 'battle': {
+      // diagnostics: report why combat time stopped (tutorial card or modal left open)
+      const stall = await p.evaluate(() => { const a = window.__sb; const c = a.battle && a.battle.combat; return c ? { paused: a.paused, tut: a.battle.tutEl.hidden ? '' : a.battle.tutEl.textContent.slice(0, 40), modals: a.modals.length } : null; });
+      if (stall && stall.paused) { stallTicks++; if (stallTicks === 15) { log(`battle paused: tutorial "${stall.tut}", modals ${stall.modals}`); await shot(`stall-${Date.now() - t0}`); } } else stallTicks = 0;
+    }
+      battleSeen++;
+      await fightLog();
+      // SB_FLOW=defeat: in run 2 the bot stops acting at the Act I boss and loses the fight
+      if (!(runIndex === 2 && st && st.bossFight)) await battleTick();
+      break;
     case 'reward': {
       const cards = await p.$$('.reward-cards .card:not(.faded):not(.picked)');
       if (cards.length) { await cards[0].click(); await clickText('Take card'); }
@@ -319,7 +450,7 @@ while (Date.now() < deadline) {
         await p.waitForTimeout(400);
         const dec = await p.evaluate(() => window.__sb.run.d.bossDecisions.at(-1));
         const shown = await p.$eval('.modal h2', (e) => e.textContent).catch(() => '');
-        check('Volatile boss prep rolled and shown', dec && dec.prep === 'volatile' && shown.startsWith('Volatile'), `${shown}`);
+        check('Volatile boss prep rolled and shown', dec && dec.prep === 'volatile' && shown.startsWith(L('Volatile: {v}').split('{')[0].trim()), `${shown}`);
         await click('.modal .btn.primary');
         await p.waitForTimeout(500);
         await reloadAndContinue('Volatile boss fight');
@@ -335,7 +466,12 @@ while (Date.now() < deadline) {
   await p.waitForTimeout(s === 'battle' ? 120 : 120);
 }
 
-const report = { url: URL, viewport: `${W}x${H}`, durationSec: Math.round((Date.now() - t0) / 1000), checks, passed: checks.filter((c) => c.ok).length, failed: checks.filter((c) => !c.ok).length, errors, firstRunSummary, events };
+const report = { url: URL, lang: LANG, flow: FLOW, viewport: `${W}x${H}`, durationSec: Math.round((Date.now() - t0) / 1000), checks, passed: checks.filter((c) => c.ok).length, failed: checks.filter((c) => !c.ok).length, errors, leftovers: [...leftovers.values()], layoutIssues: [...layoutIssues.values()], firstRunSummary, events };
 fs.writeFileSync(`${outDir}/report.json`, JSON.stringify(report, null, 2));
 console.log(`\n${report.passed} passed, ${report.failed} failed, ${errors.length} page errors`);
+if (LANG !== 'en') {
+  console.log(`${report.leftovers.length} texts with Latin words, ${report.layoutIssues.length} layout issues`);
+  for (const x of report.leftovers) console.log(`  [${x.src}] ${x.screen}: "${x.text}" (${x.words.join(', ')})`);
+  for (const x of report.layoutIssues) console.log(`  [${x.kind}] ${x.screen}: "${x.text}" @ ${x.where}`);
+}
 await b.close();

@@ -48,7 +48,7 @@ Audit date: 2026-10-27. Baseline commit: `251bbb8` (branch `claude/adoring-newto
 | Shops (cards, relics, removal, upgrade, surgery, heal) | `run.js` `makeShop`, `shopBuy` | Working | U (run), P (card purchase applied, 4 runs); services U only |
 | Events (21; every choice) | `data/events.js` | Working | U (run: all choices), P |
 | Rest (recover, tune-up, fortify, overdrive), surgery, caches | `run.js` | Working | U (systems), P |
-| Elites | `data/enemies.js` | Working | S, P (Foundry Warden, Hound Mother, Archive Censor, Choir Engine beaten through the UI; Null Knight, Rank Eater S only) |
+| Elites | `data/enemies.js` | Working | S, P (Foundry Warden, Hound Mother, Archive Censor, Choir Engine beaten through the UI; Rank Eater and Null Knight in the Russian run at 1194×834) |
 | Boss preparation (Prepared ×3 / Volatile) | `run.js` `chooseBossPrep` | Working | U (run, systems), P (Prepared: every run; Volatile: milestone runs 6–7) |
 | Build-responsive boss adaptations from current-run evidence | `run.js` `analyzeProfile`, `data/adaptations.js` | Working | U (run: needs real evidence), P (results log shows adaptations) |
 | Boss trophy relics, mutation choice, act transition | `run.js` | Working | U (run), **P (natural Act I → II → III, 5+ runs)** |
@@ -128,8 +128,21 @@ Totals: 7 runs, 5 natural victories, 2 final-boss defeats, 242 of 242 checks pas
 ### Still not demonstrated
 
 - Build variety in natural play: every bot run ended as Momentum Burst. The other nine archetypes are proven only by unit tests (one signature test each). The roadmap's "four builds shown" item is open.
-- Two elites not yet met through the UI: Null Knight and Rank Eater (Act III; the bot takes elites only in Acts I–II). Shop services (remove/upgrade/surgery/heal) through the UI.
+- Shop services (remove/upgrade/surgery/heal) through the UI.
 - Human testers, a physical iPad or iPhone, Safari/WebKit, and audio by ear.
+
+## Localization (English / Russian)
+
+| Area | Status | Evidence |
+|---|---|---|
+| Language system: `src/i18n/index.js`, one translation file per language (`src/i18n/ru.js`), switch on the title screen and in Settings, choice saved, first launch follows the browser | Working | U (i18n), P (switched from the title screen, kept after reload) |
+| Coverage: 352 interface keys and all content: 79 cards, 10 grafts, 39 relics, 12 mutations, 11 adaptations, 6 traits, 25 enemies (names, lore, 80 intent names, 7 boss phases), 21 events (53 choices, 56 outcomes), story (13 scenes / 49 lines, 4 defeat dialogues, 15 developer remarks, 18 in-code lines), 9 tutorial cards, 9 How to Play sections, boss plans, results, Museum | 100% of displayable text | U (i18n: every key and content entry, placeholders identical) |
+| Not translated on purpose | Enemy intent descriptions exist in the data but are never shown in the game; the PWA manifest description (install prompt, not in-game) | — |
+| Logic, balance and saves independent of language | Working: engine, run layer and save code do not import `src/i18n`; saved runs hold ids and message keys; older English-text saves still display | U (i18n: no imports; event outcomes saved as keys and rendered in both languages) |
+| Terminology | One Russian term per mechanic | `docs/GLOSSARY_RU.md` |
+| Cyrillic fonts, offline | Working: Cyrillic faces join the existing families (Fira Sans Extra Condensed, Oswald, Spectral Cyrillic), embedded in the build | Offline `file://` check: every face renders Cyrillic, no network requests |
+| Layout | Working | `tools/i18n-layout.mjs`: every screen, modal, event outcome, boss preparation, banner, tutorial card, all 79 cards (plain and upgraded) and every card name in a 4-slot Reserve, at 844×390, 900×500, 1024×768, 1194×834, 1920×1080: 0 issues in Russian (1124 screens) and 0 in English (1122) |
+| Russian playthrough | Working | P: `SB_LANG=ru SB_FLOW=defeat`, 844×390: three acts to victory with save/reload at every checkpoint, Museum unlock, restart encounter from the pause menu, defeat (results screen and defeat dialogue), new run to its first victory: 47/47, 0 page errors, 0 on-screen texts with untranslated words, 0 layout issues. `SB_LANG=ru`, 1194×834: Act III elites Rank Eater and Null Knight beaten, lost to the final boss (Signalbreak Core) in natural play, run recorded in the Museum: 41/41, 0 page errors, 0 layout issues; the only Latin text on screen was the brand in the boss name «Ядро Signalbreak» |
 
 ## Version
 
@@ -142,7 +155,7 @@ Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exi
 | 2 | Normal playthrough reaches the credits and returns to the main loop; victory and defeat resolve | Not passed: victory, ending scene, defeat and return to the main loop are shown, but there are no credits |
 | 3 | Four distinct build families demonstrated through play | Not passed (all bot runs ended as Momentum Burst) |
 
-Current version: **0.1.0**.
+Current version: **0.1.1** (one published build with changes since the Phase 1 gate: the localization).
 
 ## Not present in this build
 
@@ -150,7 +163,7 @@ These roadmap references have no counterpart in this repository:
 
 - **"Junk Realm" setting.** The story here is set inside the fictional game itself (the Scrapworks, the Broken Protocol, the Severed Signal).
 - **Earlier Replit project assets.** Nothing from it exists in this repo.
-- **"Version 0.3.1"** was in-story flavor text in the title tagline, not a real version, and `package.json` said 1.0.0. Both now carry the real version, **0.1.0**, defined by roadmap gates (see "Version" above).
+- **"Version 0.3.1"** was in-story flavor text in the title tagline, not a real version, and `package.json` said 1.0.0. Both now carry the real version (0.1.0, then 0.1.1), defined by roadmap gates (see "Version" above).
 
 ## Content inventory
 

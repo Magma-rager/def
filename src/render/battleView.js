@@ -7,6 +7,7 @@ import { drawIcon } from './icons.js';
 import { glow, circle, roundRect, ellipse, lin, hexToRgba, poly } from './draw.js';
 import { ENEMIES, ENEMY_KIND_ICONS } from '../data/enemies.js';
 import { clamp, lerp, easeOut } from '../core/util.js';
+import { t as tr, msg, cardName, enemyName, intentName, phaseName, phaseText, ownerName, ownerInitial } from '../i18n/index.js';
 
 const OWNER_COLORS = { V: '#d0603f', C: '#b48cf0', S: '#e6c25a' };
 const PARTY_SLOTS = { V: [0.31, 0.81], S: [0.205, 0.905], C: [0.115, 0.755] };
@@ -223,11 +224,11 @@ export class BattleView {
         case 'victory': this.schedule(0.7, () => this.onVictory()); break;
         case 'defeat': this.schedule(0.4, () => { this.dim = 1; }); break;
         case 'momentum': if (ev.delta > 0 && ev.why === 'Perfect') this.sfx('momentum'); break;
-        case 'counter': this.floatAt('V', `COUNTER ${ev.amount}`, '#e6c779', 11); break;
-        case 'partyStatus': this.schedule(enemyImpact || 0.2, () => this.floatAt(ev.who, 'WEAK', '#9ec4d8', 13)); break;
+        case 'counter': this.floatAt('V', tr('COUNTER {n}', { n: ev.amount }), '#e6c779', 11); break;
+        case 'partyStatus': this.schedule(enemyImpact || 0.2, () => this.floatAt(ev.who, tr('WEAK'), '#9ec4d8', 13)); break;
         case 'enemyGuard': { const a = this.enemyActors.get(ev.uid); if (a) this.enemyNumber(a, `+${ev.amount}`, '#9ec4d8', 12, 'shield'); this.sfx('enemyGuard'); break; }
         case 'enemyHeal': { const a = this.enemyActors.get(ev.uid); if (a) this.enemyNumber(a, `+${ev.amount}`, '#8ed49a', 13); break; }
-        case 'banner': this.hooks.banner && this.hooks.banner(ev.text, ev.sub, ev.tone); break;
+        case 'banner': this.hooks.banner && this.hooks.banner(msg(ev.text), msg(ev.sub), ev.tone); break;
         case 'drain': this.flashScreen = 0.25; this.flashColor = '#7a4ab0'; this.sfx('drain'); break;
         default: break;
       }
@@ -299,13 +300,13 @@ export class BattleView {
       this.sfx('echo');
     });
     impactAt[who] = this.time + delay + 0.2;
-    this.floatAt(who, `ECHO ${Math.round(ev.mult * 100)}%`, '#c9a8ff', 11);
+    this.floatAt(who, tr('ECHO {n}%', { n: Math.round(ev.mult * 100) }), '#c9a8ff', 11);
   }
 
   actBanner(who, ev) {
     const [hx, hy] = this.partyPos(who);
     const k = this.unit();
-    this.numbers.push({ x: hx, y: hy - 118 * k, text: ev.card, color: OWNER_COLORS[who], t: 0, dur: 0.9, size: ev.big ? 15 : 12, vy: -16, label: true });
+    this.numbers.push({ x: hx, y: hy - 118 * k, text: ev.id ? cardName(ev.id) : tr(ev.card), color: OWNER_COLORS[who], t: 0, dur: 0.9, size: ev.big ? 15 : 12, vy: -16, label: true });
   }
 
   onHit(ev) {
@@ -323,7 +324,7 @@ export class BattleView {
     if (tag === 'counter' || tag === 'bastion') color = '#e6c779';
     if (tag === 'cashout') { color = '#ffe08a'; size = 22; }
     if (tag === 'step') { color = '#8fd0ff'; size = 12; }
-    const text = ev.amount > 0 ? String(ev.amount) : ev.blocked > 0 ? '0' : 'MISS';
+    const text = ev.amount > 0 ? String(ev.amount) : ev.blocked > 0 ? '0' : tr('MISS');
     this.enemyNumber(a, text, color, size);
     if (ev.blocked > 0) this.enemyNumber(a, `▣${ev.blocked}`, '#9ec4d8', 11);
     const n = ev.big ? 16 : 7;
@@ -354,7 +355,7 @@ export class BattleView {
     const melee = ev.kind === 'atk';
     this.sfx(melee ? 'enemyAttack' : 'enemyCast', { kind: ev.kind });
     const [x, y, sc, b] = this.enemyPos(a);
-    this.numbers.push({ x: x + (b[0] + b[2]) * 0.5 * sc, y: y + b[1] * sc - 26, text: ev.name, color: '#ffb3a0', t: 0, dur: 1.1, size: 12, vy: -10, label: true });
+    this.numbers.push({ x: x + (b[0] + b[2]) * 0.5 * sc, y: y + b[1] * sc - 26, text: ev.id ? intentName(ev.id, ev.key) : ev.name, color: '#ffb3a0', t: 0, dur: 1.1, size: 12, vy: -10, label: true });
     if (['lock', 'scramble', 'jam', 'snare', 'latch', 'glitch'].includes(ev.kind)) {
       this.fx.push({ kind: 'beam', x1: x + b[0] * sc, y1: y + b[1] * sc * 0.5, x2: this.w * 0.35, y2: this.h * 1.02, t: 0, dur: 0.45, color: ev.kind === 'scramble' ? '#7fd6c2' : '#b48cf0' });
       this.sfx('interfere', { kind: ev.kind });
@@ -404,7 +405,7 @@ export class BattleView {
 
   onGuard(ev) {
     this.fx.push({ kind: 'dome', t: 0, dur: 0.55 });
-    this.floatAt('V', `+${ev.amount} GUARD`, '#9ec4d8', 12);
+    this.floatAt('V', tr('+{n} GUARD', { n: ev.amount }), '#9ec4d8', 12);
   }
 
   onHeal(ev) {
@@ -416,7 +417,7 @@ export class BattleView {
   onStatus(ev) {
     const a = this.enemyActors.get(ev.uid);
     if (!a) return;
-    const names = { exposed: 'EXPOSED', weak: 'WEAK', scorch: `SCORCH ${ev.n}`, mark: 'MARKED', parry: 'PARRY STANCE', shock: 'SHOCK' };
+    const names = { exposed: tr('EXPOSED'), weak: tr('WEAK'), scorch: tr('SCORCH {n}', { n: ev.n }), mark: tr('MARKED'), parry: tr('PARRY STANCE'), shock: tr('SHOCK') };
     const colors = { exposed: '#ffb35a', weak: '#9ec4d8', scorch: '#ff8a3a', mark: '#ffd36a', parry: '#c9a8ff', shock: '#8fd0ff' };
     this.enemyNumber(a, names[ev.kind] || ev.kind.toUpperCase(), colors[ev.kind] || '#fff', 11);
   }
@@ -428,7 +429,7 @@ export class BattleView {
     const [x2, y2] = this.partyPos(ev.to);
     const k = this.unit();
     this.fx.push({ kind: 'relay', x1, y1: y1 - 60 * k, x2, y2: y2 - 60 * k, t: 0, dur: 0.45, color: OWNER_COLORS[ev.to] });
-    this.floatAt(ev.to, 'RELAY', OWNER_COLORS[ev.to], 13);
+    this.floatAt(ev.to, tr('RELAY'), OWNER_COLORS[ev.to], 13);
     this.sfx('relay');
   }
 
@@ -441,10 +442,10 @@ export class BattleView {
         this.flashColor = '#ffe9b0';
         if (this.hooks.cutin) this.hooks.cutin({ owners: ev.owners, len: ev.len, damage: ev.damage });
       } else this.zoom = Math.max(this.zoom, 0.035);
-      if (this.hooks.banner) this.hooks.banner(ev.finisher ? 'FINISHER' : 'PERFECT', `${ev.len} cards · ${ev.damage} dmg`, 'good');
+      if (this.hooks.banner) this.hooks.banner(ev.finisher ? tr('FINISHER') : tr('PERFECT'), tr('{n} {n|card|cards} · {d} dmg', { n: ev.len, d: ev.damage }), 'good');
     } else if (ev.kind === 'forced') {
       this.sfx('dropped');
-      if (this.hooks.banner) this.hooks.banner('DROPPED', 'Flow ran out', 'bad');
+      if (this.hooks.banner) this.hooks.banner(tr('DROPPED'), tr('Flow ran out'), 'bad');
     }
   }
 
@@ -452,7 +453,7 @@ export class BattleView {
     const [tx, ty] = this.targetX(this.combat.target);
     for (let i = 0; i < 18; i++) this.particles.push({ x: tx, y: ty, vx: (Math.random() - 0.5) * 300, vy: -Math.random() * 360, life: 0, max: 0.9, size: 4, color: '#ffd36a', grav: 700, kind: 'coin', rot: Math.random() * 6, vr: 8 });
     this.sfx('cashout', { quick: ev.quick });
-    if (this.hooks.banner && ev.scale >= 1) this.hooks.banner(ev.quick ? 'QUICK CASH OUT' : 'CASH OUT', `Payout ${ev.amount}`, 'gold');
+    if (this.hooks.banner && ev.scale >= 1) this.hooks.banner(ev.quick ? tr('QUICK CASH OUT') : tr('CASH OUT'), tr('Payout {n}', { n: ev.amount }), 'gold');
   }
 
   onPhase(ev) {
@@ -461,7 +462,7 @@ export class BattleView {
     this.shake = 16;
     this.zoom = 0.06;
     this.sfx('phase');
-    if (this.hooks.banner) this.hooks.banner(ev.name, ev.text, 'bad');
+    if (this.hooks.banner) this.hooks.banner(ev.id ? phaseName(ev.id, ev.idx) : ev.name, ev.id ? phaseText(ev.id, ev.idx) : ev.text, 'bad');
   }
 
   onSummon(ev) {
@@ -929,10 +930,11 @@ export class BattleView {
     ctx.font = `700 ${fs}px "Barlow Condensed", "Arial Narrow", sans-serif`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
+    const name = enemyName(e.id, e.lvl).toUpperCase();
     ctx.fillStyle = 'rgba(20,8,14,0.85)';
-    ctx.fillText(e.name.toUpperCase(), bx + 1, top - 1 + 1);
+    ctx.fillText(name, bx + 1, top - 1 + 1);
     ctx.fillStyle = e.tier === 'elite' ? '#ffb35a' : '#efe2c6';
-    ctx.fillText(e.name.toUpperCase(), bx, top - 1);
+    ctx.fillText(name, bx, top - 1);
     // HP bar
     const hh = compact ? 6 : 8;
     roundRect(ctx, bx - 1, top, bw + 2, hh + 2, 2);
@@ -973,7 +975,7 @@ export class BattleView {
       ctx.font = `700 ${fs - 2}px "Barlow Condensed", sans-serif`;
       ctx.textAlign = 'left';
       ctx.fillStyle = col;
-      ctx.fillText(k === 'scorch' || k === 'mark' ? String(v) : v.toFixed(0) + 's', sx + 13, sy + 1);
+      ctx.fillText(k === 'scorch' || k === 'mark' ? String(v) : tr('{n}s', { n: Math.round(v) }), sx + 13, sy + 1);
       sx += 30;
     }
     if (e.hasteUntil > c.t) {
@@ -1027,7 +1029,7 @@ export class BattleView {
       ctx.font = `900 ${compact ? 7 : 8}px sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText(it.target, x + r * 1.8, y + r * 0.2 + 0.5);
+      ctx.fillText(ownerInitial(it.target), x + r * 1.8, y + r * 0.2 + 0.5);
     }
   }
 
@@ -1043,7 +1045,7 @@ export class BattleView {
     ctx.fillStyle = '#ffb35a';
     const def = ENEMIES[e.id];
     const phases = def.phases ? def.phases.length + 1 : 1;
-    ctx.fillText(`PHASE ${e.phase}/${phases}`, bx + bw, top - 1);
+    ctx.fillText(tr('PHASE {n}/{max}', { n: e.phase, max: phases }), bx + bw, top - 1);
     const a = [...this.enemyActors.values()].find((x) => x.uid === e.uid);
     if (a && this.combat.target === e.uid) {
       const [x, y, sc, b] = this.enemyPos(a);
@@ -1088,7 +1090,7 @@ export class BattleView {
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillStyle = OWNER_COLORS[p.id];
-      ctx.fillText(p.ko ? `${p.name} · KO` : p.name, bx, by + (compact ? 6 : 9));
+      ctx.fillText(p.ko ? `${ownerName(p.id)} · ${tr('KO')}` : ownerName(p.id), bx, by + (compact ? 6 : 9));
       ctx.textAlign = 'right';
       ctx.fillStyle = '#efe2c6';
       ctx.fillText(`${Math.ceil(p.hp)}/${p.maxHp}`, bx + bw, by + (compact ? 6 : 9));
@@ -1097,7 +1099,7 @@ export class BattleView {
         drawIcon(ctx, 'down', bx - 9, by + 3, 12, '#9ec4d8');
         ctx.textAlign = 'right';
         ctx.fillStyle = '#9ec4d8';
-        ctx.fillText(`WEAK ${left.toFixed(0)}s`, bx - 16, by + (compact ? 6 : 9));
+        ctx.fillText(`${tr('WEAK')} ${tr('{n}s', { n: Math.round(left) })}`, bx - 16, by + (compact ? 6 : 9));
       }
     }
     void t;

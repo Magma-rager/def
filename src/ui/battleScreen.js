@@ -2,16 +2,29 @@
 // handles touch gestures (tap = play, swipe down = Churn, swipe up = Reserve, hold = details).
 import { Combat, RULES } from '../engine/combat.js';
 import { CARDS } from '../data/cards.js';
-import { ENEMIES } from '../data/enemies.js';
 import { DEV_REMARKS } from '../data/story.js';
 import { TRAITS } from '../data/traits.js';
+import { t, msg, num, secs, block, cardName, enemyName, traitName, traitText, adaptName, adaptDesc, adaptBreak, relicName, remark } from '../i18n/index.js';
 import { BattleView } from '../render/battleView.js';
 import { drawPortrait } from '../render/rig.js';
 import { h, clear } from './dom.js';
-import { cardEl, cardTooltip } from './cardView.js';
+import { cardEl, cardTooltip, fitText } from './cardView.js';
 
 const OWNER_COL = { V: '#d0603f', C: '#b48cf0', S: '#e6c25a' };
 
+
+// A Reserve mini-card keeps rank and suit on their own row while the name fits beneath them;
+// in a short slot (3-4 slots, small screens) the name wraps around them and uses the full height.
+function fitReserveCard(el) {
+  if (!el.isConnected) return;
+  const rn = el.querySelector('.rn');
+  const over = () => el.scrollHeight > el.clientHeight + 1;
+  el.classList.remove('dense');
+  // strict here: a name box shorter than its line cuts the descenders
+  if (fitText(rn, 0.8, () => rn.scrollHeight > rn.clientHeight || over())) return;
+  el.classList.add('dense');
+  fitText(rn, 0.7, over);
+}
 export class BattleScreen {
   constructor(app, setup, onEnd) {
     this.app = app;
@@ -50,22 +63,22 @@ export class BattleScreen {
     this.flowText = h('div', { class: 'flow-text' });
     this.flowBar = h('div', { class: 'flow-bar' }, this.flowCap, this.flowFill, this.flowText);
     const strip = h('div', { class: 'strip' }, h('div', { class: 'combo-wrap' }, this.chipsEl, this.nextEl), this.flowBar);
-    this.reserveEl = h('div', { class: 'reserve' }, h('div', { class: 'zone-label' }, 'RESERVE'));
+    this.reserveEl = h('div', { class: 'reserve' }, h('div', { class: 'zone-label' }));
     this.reserveSlots = h('div', { class: 'reserve-slots' });
     this.reserveEl.append(this.reserveSlots);
     this.handEl = h('div', { class: 'hand' });
     this.slots.forEach((s, i) => {
-      const el = h('div', { class: 'slot', 'data-slot': i }, h('div', { class: 'slot-jam' }, h('span', {}, 'STATIC')), h('div', { class: 'swipe-hint' }));
+      const el = h('div', { class: 'slot', 'data-slot': i }, h('div', { class: 'slot-jam' }, h('span', {})), h('div', { class: 'swipe-hint' }));
       s.box = el;
       this.bindGestures(el, i);
       this.handEl.append(el);
     });
     // controls
-    this.cashBtn = h('button', { class: 'ctl cash', type: 'button' }, h('span', { class: 'ctl-main' }, 'CASH OUT'), h('span', { class: 'ctl-sub' }, ''));
+    this.cashBtn = h('button', { class: 'ctl cash', type: 'button' }, h('span', { class: 'ctl-main' }), h('span', { class: 'ctl-sub' }, ''));
     this.cashBtn.addEventListener('click', () => this.doCashOut());
-    this.flowBtn = h('button', { class: 'ctl mom', type: 'button' }, h('span', { class: 'ctl-main' }, '+FLOW'), h('span', { class: 'ctl-sub' }, ''));
+    this.flowBtn = h('button', { class: 'ctl mom', type: 'button' }, h('span', { class: 'ctl-main' }), h('span', { class: 'ctl-sub' }, ''));
     this.flowBtn.addEventListener('click', () => this.doSpend('flow'));
-    this.guardBtn = h('button', { class: 'ctl mom', type: 'button' }, h('span', { class: 'ctl-main' }, '+GUARD'), h('span', { class: 'ctl-sub' }, ''));
+    this.guardBtn = h('button', { class: 'ctl mom', type: 'button' }, h('span', { class: 'ctl-main' }), h('span', { class: 'ctl-sub' }, ''));
     this.guardBtn.addEventListener('click', () => this.doSpend('guard'));
     this.momEl = h('div', { class: 'momentum' });
     this.guardEl = h('div', { class: 'stat guard' });
@@ -78,6 +91,7 @@ export class BattleScreen {
     this.deck = h('div', { class: 'deck' }, strip, h('div', { class: 'row' }, this.reserveEl, this.handEl, this.controls));
     this.root.append(this.field, this.deck, this.tutEl);
     clear(root).append(this.root);
+    this.applyLabels();
 
     this.view = new BattleView(this.canvas, {
       sfx: (n, o) => this.app.audio.sfx(n, o),
@@ -100,9 +114,31 @@ export class BattleScreen {
     this.consumeEvents(c.drainEvents());
     const isBoss = this.setup.kind === 'boss';
     this.app.audio.music(isBoss ? 'boss' : `battle${this.setup.act}`);
-    if (this.setup.trait) this.banner(TRAITS[this.setup.trait].name.toUpperCase(), TRAITS[this.setup.trait].text, 'info');
-    if (c.adapt) this.banner('ADAPTATION', `${c.adapt.name}: ${c.adapt.desc}`, 'bad');
+    if (this.setup.trait) this.banner(traitName(this.setup.trait).toUpperCase(), traitText(this.setup.trait), 'info');
+    if (c.adapt) this.banner(t('ADAPTATION'), `${adaptName(c.adapt)}: ${adaptDesc(c.adapt)}`, 'bad');
     if (this.setup.tutorial) this.tutorial('start');
+  }
+
+  // Fixed labels; called on mount and after a language switch.
+  applyLabels() {
+    this.reserveEl.querySelector('.zone-label').textContent = t('RESERVE');
+    for (const s of this.slots) s.box.querySelector('.slot-jam span').textContent = t('STATIC');
+    this.cashBtn.querySelector('.ctl-main').textContent = t('CASH OUT');
+    this.flowBtn.querySelector('.ctl-main').textContent = t('+FLOW');
+    this.guardBtn.querySelector('.ctl-main').textContent = t('+GUARD');
+  }
+
+  // Re-renders every text in the battle UI in the current language. Combat state is untouched.
+  relocalize() {
+    this.applyLabels();
+    this.renderTop();
+    for (const k of ['_ft', '_fbs', '_gbs', '_gh', '_ch', '_cs', 'chipSig', 'momSig', 'resSig', 'adaptHtml']) this[k] = undefined;
+    for (const s of this.slots) {
+      if (s.el) s.el.remove();
+      s.el = null;
+      s.uid = null;
+    }
+    this.updateHud(true);
   }
 
   layout() {
@@ -110,6 +146,7 @@ export class BattleScreen {
     let dpr = Math.min(2, window.devicePixelRatio || 1);
     if (r.width * r.height * dpr * dpr > 2.2e6) dpr = Math.max(1, Math.min(dpr, 1.5));
     this.view.resize(Math.max(1, Math.floor(r.width)), Math.max(1, Math.floor(r.height)), dpr);
+    for (const [, el] of this.resEls || []) fitReserveCard(el);
   }
 
   destroy() {
@@ -121,12 +158,12 @@ export class BattleScreen {
     const s = this.setup;
     const run = this.app.run;
     const node = run ? run.node(run.d.pending && run.d.pending.nodeId) : null;
-    const relics = (s.relics || []).map((id) => h('span', { class: 'relic-pip', title: id, 'data-relic': id }, this.app.relicIcon(id)));
-    const pause = h('button', { class: 'icon-btn pause-btn', type: 'button', 'aria-label': 'Pause' }, '❚❚');
+    const relics = (s.relics || []).map((id) => h('span', { class: 'relic-pip', title: relicName(id), 'data-relic': id }, this.app.relicIcon(id)));
+    const pause = h('button', { class: 'icon-btn pause-btn', type: 'button', 'aria-label': t('Pause') }, '❚❚');
     pause.addEventListener('click', () => this.app.pause());
-    const label = s.kind === 'boss' ? 'BOSS' : s.kind === 'elite' ? 'ELITE' : `ACT ${s.act}`;
+    const label = s.kind === 'boss' ? t('BOSS') : s.kind === 'elite' ? t('ELITE') : t('ACT {n}', { n: s.act });
     clear(this.topbar).append(
-      h('div', { class: 'bt-left' }, h('span', { class: `bt-kind k-${s.kind}` }, label), node ? h('span', { class: 'bt-floor' }, `Floor ${run.d.floors}`) : null, s.trait ? h('span', { class: 'trait-pip', style: { color: TRAITS[s.trait].color } }, TRAITS[s.trait].name) : null),
+      h('div', { class: 'bt-left' }, h('span', { class: `bt-kind k-${s.kind}` }, label), node ? h('span', { class: 'bt-floor' }, t('Floor {n}', { n: run.d.floors })) : null, s.trait ? h('span', { class: 'trait-pip', style: { color: TRAITS[s.trait].color } }, traitName(s.trait)) : null),
       h('div', { class: 'bt-relics' }, relics),
       pause,
     );
@@ -260,7 +297,7 @@ export class BattleScreen {
     if (this.app.paused || this.ended) return;
     const r = kind === 'flow' ? this.combat.spendMomentumFlow() : this.combat.spendMomentumGuard();
     this.app.audio.sfx(r.ok ? 'momentum' : 'reject');
-    if (!r.ok && r.text) this.flashNote(r.text);
+    if (!r.ok && r.text) this.flashNote(msg(r.text));
     this.afterAction();
   }
 
@@ -284,7 +321,7 @@ export class BattleScreen {
       this.ended = true;
       const win = c.result.victory;
       this.app.audio.sfx(win ? 'victory' : 'defeat');
-      this.banner(win ? 'VICTORY' : 'DEFEAT', win ? 'Signal holds' : 'The party falls', win ? 'gold' : 'bad');
+      this.banner(win ? t('VICTORY') : t('DEFEAT'), win ? t('Signal holds') : t('The party falls'), win ? 'gold' : 'bad');
       this.endTimer = setTimeout(() => this.onEnd(c.outcome(), c), win ? 1700 : 2200);
     }
   }
@@ -304,8 +341,8 @@ export class BattleScreen {
         case 'jam': if (!this.app.meta.tut.jam) this.tutorial('jam'); break;
         case 'glitch': if (!this.app.meta.tut.glitch) this.tutorial('glitch'); break;
         case 'latch': if (!this.app.meta.tut.latch) this.tutorial('latch'); break;
-        case 'stumble': this.flashNote(`STUMBLE ${ev.n}/${RULES.MAX_STUMBLES}`); break;
-        case 'reject': if (ev.text && ev.reason !== 'zone') this.flashNote(ev.text); break;
+        case 'stumble': this.flashNote(t('STUMBLE {n}/{max}', { n: ev.n, max: RULES.MAX_STUMBLES })); break;
+        case 'reject': if (ev.text && ev.reason !== 'zone') this.flashNote(msg(ev.text)); break;
         case 'comboEnd': this.onComboEnd(ev); break;
         case 'banner': if (ev.text === 'ADAPTATION BROKEN') this.remark('adaptBroken', true); break;
         case 'phase': this.app.audio.music('boss'); break;
@@ -336,8 +373,8 @@ export class BattleScreen {
     if (this.remarkCooldown > 0) return;
     this.saidOnce.add(key);
     this.remarkCooldown = 14;
-    const list = DEV_REMARKS[key];
-    this.app.toast(list[Math.floor(Math.random() * list.length)], 'dev');
+    const i = Math.floor(Math.random() * DEV_REMARKS[key].length);
+    this.app.toast(remark(key, i), 'dev');
   }
 
   flashNote(text) {
@@ -367,7 +404,7 @@ export class BattleScreen {
       drawPortrait(ctx, id, 160, 160, 0.5, 'victory');
       band.append(cv);
     }
-    band.append(h('div', { class: 'cutin-text' }, info.len >= 7 ? 'GRAND RELAY' : 'RELAY FINISHER'));
+    band.append(h('div', { class: 'cutin-text' }, info.len >= 7 ? t('GRAND RELAY') : t('RELAY FINISHER')));
     this.cutinEl.append(band);
     setTimeout(() => band.remove(), 1100);
   }
@@ -386,16 +423,16 @@ export class BattleScreen {
       glitch: ['GLITCH CARDS', 'Glitch cards were shuffled into your deck. They are unplayable — <b>swipe them down</b> to delete them for free.'],
       latch: ['RESERVE LATCHED', 'A Latch Wisp grabbed your Reserve. It steals a stored card, or seals the Reserve for a few seconds.'],
     };
-    const t = TXT[key];
-    if (!t) return;
+    if (!TXT[key]) return;
+    const [title, body] = block('tutorial', key, TXT[key]);
     meta.tut[key] = true;
     this.app.saveMeta();
     this.app.pause(true);
     clear(this.tutEl);
     this.tutEl.hidden = false;
-    const ok = h('button', { class: 'btn primary', type: 'button' }, 'Got it');
+    const ok = h('button', { class: 'btn primary', type: 'button' }, t('Got it'));
     ok.addEventListener('click', () => { this.tutEl.hidden = true; this.app.resume(); });
-    this.tutEl.append(h('div', { class: 'tut-card' }, h('div', { class: 'tut-title' }, t[0]), h('div', { class: 'tut-body', html: t[1] }), ok));
+    this.tutEl.append(h('div', { class: 'tut-card' }, h('div', { class: 'tut-title' }, title), h('div', { class: 'tut-body', html: body }), ok));
     setTimeout(() => ok.focus(), 50);
   }
 
@@ -417,12 +454,12 @@ export class BattleScreen {
       const cap = c.flowCap() - c.t;
       set('_ff', (v) => (this.flowFill.style.width = v), `${Math.min(100, (left / RULES.FLOW_ABS_MAX) * 100).toFixed(1)}%`);
       set('_fc', (v) => (this.flowCap.style.width = v), `${Math.min(100, (cap / RULES.FLOW_ABS_MAX) * 100).toFixed(1)}%`);
-      set('_ft', (v) => (this.flowText.textContent = v), `FLOW ${left.toFixed(1)}s`);
+      set('_ft', (v) => (this.flowText.textContent = v), t('FLOW {s}', { s: secs(left, 1) }));
       set('_fb', (v) => (this.flowBar.className = v), `flow-bar active${left < 1 ? ' low' : ''}`);
     } else {
       set('_ff', (v) => (this.flowFill.style.width = v), '0%');
       set('_fc', (v) => (this.flowCap.style.width = v), '0%');
-      set('_ft', (v) => (this.flowText.textContent = v), c.phase === 'RECOVER' ? 'RECOVERING…' : c.phase === 'END' ? '—' : 'PRE-COMBO · PLAY AN OPENER');
+      set('_ft', (v) => (this.flowText.textContent = v), c.phase === 'RECOVER' ? t('RECOVERING…') : c.phase === 'END' ? '—' : t('PRE-COMBO · PLAY AN OPENER'));
       set('_fb', (v) => (this.flowBar.className = v), `flow-bar ${c.phase === 'PRE' ? 'pre' : ''}`);
     }
     // combo chips
@@ -436,11 +473,11 @@ export class BattleScreen {
           this.chipsEl.append(h('span', { class: `chip v-${e.variant}`, style: { borderColor: OWNER_COL[e.owner] } },
             h('b', {}, String(e.rank)), e.variant, e.kind === 'step' ? h('i', { class: 'k' }, '↑') : e.kind === 'cross' ? h('i', { class: 'k' }, '✕') : null, e.relay ? h('i', { class: 'k relay' }, '⇄') : null));
         }
-        const rv = combo.variant === 'EX' ? 'any suit' : `${combo.variant}/EX`;
+        const rv = combo.variant === 'EX' ? t('any suit') : `${combo.variant}/EX`;
         const crossV = combo.variant === 'A' ? 'B' : combo.variant === 'B' ? 'A' : null;
-        this.nextEl.innerHTML = `NEXT <b>${rv} ${Math.min(9, combo.rank + 1)}+</b>${crossV && combo.rank < 9 ? ` · <b>${crossV} ${combo.rank + 1}${c.crossGap() > 1 ? `–${Math.min(9, combo.rank + 2)}` : ''}</b>` : ''}${combo.convCount < 1 ? ' · <i>Converter before Closer</i>' : ''}`;
+        this.nextEl.innerHTML = `${t('NEXT')} <b>${rv} ${Math.min(9, combo.rank + 1)}+</b>${crossV && combo.rank < 9 ? ` · <b>${crossV} ${combo.rank + 1}${c.crossGap() > 1 ? `–${Math.min(9, combo.rank + 2)}` : ''}</b>` : ''}${combo.convCount < 1 ? ` · <i>${t('Converter before Closer')}</i>` : ''}`;
       } else {
-        this.nextEl.innerHTML = c.phase === 'PRE' ? 'Any <b>Opener ▶</b> starts a combo' : '';
+        this.nextEl.innerHTML = c.phase === 'PRE' ? t('Any <b>Opener ▶</b> starts a combo') : '';
       }
     }
     // momentum
@@ -451,21 +488,21 @@ export class BattleScreen {
       clear(this.momEl);
       const pips = h('div', { class: 'pips' });
       for (let i = 0; i < max; i++) pips.append(h('i', { class: i < c.momentum ? 'on' : '' }));
-      this.momEl.append(h('span', { class: 'mom-label' }, 'MOMENTUM'), h('b', { class: 'mom-num' }, String(c.momentum)), pips);
+      this.momEl.append(h('span', { class: 'mom-label' }, t('MOMENTUM')), h('b', { class: 'mom-num' }, String(c.momentum)), pips);
     }
     const fc = c.momentumCostFlow();
     this.flowBtn.disabled = !(c.phase === 'ACTIVE' && c.momentum >= fc && c.combo && c.combo.deadline < c.flowCap() - 0.01);
-    set('_fbs', (v) => (this.flowBtn.querySelector('.ctl-sub').textContent = v), `${fc}M · +${c.flowSpendAmount()}s`);
+    set('_fbs', (v) => (this.flowBtn.querySelector('.ctl-sub').textContent = v), t('{n}M · +{s}', { n: fc, s: secs(c.flowSpendAmount()) }));
     this.guardBtn.disabled = !(c.momentum >= RULES.MOMENTUM_COST && c.phase !== 'END');
-    set('_gbs', (v) => (this.guardBtn.querySelector('.ctl-sub').textContent = v), `${RULES.MOMENTUM_COST}M · +${c.guardSpendAmount()}`);
+    set('_gbs', (v) => (this.guardBtn.querySelector('.ctl-sub').textContent = v), t('{n}M · +{g}', { n: RULES.MOMENTUM_COST, g: c.guardSpendAmount() }));
     // guard & churn
     const g = Math.floor(c.guard);
-    set('_gh', (v) => (this.guardEl.innerHTML = v), `<span class="ic">▣</span><b>${g}</b><span class="lbl">GUARD</span>${c.counter ? `<span class="counter">↺${c.counter}</span>` : ''}`);
+    set('_gh', (v) => (this.guardEl.innerHTML = v), `<span class="ic">▣</span><b>${g}</b><span class="lbl">${t('GUARD')}</span>${c.counter ? `<span class="counter">↺${c.counter}</span>` : ''}`);
     const snared = c.churnJamUntil > c.t;
     let dots = '';
     for (let i = 0; i < c.churnMax(); i++) dots += `<i class="${i < c.churn.charges ? 'on' : ''}"></i>`;
     const free = c.relics.has('beta_badge') && !c.churn.freeUsed;
-    set('_ch', (v) => (this.churnEl.innerHTML = v), `<span class="ic">⟲</span><span class="dots">${dots}</span><span class="lbl">${snared ? 'SNARED' : 'CHURN'}</span>${free && !snared ? '<span class="free">FREE</span>' : ''}`);
+    set('_ch', (v) => (this.churnEl.innerHTML = v), `<span class="ic">⟲</span><span class="dots">${dots}</span><span class="lblwrap"><span class="lbl">${snared ? t('SNARED') : t('CHURN')}</span>${free && !snared ? `<span class="free">${t('FREE')}</span>` : ''}</span>`);
     this.churnEl.classList.toggle('snared', snared);
     // cash out
     const can = c.canCashOut();
@@ -473,18 +510,18 @@ export class BattleScreen {
     const sub = this.cashBtn.querySelector('.ctl-sub');
     if (can) {
       const p = c.payoutAmount(1);
-      set('_cs', (v) => (sub.textContent = v), `${p.quick ? 'QUICK · ' : ''}≈${p.amount} dmg +${p.guard}▣`);
+      set('_cs', (v) => (sub.textContent = v), `${p.quick ? t('QUICK · ') : ''}${t('≈{n} dmg +{g}▣', { n: p.amount, g: p.guard })}`);
       this.cashBtn.classList.toggle('quick', p.quick);
     } else {
-      set('_cs', (v) => (sub.textContent = v), c.phase === 'ACTIVE' ? 'needs 2+ cards' : 'during a combo');
+      set('_cs', (v) => (sub.textContent = v), c.phase === 'ACTIVE' ? t('needs 2+ cards') : t('during a combo'));
       this.cashBtn.classList.remove('quick');
     }
     // adaptation & citation
     if (c.adapt || c.citation) {
       this.adaptEl.hidden = false;
       const parts = [];
-      if (c.adapt) parts.push(`<div class="ad-title ${c.adapt.broken ? 'broken' : ''}">${c.adapt.broken ? 'BROKEN · ' : 'ADAPTATION · '}${c.adapt.name}</div><div class="ad-desc">${c.adapt.broken ? 'Disabled.' : c.adapt.desc}</div>${c.adapt.broken ? '' : `<div class="ad-break">Break: ${c.adapt.breakText} <b>${Math.floor(c.adapt.progress)}/${c.adapt.need}</b></div>`}`);
-      if (c.citation) parts.push(`<div class="ad-title cite">CITATION · -40% damage</div><div class="ad-desc">${c.citation.kind === 'suit' ? `Open with a suit other than ${c.citation.value}` : 'Finish with a different Closer'}</div>`);
+      if (c.adapt) parts.push(`<div class="ad-title ${c.adapt.broken ? 'broken' : ''}">${c.adapt.broken ? t('BROKEN · ') : t('ADAPTATION · ')}${adaptName(c.adapt)}</div><div class="ad-desc">${c.adapt.broken ? t('Disabled.') : adaptDesc(c.adapt)}</div>${c.adapt.broken ? '' : `<div class="ad-break">${t('Break: {b}', { b: adaptBreak(c.adapt) })} <b>${Math.floor(c.adapt.progress)}/${c.adapt.need}</b></div>`}`);
+      if (c.citation) parts.push(`<div class="ad-title cite">${t('CITATION · -40% damage')}</div><div class="ad-desc">${c.citation.kind === 'suit' ? t('Open with a suit other than {s}', { s: c.citation.value }) : t('Finish with a different Closer')}</div>`);
       const html = parts.join('');
       if (html !== this.adaptHtml) { this.adaptHtml = html; this.adaptEl.innerHTML = html; }
     } else this.adaptEl.hidden = true;
@@ -546,13 +583,13 @@ export class BattleScreen {
           el.classList.remove('v-A', 'v-B', 'v-EX');
           el.classList.add(`v-${v}`);
         }
-        s.reasonEl.textContent = !chk.ok && !locked && ['rank', 'cross', 'needconv', 'junk', 'role'].includes(chk.reason) && c.phase !== 'RECOVER' ? chk.text : '';
-        if (locked) s.lockSrc.textContent = c.locks[uid].source;
+        s.reasonEl.textContent = !chk.ok && !locked && ['rank', 'cross', 'needconv', 'junk', 'role'].includes(chk.reason) && c.phase !== 'RECOVER' ? msg(chk.text) : '';
+        if (locked) s.lockSrc.textContent = c.locks[uid].source ? enemyName(c.locks[uid].source) : t('Interference');
       }
       if (locked) {
         const l = c.locks[uid];
         const left = Math.max(0, l.until - c.t);
-        const txt = left.toFixed(1);
+        const txt = num(left, 1);
         if (s.lockTxt !== txt) {
           s.lockTxt = txt;
           s.lockTime.textContent = txt;
@@ -569,6 +606,7 @@ export class BattleScreen {
     if (sig !== this.resSig) {
       this.resSig = sig;
       clear(this.reserveSlots);
+      this.reserveSlots.classList.toggle('many', max > 2);
       this.resEls = [];
       for (let i = 0; i < max; i++) {
         const uid = c.reserve[i];
@@ -577,13 +615,14 @@ export class BattleScreen {
           const inst = c.cards.get(uid);
           const def = CARDS[inst.id];
           const el = h('div', { class: `res-card owner-${def.owner} v-${c.effVariant(uid)} role-${def.role}`, role: 'button', tabindex: '0' },
-            h('span', { class: 'rr' }, String(c.effRank(uid))), h('span', { class: 'rv' }, c.effVariant(uid)), h('span', { class: 'rn' }, def.name));
+            h('span', { class: 'rr' }, String(c.effRank(uid))), h('span', { class: 'rv' }, c.effVariant(uid)), h('span', { class: 'rn' }, cardName(def.id)));
           el.addEventListener('click', () => this.doPlay(uid));
           let lp;
-          el.addEventListener('pointerdown', () => { lp = setTimeout(() => this.showDetail(uid), 480); });
-          el.addEventListener('pointerup', () => clearTimeout(lp));
-          el.addEventListener('pointerleave', () => clearTimeout(lp));
+          // hold for details; a re-render under the finger removes this element, so check it is still shown
+          el.addEventListener('pointerdown', () => { lp = setTimeout(() => { if (el.isConnected) this.showDetail(uid); }, 480); });
+          for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) el.addEventListener(ev, () => clearTimeout(lp));
           cell.append(el);
+          requestAnimationFrame(() => fitReserveCard(el));
           this.resEls.push([uid, el]);
         } else cell.append(h('div', { class: 'res-empty' }, '↑'));
         this.reserveSlots.append(cell);
@@ -597,10 +636,6 @@ export class BattleScreen {
       el.classList.toggle('illegal', !ok);
     }
   }
-}
-
-export function enemyName(id) {
-  return ENEMIES[id].name;
 }
 
 export { cardTooltip };

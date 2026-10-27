@@ -2,9 +2,12 @@
 import { Run } from './engine/run.js';
 import { Save, recordRun } from './engine/save.js';
 import { AudioEngine } from './audio/audio.js';
-import { CARDS, GRAFTS, ROLE_NAMES } from './data/cards.js';
+import { CARDS } from './data/cards.js';
 import { RELICS } from './data/relics.js';
-import { SCENES } from './data/story.js';
+import {
+  t, msg, LANGS, lang, setLang, detectLang, block, line, sceneLines as sceneText, cardName, rolePlural, relicName, relicText,
+  rarityName, graftName, graftText, heroRole, ownerName,
+} from './i18n/index.js';
 import { ICON_PATHS } from './render/icons.js';
 import { h, clear, btn } from './ui/dom.js';
 import { cardEl, cardTooltip, cardText } from './ui/cardView.js';
@@ -22,6 +25,7 @@ class App {
   constructor(root) {
     this.root = root;
     this.settings = Save.loadSettings();
+    setLang(this.settings.lang || detectLang(typeof navigator !== 'undefined' ? navigator.languages || [navigator.language] : []));
     this.meta = Save.loadMeta();
     if (!this.meta.tut) this.meta.tut = {};
     this.audio = new AudioEngine(this.settings);
@@ -84,6 +88,34 @@ class App {
   saveMeta() { Save.saveMeta(this.meta); }
   saveSettings() { Save.saveSettings(this.settings); this.audio.applySettings(this.settings); }
 
+  // Switches the interface language, stores the choice, and redraws what is on screen. Run, combat
+  // and save state are not touched: they hold no display text.
+  setLanguage(id) {
+    if (id === lang() && this.settings.lang === id) return;
+    this.settings.lang = id;
+    this.saveSettings();
+    setLang(id);
+    this.preloadFonts();
+    const settingsOpen = this.settingsOpen;
+    const pauseOpen = this.pauseOpen;
+    this.closeAllModals();
+    if (this.battle) {
+      this.battle.relocalize();
+      this.paused = pauseOpen || settingsOpen;
+    } else if (this.current) this.show(this.current[0], ...this.current[1]);
+    if (pauseOpen) this.pause();
+    if (settingsOpen) this.openSettings();
+  }
+
+  // Canvas text does not trigger web-font loading on its own; load the faces for the current script.
+  preloadFonts() {
+    if (typeof document === 'undefined' || !document.fonts) return;
+    const sample = lang() === 'ru' ? 'Ая' : 'Aa';
+    const faces = ['400', '600', '700', '800'].map((w) => `${w} 12px "Barlow Condensed"`)
+      .concat(['700', '800', '900'].map((w) => `${w} 12px "Big Shoulders Display"`), ['400 12px Spectral', 'italic 400 12px Spectral', '600 12px Spectral']);
+    for (const f of faces) document.fonts.load(f, sample).catch(() => {});
+  }
+
   // ───────────────────────── routing ─────────────────────────
   show(fn, ...args) {
     if (this.cleanup) { try { this.cleanup(); } catch (e) { /* ignore */ } }
@@ -92,6 +124,7 @@ class App {
     this.cleanup = null;
     if (this.battle) { this.battle.destroy(); this.battle = null; }
     this.paused = false;
+    this.current = [fn, args];
     const r = fn(this, this.layers.screen, ...args);
     if (typeof r === 'function') this.cleanup = r;
   }
@@ -103,6 +136,7 @@ class App {
   }
 
   start() {
+    this.preloadFonts();
     this.show(S.titleScreen);
   }
 
@@ -156,7 +190,7 @@ class App {
       case 'bossprep':
         if (!p.introShown) {
           this.show(S.bossPrepScreen);
-          S.storyDialog(this, SCENES[`boss_intro_${p.bossId}`] || [], () => { p.introShown = true; this.save(); });
+          S.storyDialog(this, sceneText(`boss_intro_${p.bossId}`), () => { p.introShown = true; this.save(); });
         } else this.show(S.bossPrepScreen);
         break;
       case 'reward': this.show(S.rewardScreen); break;
@@ -176,31 +210,31 @@ class App {
     const m = this.meta;
     const run = this.run;
     if (scene === 'intro_return') {
-      const lines = [{ who: 'gran', text: `Shovelware Safari, episode ${212 + m.totalRuns}. Back in SIGNAL//BREAK. Run number ${m.totalRuns + 1}.` }];
-      if (m.wins > 0) lines.push({ who: 'dev', text: 'You again. The one who FINISHED it. I patched nothing. I was too busy staring at the telemetry.' });
-      else if (m.defeats >= 3) lines.push({ who: 'dev', text: `${m.defeats} defeats and you keep coming back. Is it... is it the Relay? It's the Relay, isn't it.` });
-      else lines.push({ who: 'dev', text: 'Oh. You came back. Nobody comes back. Please do not tell the publisher.' });
-      if (m.devTrust > 0) lines.push({ who: 'dev', text: 'I, um. Kept the napkin. The one with the baton diagram.' });
-      if (m.bestCombo >= 6) lines.push({ who: 'gran', text: `Personal best: a ${m.bestCombo}-card chain. Let's beat it.` });
-      lines.push({ who: 'V', text: 'Commander. Same formation as last time?' }, { who: 'gran', text: 'Same formation. New deck.' });
+      const lines = [{ who: 'gran', text: line('return.episode', 'Shovelware Safari, episode {ep}. Back in SIGNAL//BREAK. Run number {run}.', { ep: 212 + m.totalRuns, run: m.totalRuns + 1 }) }];
+      if (m.wins > 0) lines.push({ who: 'dev', text: line('return.winner', 'You again. The one who FINISHED it. I patched nothing. I was too busy staring at the telemetry.') });
+      else if (m.defeats >= 3) lines.push({ who: 'dev', text: line('return.defeats', '{n} defeats and you keep coming back. Is it... is it the Relay? It\'s the Relay, isn\'t it.', { n: m.defeats }) });
+      else lines.push({ who: 'dev', text: line('return.back', 'Oh. You came back. Nobody comes back. Please do not tell the publisher.') });
+      if (m.devTrust > 0) lines.push({ who: 'dev', text: line('return.napkin', 'I, um. Kept the napkin. The one with the baton diagram.') });
+      if (m.bestCombo >= 6) lines.push({ who: 'gran', text: line('return.best', 'Personal best: a {n}-card chain. Let\'s beat it.', { n: m.bestCombo }) });
+      lines.push({ who: 'V', text: line('return.formation', 'Commander. Same formation as last time?') }, { who: 'gran', text: line('return.deck', 'Same formation. New deck.') });
       return lines;
     }
-    const base = SCENES[scene] || [];
+    const base = sceneText(scene);
     if (scene.startsWith('boss_win') && run) {
-      const arch = run.archetypeLabel();
       const quip = {
-        'Rank Ladder': 'You climbed it rank by rank like a ladder I forgot to remove.',
-        'Suit Switching': 'All that suit switching. A, B, A, B. My eyes hurt. In a good way? No. Bad way.',
-        'Relay Echo': 'Echoes on echoes. The boss lost to its own reflection of your team.',
-        'Momentum Burst': 'You hoarded Momentum and spent it all at once. That is fiscally irresponsible.',
-        'Flow Extension': 'You squeezed every hundredth of a second out of the Flow window. I measured.',
-        'Churn Engine': 'You rerolled your way to victory. The Churn button has filed a complaint.',
-        'Reserve Strategy': 'You saved cards for later. Later came. It was bad for my boss.',
-        'Guard & Counter': 'You just... stood behind a shield and hit back? That is a valid strategy, apparently.',
-        'Cash Out': 'Cash Out, Cash Out, Cash Out. You treated my boss like an ATM.',
-        'Interference Exploit': 'You turned my interference into ammunition. That is MY interference.',
-      }[arch];
-      if (quip) return [{ who: 'dev', text: quip }, ...base];
+        ladder: 'You climbed it rank by rank like a ladder I forgot to remove.',
+        variant: 'All that suit switching. A, B, A, B. My eyes hurt. In a good way? No. Bad way.',
+        relay: 'Echoes on echoes. The boss lost to its own reflection of your team.',
+        momentum: 'You hoarded Momentum and spent it all at once. That is fiscally irresponsible.',
+        flow: 'You squeezed every hundredth of a second out of the Flow window. I measured.',
+        churn: 'You rerolled your way to victory. The Churn button has filed a complaint.',
+        reserve: 'You saved cards for later. Later came. It was bad for my boss.',
+        guard: 'You just... stood behind a shield and hit back? That is a valid strategy, apparently.',
+        cashout: 'Cash Out, Cash Out, Cash Out. You treated my boss like an ATM.',
+        interference: 'You turned my interference into ammunition. That is MY interference.',
+      };
+      const arch = run.archetypeKey();
+      if (quip[arch]) return [{ who: 'dev', text: line(`quip.${arch}`, quip[arch]) }, ...base];
     }
     return base;
   }
@@ -225,7 +259,7 @@ class App {
       this.meta.tutorialDone = true;
       this.saveMeta();
       this.show(S.mapScreen);
-      S.storyDialog(this, SCENES.tutorial_done, () => this.route());
+      S.storyDialog(this, sceneText('tutorial_done'), () => this.route());
       return;
     }
     void res;
@@ -257,18 +291,19 @@ class App {
       this.audio.setDuck(0.35);
     }
     if (silent) return;
+    this.pauseOpen = true;
     const close = this.modal(h('div', { class: 'panel pause-panel' },
-      h('h2', {}, 'Paused'),
-      h('p', { class: 'dim' }, this.battle ? 'Combat time is frozen: Flow, ATB, locks and statuses are all stopped.' : 'Run saved.'),
+      h('h2', {}, t('Paused')),
+      h('p', { class: 'dim' }, this.battle ? t('Combat time is frozen: Flow, ATB, locks and statuses are all stopped.') : t('Run saved.')),
       h('div', { class: 'pause-btns' },
-        btn('Resume', () => { close(); }, 'primary big'),
-        this.battle ? btn('Restart encounter', () => this.confirm('Restart this encounter?', 'The fight restarts from the beginning with the same enemies. Your deck and HP are as they were when it began.', 'Restart', () => { this.closeAllModals(); this.startBattle(); }), '') : null,
-        btn('View deck', () => this.viewDeck(), ''),
-        btn('How to play', () => this.howToPlay(), ''),
-        btn('Settings', () => this.openSettings(), ''),
-        btn('Save & quit to title', () => { close(); this.save(); this.toTitle(); }, ''),
-        this.run ? btn('Abandon run', () => this.confirm('Abandon this run?', 'It will be recorded as abandoned in the Museum.', 'Abandon', () => { close(); this.closeAllModals(); const r = this.run; this.recordEnd(r, 'abandoned'); Save.clearRun(); this.run = null; this.toTitle(); }), 'danger') : null)),
-    { dismiss: true, onClose: () => this.resume() });
+        btn(t('Resume'), () => { close(); }, 'primary big'),
+        this.battle ? btn(t('Restart encounter'), () => this.confirm(t('Restart this encounter?'), t('The fight restarts from the beginning with the same enemies. Your deck and HP are as they were when it began.'), t('Restart'), () => { this.closeAllModals(); this.startBattle(); }), '') : null,
+        btn(t('View deck'), () => this.viewDeck(), ''),
+        btn(t('How to play'), () => this.howToPlay(), ''),
+        btn(t('Settings'), () => this.openSettings(), ''),
+        btn(t('Save & quit to title'), () => { close(); this.save(); this.toTitle(); }, ''),
+        this.run ? btn(t('Abandon run'), () => this.confirm(t('Abandon this run?'), t('It will be recorded as abandoned in the Museum.'), t('Abandon'), () => { close(); this.closeAllModals(); const r = this.run; this.recordEnd(r, 'abandoned'); Save.clearRun(); this.run = null; this.toTitle(); }), 'danger') : null)),
+    { dismiss: true, onClose: () => { this.pauseOpen = false; this.resume(); } });
   }
 
   resume() {
@@ -304,18 +339,18 @@ class App {
   }
 
   confirm(title, text, okLabel, onOk) {
-    const close = this.modal(h('div', { class: 'panel' }, h('h2', {}, title), h('p', {}, text), h('div', { class: 'row-btns' }, btn('Cancel', () => close(), ''), btn(okLabel, () => { close(); onOk(); }, 'danger'))), { dismiss: true });
+    const close = this.modal(h('div', { class: 'panel' }, h('h2', {}, title), h('p', {}, text), h('div', { class: 'row-btns' }, btn(t('Cancel'), () => close(), ''), btn(okLabel, () => { close(); onOk(); }, 'danger'))), { dismiss: true });
   }
 
   info(title, text, onClose) {
-    const close = this.modal(h('div', { class: 'panel' }, h('h2', {}, title), h('p', {}, text), h('div', { class: 'row-btns end' }, btn('OK', () => close(), 'primary'))), { dismiss: true, onClose });
+    const close = this.modal(h('div', { class: 'panel' }, h('h2', {}, title), h('p', {}, text), h('div', { class: 'row-btns end' }, btn(t('OK'), () => close(), 'primary'))), { dismiss: true, onClose });
   }
 
   toast(text, kind = '') {
-    const t = h('div', { class: `toast ${kind}` }, kind === 'dev' ? h('span', { class: 'toast-who' }, 'OZMUND') : null, h('span', {}, text));
-    this.layers.toast.append(t);
-    setTimeout(() => t.classList.add('out'), 3200);
-    setTimeout(() => t.remove(), 3800);
+    const el = h('div', { class: `toast ${kind}` }, kind === 'dev' ? h('span', { class: 'toast-who' }, t('OZMUND')) : null, h('span', {}, text));
+    this.layers.toast.append(el);
+    setTimeout(() => el.classList.add('out'), 3200);
+    setTimeout(() => el.remove(), 3800);
   }
 
   relicIconSvg(id) {
@@ -327,21 +362,20 @@ class App {
   relicIcon(id) { return h('span', { class: 'ri', html: this.relicIconSvg(id) }); }
 
   showRelic(id) {
-    const r = RELICS[id];
-    this.info(r.name, `${r.text} (${r.rarity})`);
+    this.info(relicName(id), `${relicText(id)} (${rarityName(RELICS[id].rarity)})`);
   }
 
   cardDetail(inst, chk) {
     const def = CARDS[inst.id];
-    const status = chk ? (chk.ok ? 'Playable now' : chk.text) : '';
+    const status = chk ? (chk.ok ? t('Playable now') : msg(chk.text)) : '';
     const close = this.modal(h('div', { class: 'panel card-detail' },
       h('div', { class: 'cd-card' }, cardEl(inst, { static: true })),
       h('div', { class: 'cd-text' },
-        h('h2', {}, def.name + (inst.up ? '+' : '')),
+        h('h2', {}, cardName(def.id) + (inst.up ? '+' : '')),
         h('p', { html: cardTooltip(inst) }),
         status ? h('p', { class: chk.ok ? 'good' : 'bad' }, status) : null,
-        h('p', { class: 'dim small' }, 'Tap: play · Swipe down: Churn · Swipe up: Reserve'),
-        btn('Close', () => close(), 'primary'))), { dismiss: true });
+        h('p', { class: 'dim small' }, t('Tap: play · Swipe down: Churn · Swipe up: Reserve')),
+        btn(t('Close'), () => close(), 'primary'))), { dismiss: true });
   }
 
   viewDeck() {
@@ -355,11 +389,11 @@ class App {
       el.addEventListener('click', () => this.cardDetail(c));
       grid.append(el);
     }
-    const counts = ['open', 'conv', 'close'].map((r) => `${ROLE_NAMES[r]}s ${run.roleCount(r)}`).join(' · ');
-    const close = this.modal(h('div', { class: 'panel wide' }, h('h2', {}, `Deck (${run.d.deck.length})`), h('p', { class: 'dim' }, counts), grid, h('div', { class: 'row-btns end' }, btn('Close', () => close(), 'primary'))), { dismiss: true });
+    const counts = ['open', 'conv', 'close'].map((r) => `${rolePlural(r)} ${run.roleCount(r)}`).join(' · ');
+    const close = this.modal(h('div', { class: 'panel wide' }, h('h2', {}, t('Deck ({n})', { n: run.d.deck.length })), h('p', { class: 'dim' }, counts), grid, h('div', { class: 'row-btns end' }, btn(t('Close'), () => close(), 'primary'))), { dismiss: true });
   }
 
-  selectCard({ title, filter, confirm = 'Confirm', preview = false, action = null, cancelable = true }) {
+  selectCard({ title, filter, confirm = t('Confirm'), preview = false, action = null, cancelable = true }) {
     return new Promise((resolve) => {
       const run = this.run;
       let sel = null;
@@ -381,13 +415,13 @@ class App {
           el.classList.add('selected');
           ok.disabled = false;
           clear(prev);
-          if (preview) prev.append(h('span', { class: 'dim' }, 'After:'), cardEl({ ...c, up: true }, { static: true }));
-          else if (action) prev.append(h('span', { class: 'dim' }, 'After:'), cardEl(simulate(run, c, action), { static: true }));
+          if (preview) prev.append(h('span', { class: 'dim' }, t('After:')), cardEl({ ...c, up: true }, { static: true }));
+          else if (action) prev.append(h('span', { class: 'dim' }, t('After:')), cardEl(simulate(run, c, action), { static: true }));
           this.audio.sfx('card', { rank: CARDS[c.id].rank });
         });
         grid.append(el);
       }
-      const close = this.modal(h('div', { class: 'panel wide' }, h('h2', {}, title), grid, h('div', { class: 'select-foot' }, prev, h('div', { class: 'row-btns' }, cancelable ? btn('Cancel', () => { close(); }, '') : null, ok))), {
+      const close = this.modal(h('div', { class: 'panel wide' }, h('h2', {}, title), grid, h('div', { class: 'select-foot' }, prev, h('div', { class: 'row-btns' }, cancelable ? btn(t('Cancel'), () => { close(); }, '') : null, ok))), {
         dismiss: cancelable,
         onClose: () => { if (!done) resolve(null); },
       });
@@ -397,10 +431,10 @@ class App {
   chooseSurgeryOp(grafts) {
     return new Promise((resolve) => {
       let done = false;
-      const ops = [['rankup', 'Re-gauge +1 rank'], ['rankdown', 'Re-gauge −1 rank'], ['recut', 'Recut suit (A↔B)'], ...grafts.map((g) => [`graft:${g}`, `Graft ${GRAFTS[g].name}: ${GRAFTS[g].text}`])];
+      const ops = [['rankup', t('Re-gauge +1 rank')], ['rankdown', t('Re-gauge −1 rank')], ['recut', t('Recut suit (A↔B)')], ...grafts.map((g) => [`graft:${g}`, t('Graft {g}: {text}', { g: graftName(g), text: graftText(g) })])];
       const list = h('div', { class: 'event-choices' });
       for (const [a, label] of ops) list.append(btn(label, () => { done = true; close(); resolve(a); }, 'choice'));
-      const close = this.modal(h('div', { class: 'panel' }, h('h2', {}, 'Choose an operation'), list, h('div', { class: 'row-btns end' }, btn('Cancel', () => close(), ''))), { dismiss: true, onClose: () => { if (!done) resolve(null); } });
+      const close = this.modal(h('div', { class: 'panel' }, h('h2', {}, t('Choose an operation')), list, h('div', { class: 'row-btns end' }, btn(t('Cancel'), () => close(), ''))), { dismiss: true, onClose: () => { if (!done) resolve(null); } });
     });
   }
 
@@ -420,43 +454,51 @@ class App {
       input.addEventListener('change', () => { s[key] = input.checked; this.saveSettings(); if (after) after(); });
       return h('label', { class: 'set-row', for: id }, h('span', {}, label), input);
     };
+    const langRow = h('div', { class: 'set-row lang-row' }, h('span', {}, t('Language')),
+      h('div', { class: 'lang-switch inline', role: 'group', 'aria-label': t('Language') }, ...LANGS.map((l) => {
+        const b = h('button', { class: `lang-opt ${lang() === l.id ? 'on' : ''}`, type: 'button', lang: l.id, 'aria-pressed': String(lang() === l.id) }, l.name);
+        b.addEventListener('click', () => this.setLanguage(l.id));
+        return b;
+      })));
+    this.settingsOpen = true;
     const close = this.modal(h('div', { class: 'panel' },
-      h('h2', {}, 'Settings'),
-      slider('master', 'Master volume'), slider('music', 'Music'), slider('sfx', 'Sound effects'),
-      toggle('muted', 'Mute all audio'),
-      toggle('reducedMotion', 'Reduced motion (no zoom/shake/cut-ins)', () => {
+      h('h2', {}, t('Settings')),
+      langRow,
+      slider('master', t('Master volume')), slider('music', t('Music')), slider('sfx', t('Sound effects')),
+      toggle('muted', t('Mute all audio')),
+      toggle('reducedMotion', t('Reduced motion (no zoom/shake/cut-ins)'), () => {
         document.documentElement.classList.toggle('reduced-motion', s.reducedMotion);
         if (this.battle) this.battle.view.reducedMotion = s.reducedMotion;
       }),
-      toggle('shake', 'Screen shake', () => { if (this.battle) this.battle.view.shakeEnabled = s.shake; }),
-      toggle('hints', 'Tutorial hints'),
-      toggle('relaxed', 'Assist: relaxed enemy speed (−25% enemy ATB; Flow rules unchanged)'),
+      toggle('shake', t('Screen shake'), () => { if (this.battle) this.battle.view.shakeEnabled = s.shake; }),
+      toggle('hints', t('Tutorial hints')),
+      toggle('relaxed', t('Assist: relaxed enemy speed (−25% enemy ATB; Flow rules unchanged)')),
       h('div', { class: 'row-btns' },
-        btn('Replay tutorial hints', () => { this.meta.tut = {}; this.saveMeta(); this.toast('Tutorial hints reset.'); }, 'small'),
-        btn('Erase all data', () => this.confirm('Erase everything?', 'Deletes the current run, Museum records and settings on this device.', 'Erase', () => {
+        btn(t('Replay tutorial hints'), () => { this.meta.tut = {}; this.saveMeta(); this.toast(t('Tutorial hints reset.')); }, 'small'),
+        btn(t('Erase all data'), () => this.confirm(t('Erase everything?'), t('Deletes the current run, Museum records and settings on this device.'), t('Erase'), () => {
           Save.clearRun();
           try { localStorage.clear(); } catch (e) { /* storage unavailable */ }
           location.reload();
         }), 'small danger')),
-      h('div', { class: 'row-btns end' }, btn('Done', () => close(), 'primary'))), { dismiss: true });
+      h('div', { class: 'row-btns end' }, btn(t('Done'), () => close(), 'primary'))), { dismiss: true, onClose: () => { this.settingsOpen = false; } });
   }
 
   openMuseum() { museumModal(this); }
 
   howToPlay() {
-    const sec = (t, body) => h('div', { class: 'htp-sec' }, h('h3', {}, t), h('div', { html: body }));
+    const sec = (key, title, body) => { const [tl, bd] = block('howto', key, [title, body]); return h('div', { class: 'htp-sec' }, h('h3', {}, tl), h('div', { html: bd })); };
     const close = this.modal(h('div', { class: 'panel wide htp' },
-      h('h2', {}, 'How to Relay'),
-      sec('The hand', 'Your three heroes — <b>Hessa</b> (Vanguard), <b>Corvin</b> (Channeler) and <b>Pin</b> (Striker) — share one deck and one hand of <b>six cards</b>. Enemies act in real time: their ATB bar fills and they execute the intent shown in their bubble (the colored dot shows their target).'),
-      sec('Opener → Converter → Closer', 'Tap an <b>Opener ▶</b> to start a combo. The hand switches to <b>Converters ⟳</b> and <b>Closers ■</b>. A Closer needs at least one Converter before it, and ends the combo with a payoff based on everything played.'),
-      sec('Ranks & suits', 'Every card must have a <b>higher rank</b> than the last. Same suit (A→A, B→B): any higher rank (exactly +1 is a <b>Step</b>). Switching suit A↔B is a <b>Cross</b>: exactly +1, and it grants Momentum. <b>EX</b> cards fit with anything. Converters can <b>Rewind</b> the rank or change the suit.'),
-      sec('Flow', 'The first card starts <b>3.0s of Flow</b>. Each valid card refunds 0.18s (max 1.2s per combo). A combo can never last more than <b>6.2s</b>. If Flow runs out the combo is <b>Dropped</b> (−2 Momentum). Wrong cards cause a <b>Stumble</b> (−0.4s, −1 Momentum; three stumbles drop the combo).'),
-      sec('Relay & Echo', 'Playing a card owned by a different hero is a <b>Relay</b>: that hero takes over the action (+1 Momentum). Echo effects repeat earlier cards\' damage, Guard, healing and statuses at reduced power (never Flow, Momentum, rank changes or other Echoes).'),
-      sec('Momentum, Guard, Cash Out', '<b>Momentum</b> comes from Relays, Crosses, Perfect combos and cards. Spend 3 for <b>+0.6s Flow</b> (within the 6.2s cap) or <b>+8 Guard</b>. Guard is shared by the party and fades slowly. <b>CASH OUT</b> ends a combo of 2+ cards immediately for a payout (+25% if 1.5s+ Flow is left) — but gives up the Perfect bonus.'),
-      sec('Churn & Reserve', '<b>Swipe a card down</b> to Churn it (uses a charge; charges refill over time). <b>Swipe up</b> to stash it in Reserve (2 slots); Reserve cards stay through combo phases and can be played when legal. <b>Hold</b> a card for details.'),
-      sec('Interference', 'Enemies Lock cards (3s), Scramble ranks/suits, jam slots, snare Churn, latch your Reserve and steal Flow. Every effect shows its source and timer and always expires.'),
-      sec('Keyboard', '<b>1–6</b> play · <b>Shift+1–6</b> Churn · <b>Alt+1–6</b> Reserve · <b>7/8</b> play Reserve · <b>Space</b> Cash Out · <b>F</b> +Flow · <b>G</b> +Guard · <b>Tab</b> cycle target · <b>Esc</b> pause'),
-      h('div', { class: 'row-btns end' }, btn('Close', () => close(), 'primary'))), { dismiss: true });
+      h('h2', {}, t('How to Relay')),
+      sec('hand', 'The hand', 'Your three heroes — <b>Hessa</b> (Vanguard), <b>Corvin</b> (Channeler) and <b>Pin</b> (Striker) — share one deck and one hand of <b>six cards</b>. Enemies act in real time: their ATB bar fills and they execute the intent shown in their bubble (the colored dot shows their target).'),
+      sec('sequence', 'Opener → Converter → Closer', 'Tap an <b>Opener ▶</b> to start a combo. The hand switches to <b>Converters ⟳</b> and <b>Closers ■</b>. A Closer needs at least one Converter before it, and ends the combo with a payoff based on everything played.'),
+      sec('ranks', 'Ranks & suits', 'Every card must have a <b>higher rank</b> than the last. Same suit (A→A, B→B): any higher rank (exactly +1 is a <b>Step</b>). Switching suit A↔B is a <b>Cross</b>: exactly +1, and it grants Momentum. <b>EX</b> cards fit with anything. Converters can <b>Rewind</b> the rank or change the suit.'),
+      sec('flow', 'Flow', 'The first card starts <b>3.0s of Flow</b>. Each valid card refunds 0.18s (max 1.2s per combo). A combo can never last more than <b>6.2s</b>. If Flow runs out the combo is <b>Dropped</b> (−2 Momentum). Wrong cards cause a <b>Stumble</b> (−0.4s, −1 Momentum; three stumbles drop the combo).'),
+      sec('relay', 'Relay & Echo', 'Playing a card owned by a different hero is a <b>Relay</b>: that hero takes over the action (+1 Momentum). Echo effects repeat earlier cards\' damage, Guard, healing and statuses at reduced power (never Flow, Momentum, rank changes or other Echoes).'),
+      sec('momentum', 'Momentum, Guard, Cash Out', '<b>Momentum</b> comes from Relays, Crosses, Perfect combos and cards. Spend 3 for <b>+0.6s Flow</b> (within the 6.2s cap) or <b>+8 Guard</b>. Guard is shared by the party and fades slowly. <b>CASH OUT</b> ends a combo of 2+ cards immediately for a payout (+25% if 1.5s+ Flow is left) — but gives up the Perfect bonus.'),
+      sec('churn', 'Churn & Reserve', '<b>Swipe a card down</b> to Churn it (uses a charge; charges refill over time). <b>Swipe up</b> to stash it in Reserve (2 slots); Reserve cards stay through combo phases and can be played when legal. <b>Hold</b> a card for details.'),
+      sec('interference', 'Interference', 'Enemies Lock cards (3s), Scramble ranks/suits, jam slots, snare Churn, latch your Reserve and steal Flow. Every effect shows its source and timer and always expires.'),
+      sec('keyboard', 'Keyboard', '<b>1–6</b> play · <b>Shift+1–6</b> Churn · <b>Alt+1–6</b> Reserve · <b>7/8</b> play Reserve · <b>Space</b> Cash Out · <b>F</b> +Flow · <b>G</b> +Guard · <b>Tab</b> cycle target · <b>Esc</b> pause'),
+      h('div', { class: 'row-btns end' }, btn(t('Close'), () => close(), 'primary'))), { dismiss: true });
   }
 }
 

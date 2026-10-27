@@ -3,4 +3,4 @@
 //   0.N.P  — P counts published builds with changes since that gate
 //   1.0.0  — the Phase 9 release
 // package.json and the iOS project must carry the same number (checked by tests/systems.test.mjs).
-export const VERSION = '0.1.0';
+export const VERSION = '0.1.1';
