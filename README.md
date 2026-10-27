@@ -29,7 +29,7 @@ The home-screen app keeps its own saves, separate from Safari's. On a phone held
   1. In the Yandex Cloud console create a bucket (name without dots, e.g. `signalbreak-game`) with public read access to objects, and turn on Website hosting with `index.html` as the main page.
   2. Create a service account with the `storage.editor` role and a static access key for it.
   3. In GitHub: Settings → Secrets and variables → Actions → add secrets `MIRROR_KEY_ID` and `MIRROR_SECRET` (the key), and the variable `MIRROR_BUCKET` (the bucket name).
-  4. Actions → Mirror web app → Run workflow. The game is then at `https://website.yandexcloud.net/<bucket>/index.html`.
+  4. Actions → Mirror web app → open the latest run → Re-run all jobs (later pushes upload by themselves). The game is then at `https://website.yandexcloud.net/<bucket>/index.html`.
 
   Another S3-compatible provider works the same way with the variables `MIRROR_ENDPOINT` and `MIRROR_REGION`.
 

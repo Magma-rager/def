@@ -7,10 +7,11 @@
 #     Variables: MIRROR_BUCKET (bucket name); optional MIRROR_ENDPOINT, MIRROR_REGION
 name: Mirror web app
 
+# Runs on every push to these branches (a few small files). To upload right after setting the
+# keys, re-run the latest run of this workflow from the Actions tab.
 on:
   push:
     branches: [main, claude/adoring-newton-e9l4sf]
-    paths: ['dist/**']
   workflow_dispatch:
 
 jobs:
