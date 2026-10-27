@@ -137,7 +137,7 @@ These roadmap references have no counterpart in this repository:
 
 - **"Junk Realm" setting.** The story here is set inside the fictional game itself (the Scrapworks, the Broken Protocol, the Severed Signal).
 - **Earlier Replit project assets.** Nothing from it exists in this repo.
-- **"Version 0.3.1"** appears only as joke text in the title tagline; there is no real version display. `package.json` says 1.0.0.
+- **"Version 0.3.1"** was in-story flavor text in the title tagline, not a real version. It has been removed from the title; the title screen now shows a factual build stamp (build date and source commit). "Patch Notes v0.3.1" remains as the name of an in-story event. `package.json` says 1.0.0; no version number has been advanced.
 
 ## Content inventory
 
