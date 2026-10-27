@@ -9,7 +9,7 @@ Granraku, a cynical trash-game hunter, enters a malfunctioning experimental card
 - **Built game:** `dist/index.html` is self-contained (one HTML file with inline JS/CSS). Serve the `dist/` folder over HTTP to enable the offline service worker (`npm run serve` serves the repo root; `node tools/serve.mjs dist 8124` serves the build).
 - **Development:** `npm run serve`, then open `http://localhost:8123/index.html`. This runs the ES-module sources directly; there is no build step for development.
 - **Build:** `npm install && npm run build` writes `dist/index.html` (full PWA document), `dist/artifact.html` (page fragment for embedded hosting), `dist/sw.js`, the manifest and the icon.
-- **Tests:** `npm test` runs the engine, run-layer and archetype tests (Node built-in test runner).
+- **Tests:** `npm test` runs the engine, run-layer, systems and archetype tests (Node built-in test runner).
 
 ### iPad / iPhone App Store build (no Mac)
 
@@ -51,7 +51,7 @@ Granraku, a cynical trash-game hunter, enters a malfunctioning experimental card
 ## Content
 
 - 78 cards (25 Openers, 27 Converters, 26 Closers) across three owners, with A/B/EX suits, upgrades, rarities and 10 graft types.
-- 34 relics, 12 mutations, 21 events, 6 route traits (HOTWIRE, STATIC, QUIET_CHANNEL, SCRAP_CACHE, BLACKOUT, WILD_SIGNAL).
+- 39 relics (including 5 boss trophies), 12 mutations, 21 events, 6 route traits (HOTWIRE, STATIC, QUIET_CHANNEL, SCRAP_CACHE, BLACKOUT, WILD_SIGNAL).
 - 12 normal enemies (+1 summon), 6 elites, 6 bosses (two per Act, each with phase changes), and adaptive boss counter-strategies driven by current-run evidence.
 - Three Acts (The Scrapworks, The Broken Protocol, The Severed Signal) with branching 8-depth maps, shops, rests, surgery, caches, boss preparation (Prepared / Volatile) and mutations.
 - Persistent Museum: run history, bestiary, relic and card catalogues, records, and modest starter-relic unlocks.
@@ -78,6 +78,7 @@ The combat engine is the single source of truth. The UI asks `combat.check(uid)`
 
 - `node tools/simulate.mjs [runs] [reactionSeconds]` runs complete runs through all three Acts with a heuristic bot. It checks zone integrity and save round-trips at every step, and reports win rates, battle durations and HP loss.
 - `node tools/uiplay.mjs [w] [h] [minutes]` plays the game only through DOM taps and clicks in Chromium, from the title screen to the results screen.
+- `node tools/milestone.mjs [outDir] [minutes] [stopAtAct] [w] [h]` plays a fresh run through the UI only, reloads the page and presses Continue at every major transition (mid-battle, boss fights, boss reward, mutation, act entries, ending), checks the restored state is identical, and checks the Museum unlock in the next run. Needs the dev server on port 8123. Writes `report.json` and screenshots. See `docs/AUDIT.md`.
 - `node tools/flow.mjs`, `tools/screens.mjs`, `tools/bossfight.mjs` and `tools/offline.mjs` take screenshots of flows, screens, boss and interference visuals, and check offline PWA behavior.
 
 All art, animation, music and sound are generated procedurally in code; no external assets are used.

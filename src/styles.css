@@ -75,7 +75,8 @@ p { margin: 0 0 0.7em; line-height: 1.35; }
 
 /* ── dialogue ── */
 .dialog-layer { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center; padding: 12px; background: linear-gradient(transparent 40%, rgba(10, 4, 8, 0.65)); z-index: 30; }
-.dlg-box { width: min(920px, 100%); display: flex; gap: 14px; align-items: stretch; background: linear-gradient(#2c1c26, #1c1018); border: 2px solid var(--brass-lo); border-radius: 8px; padding: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); cursor: pointer; animation: rise 0.25s ease-out; }
+.dlg-wrap { position: relative; width: min(920px, 100%); }
+.dlg-box { width: 100%; display: flex; gap: 14px; align-items: stretch; background: linear-gradient(#2c1c26, #1c1018); border: 2px solid var(--brass-lo); border-radius: 8px; padding: 12px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); cursor: pointer; animation: rise 0.25s ease-out; }
 .dlg-pframe { flex: none; width: clamp(84px, 16vh, 150px); aspect-ratio: 1; border: 2px solid var(--brass); border-radius: 6px; overflow: hidden; background: #140a10; }
 .dlg-portrait { width: 100%; height: 100%; display: block; }
 .dlg-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; position: relative; }
@@ -83,7 +84,7 @@ p { margin: 0 0 0.7em; line-height: 1.35; }
 .dlg-name span { margin-left: 8px; color: var(--cream3); font-size: 0.9em; }
 .dlg-text { font-family: var(--font-story); font-size: clamp(15px, 2.3vh, 19px); line-height: 1.4; min-height: 3.2em; color: var(--cream); }
 .dlg-next { position: absolute; right: 4px; bottom: 0; color: var(--brass-hi); animation: blink 1s infinite; }
-.dlg-skip { position: absolute; top: 12px; right: 12px; }
+.dlg-skip { position: absolute; right: 10px; bottom: calc(100% + 8px); }
 .who-dev .dlg-pframe { border-color: #e0a35a; }
 .who-sys .dlg-text { font-family: ui-monospace, Menlo, monospace; color: #8fb7d9; }
 @keyframes blink { 50% { opacity: 0.2; } }

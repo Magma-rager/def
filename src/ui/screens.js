@@ -86,7 +86,7 @@ export function storyDialog(app, lines, onDone) {
   const next = h('div', { class: 'dlg-next' }, '▶');
   const skip = h('button', { class: 'btn small dlg-skip', type: 'button' }, 'Skip');
   const box = h('div', { class: 'dlg-box' }, h('div', { class: 'dlg-pframe' }, portrait), h('div', { class: 'dlg-body' }, name, text, next));
-  const layer = h('div', { class: 'dialog-layer' }, box, skip);
+  const layer = h('div', { class: 'dialog-layer' }, h('div', { class: 'dlg-wrap' }, skip, box));
   app.layers.dialog.append(layer);
   let typing = null;
   let full = '';
