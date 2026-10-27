@@ -67,7 +67,7 @@ export function cardEl(inst, opts = {}) {
       <div class="card-top">
         <span class="rank">${def.role === 'junk' ? '–' : rank}</span>
         <span class="var">${variant}</span>
-        <span class="role-tag"><i>${ROLE_GLYPH[def.role]}</i>${esc(roleName(def.role))}</span>
+        <span class="role-tag" title="${esc(roleName(def.role))}"><i>${ROLE_GLYPH[def.role]}</i><span class="rt-word">${esc(roleName(def.role))}</span></span>
       </div>
       <div class="card-art"${def.owner && vignette(def.owner, def.anim) ? ` style="--vig:url(${vignette(def.owner, def.anim)})"` : ''}>${artSvg(def)}<span class="owner-chip">${owner === 'X' ? '!' : ownerInitial(owner)}</span>${def.rarity === 'rare' ? '<span class="rare-gem"></span>' : ''}</div>
       <div class="card-name">${esc(cardName(def.id))}${inst.up ? '<sup>+</sup>' : ''}</div>
@@ -129,8 +129,10 @@ export function fitCard(el) {
   const name = el.querySelector('.card-name');
   name.classList.remove('two-line');
   if (!fitText(name, 0.8)) { name.classList.add('two-line'); fitText(name, 0.68); }
-  // the text also gives way when the card as a whole would overflow (e.g. a two-line name)
-  fitText(el.querySelector('.card-text'), 0.7, () => frame.scrollHeight > frame.clientHeight + 1);
+  // the text also gives way when the card as a whole would overflow (e.g. a two-line name); the
+  // smallest phones (html.narrow) allow a little more shrinking
+  const min = document.documentElement.classList.contains('narrow') ? 0.6 : 0.7;
+  fitText(el.querySelector('.card-text'), min, () => frame.scrollHeight > frame.clientHeight + 1);
 }
 
 export function cardTooltip(inst) {

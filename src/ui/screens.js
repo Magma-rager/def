@@ -37,6 +37,10 @@ export function relicBadge(app, id, extra = {}) {
 // Build stamp injected by tools/build.mjs; running the sources directly shows "Development build".
 const BUILD = typeof __BUILD__ !== 'undefined' ? __BUILD__ : null;
 
+export function offlineLabel(state) {
+  return state === 'ready' ? t('Available offline') : state === 'caching' ? t('Saving for offline play…') : '';
+}
+
 export function titleScreen(app, root) {
   const canvas = h('canvas', { class: 'scene-canvas' });
   const has = app.hasSave();
@@ -59,7 +63,8 @@ export function titleScreen(app, root) {
       h('div', { class: 'tagline' }, t('A Relay-driven card saga. Patched to version {v}. Probably.', { v: VERSION })),
       menu,
       h('div', { class: 'title-foot' }, t('Runs {runs} · Wins {wins} · Best combo {n} {n|card|cards}', { runs: m.totalRuns, wins: m.wins, n: m.bestCombo })),
-      h('div', { class: 'title-build' }, !BUILD ? t('Development build') : BUILD.commit ? t('Build {date} · {commit}', BUILD) : t('Build {date}', BUILD))));
+      h('div', { class: 'title-build' }, !BUILD ? t('Development build') : BUILD.commit ? t('Build {date} · {commit}', BUILD) : t('Build {date}', BUILD)),
+      h('div', { class: 'title-offline' }, offlineLabel(app.offline))));
   clear(root).append(el);
   const sc = liveScene(canvas, { act: 1, party: true, enemy: null, dim: 0.25, left: true });
   app.audio.music('title');

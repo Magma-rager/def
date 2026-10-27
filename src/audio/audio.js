@@ -25,7 +25,8 @@ export class AudioEngine {
 
   unlock() {
     if (this.ctx) {
-      if (this.ctx.state === 'suspended') this.ctx.resume();
+      // iOS leaves the context 'interrupted' after the app was in the background or a call came in
+      if (this.ctx.state !== 'running') this.ctx.resume();
       return;
     }
     const AC = window.AudioContext || window.webkitAudioContext;

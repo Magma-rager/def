@@ -64,7 +64,7 @@ Audit date: 2026-10-27. Baseline commit: `251bbb8` (branch `claude/adoring-newto
 | Run cleared after it ends: no Continue, recorded in the Museum exactly once | Working | P |
 | Museum records, bestiary, relic/card catalogues | Working | U (systems), P |
 | Starter relic selection (4 options) and unlocks | Working | U (systems), P (Stopwatch Gear unlocked by the Act I boss, then selected and applied in the next run, every milestone run) |
-| Offline: single-file build, file:// play, PWA service worker, embedded fonts | Working | Offline Playwright checks |
+| Offline: single-file build, file:// play, PWA service worker, embedded fonts | Working | Offline Playwright checks; `tools/pwa.mjs` (see "Web app on iPhone and iPad") |
 
 ## Presentation
 
@@ -122,7 +122,7 @@ Totals: 7 runs, 5 natural victories, 2 final-boss defeats, 242 of 242 checks pas
 ### Tests
 
 - `npm test`: 49/49 pass (combat 17, run 10, systems 8, archetypes 12, App Store upload client 2).
-- `tools/offline.mjs` on the built `dist/`: service worker controls the page, title renders offline, Continue restores the run.
+- `tools/offline.mjs` on the built `dist/` (since replaced by `tools/pwa.mjs`): service worker controls the page, title renders offline, Continue restores the run.
 - Milestone runs: 242/242 checks passed across 7 runs (table above).
 
 ### Still not demonstrated
@@ -141,8 +141,23 @@ Totals: 7 runs, 5 natural victories, 2 final-boss defeats, 242 of 242 checks pas
 | Logic, balance and saves independent of language | Working: engine, run layer and save code do not import `src/i18n`; saved runs hold ids and message keys; older English-text saves still display | U (i18n: no imports; event outcomes saved as keys and rendered in both languages) |
 | Terminology | One Russian term per mechanic | `docs/GLOSSARY_RU.md` |
 | Cyrillic fonts, offline | Working: Cyrillic faces join the existing families (Fira Sans Extra Condensed, Oswald, Spectral Cyrillic), embedded in the build | Offline `file://` check: every face renders Cyrillic, no network requests |
-| Layout | Working | `tools/i18n-layout.mjs`: every screen, modal, event outcome, boss preparation, banner, tutorial card, all 79 cards (plain and upgraded) and every card name in a 4-slot Reserve, at 844×390, 900×500, 1024×768, 1194×834, 1920×1080: 0 issues in Russian (1124 screens) and 0 in English (1122) |
+| Layout | Working | `tools/i18n-layout.mjs`: every screen, modal, event outcome, boss preparation, banner, tutorial card, all 79 cards (plain and upgraded) and every card name in a 4-slot Reserve, at 667×375, 844×390, 900×500, 1024×768, 1194×834, 1920×1080: 0 issues in Russian and 0 in English (1356 screens each); iPad portrait 834×1194: 0 and 0 |
 | Russian playthrough | Working | P: `SB_LANG=ru SB_FLOW=defeat`, 844×390: three acts to victory with save/reload at every checkpoint, Museum unlock, restart encounter from the pause menu, defeat (results screen and defeat dialogue), new run to its first victory: 47/47, 0 page errors, 0 on-screen texts with untranslated words, 0 layout issues. `SB_LANG=ru`, 1194×834: Act III elites Rank Eater and Null Knight beaten, lost to the final boss (Signalbreak Core) in natural play, run recorded in the Museum: 41/41, 0 page errors, 0 layout issues; the only Latin text on screen was the brand in the boss name «Ядро Signalbreak» |
+
+## Web app on iPhone and iPad (PWA)
+
+| Area | Status | Evidence |
+|---|---|---|
+| Install from Safari: home-screen icon (180 px PNG), name "SignalBreak", opens full screen without browser bars | Implemented | Head and manifest checked by `tools/pwa.mjs`; not yet tried on a device |
+| First online launch caches the game; the title screen says when it is available offline | Working | P (`tools/pwa.mjs`, Chromium) |
+| Launch with no connection (start URL, folder URL, URL with a query), saved run continues, battle plays, no network requests | Working | P (`tools/pwa.mjs`, Chromium) |
+| New build: checked on each launch and on return to the app, installed in the background, used from the next launch, old cache removed | Working | P (`tools/pwa.mjs`, Chromium) |
+| Phones in portrait: the game asks to turn the device and pauses a fight (an installed web app cannot lock orientation); iPad portrait plays normally | Working | P (844×390 → 390×844 → back: combat time frozen, pause menu on return; 834×1194 battle laid out) |
+| Smallest iPhones in landscape (667×375, iPhone SE size): hand cards show the role as its symbol only and their text may shrink a little more | Working | `tools/i18n-layout.mjs` at 667×375: 0 issues in both languages (English cards were also clipped there before) |
+| Audio after the app was in the background or a call | Implemented (resumes on the next touch) | Not tested on a device |
+| Hosting | GitHub Pages from this branch's root; the root page redirects to `dist/` on github.io; `.nojekyll` serves files as they are | Needs Pages switched on in the repository settings |
+
+Limits on iOS: the home-screen app keeps its own storage, separate from Safari, so a run started in Safari does not carry over; installed web apps are exempt from Safari's 7-day storage limit. Chromium stands in for Safari in `tools/pwa.mjs`; Safari itself has not been run.
 
 ## Version
 
@@ -155,7 +170,7 @@ Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exi
 | 2 | Normal playthrough reaches the credits and returns to the main loop; victory and defeat resolve | Not passed: victory, ending scene, defeat and return to the main loop are shown, but there are no credits |
 | 3 | Four distinct build families demonstrated through play | Not passed (all bot runs ended as Momentum Burst) |
 
-Current version: **0.1.1** (one published build with changes since the Phase 1 gate: the localization).
+Current version: **0.1.2** (two published builds with changes since the Phase 1 gate: the localization, then the iPhone/iPad web app).
 
 ## Not present in this build
 
@@ -163,7 +178,7 @@ These roadmap references have no counterpart in this repository:
 
 - **"Junk Realm" setting.** The story here is set inside the fictional game itself (the Scrapworks, the Broken Protocol, the Severed Signal).
 - **Earlier Replit project assets.** Nothing from it exists in this repo.
-- **"Version 0.3.1"** was in-story flavor text in the title tagline, not a real version, and `package.json` said 1.0.0. Both now carry the real version (0.1.0, then 0.1.1), defined by roadmap gates (see "Version" above).
+- **"Version 0.3.1"** was in-story flavor text in the title tagline, not a real version, and `package.json` said 1.0.0. Both now carry the real version (0.1.0, then 0.1.1 and 0.1.2), defined by roadmap gates (see "Version" above).
 
 ## Content inventory
 

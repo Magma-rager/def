@@ -4,6 +4,7 @@
 import { build } from 'esbuild';
 import fs from 'node:fs';
 import { execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 // Build stamp shown on the title screen: build date plus the commit it was built from
 // ("+" when built with uncommitted changes). Not a version number.
@@ -38,10 +39,14 @@ const full = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <title>SIGNAL//BREAK</title>
 <meta name="theme-color" content="#1c1018">
+<meta name="description" content="A real-time party-based roguelite deckbuilding JRPG.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SignalBreak">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
 ${FONTS}
 <style>${css}</style>
 </head>
@@ -80,20 +85,37 @@ ${FONTS}
 `;
 fs.writeFileSync('dist/app.html', app);
 
-fs.copyFileSync('public/manifest.webmanifest', 'dist/manifest.webmanifest');
-fs.copyFileSync('public/icon.svg', 'dist/icon.svg');
-const version = Date.now().toString(36);
-fs.writeFileSync('dist/sw.js', `// Offline cache for SIGNAL//BREAK
+// Web app files: the page is self-contained, so these are everything it needs offline.
+const WEB = ['manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
+for (const f of WEB) fs.copyFileSync(`public/${f}`, `dist/${f}`);
+// The cache name is a hash of the cached files, so a new build replaces the cache and an
+// unchanged one keeps it.
+const hash = createHash('sha256').update(full);
+for (const f of WEB) hash.update(fs.readFileSync(`dist/${f}`));
+const version = hash.digest('hex').slice(0, 12);
+fs.writeFileSync('dist/sw.js', `// Offline cache for SIGNAL//BREAK. Installed on the first online launch; afterwards the game
+// starts from the cache, with or without a connection. A new build installs in the background
+// and is used from the next launch.
 const CACHE = 'signalbreak-${version}';
-const CORE = ['./', './index.html', './manifest.webmanifest', './icon.svg'];
-self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE)).then(() => self.skipWaiting())); });
-self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
+const CORE = ${JSON.stringify(['./index.html', ...WEB.map((f) => './' + f)])};
+self.addEventListener('install', (e) => {
+  // bypass the HTTP cache so a new build never stores a stale copy of the page
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
+});
+self.addEventListener('activate', (e) => {
+  e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k.startsWith('signalbreak-') && k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+});
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET') return;
-  e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
-    if (res && (res.ok || res.type === 'opaque')) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); }
-    return res;
-  }).catch(() => hit)));
+  const req = e.request;
+  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  // the game page under any of its addresses (folder, index.html, with a query string); other
+  // files in the folder (downloads, the iOS project) go to the network
+  const page = req.url.split(/[?#]/)[0];
+  if (req.mode === 'navigate' && (page === self.registration.scope || page === self.registration.scope + 'index.html')) {
+    e.respondWith(caches.open(CACHE).then((c) => c.match('./index.html')).then((hit) => hit || fetch(req)));
+    return;
+  }
+  e.respondWith(caches.open(CACHE).then((c) => c.match(req, { ignoreSearch: true })).then((hit) => hit || fetch(req)));
 });
 `);
 const kb = (n) => (n / 1024).toFixed(0) + ' KB';

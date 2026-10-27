@@ -30,6 +30,7 @@ class App {
     if (!this.meta.tut) this.meta.tut = {};
     this.audio = new AudioEngine(this.settings);
     this.run = null;
+    this.offline = null; // web app offline cache: null (none), 'caching' or 'ready'
     this.battle = null;
     this.paused = false;
     this.cleanup = null;
@@ -40,7 +41,11 @@ class App {
       modal: h('div', { class: 'layer-modal' }),
       toast: h('div', { class: 'layer-toast' }),
     };
-    root.append(this.layers.screen, this.layers.dialog, this.layers.modal, this.layers.toast);
+    // Phones in portrait: the game is landscape-only, and an installed web app cannot lock the
+    // orientation, so ask for a turn (CSS shows this only while html.rotate is set).
+    this.rotateText = h('div', { class: 'rotate-text' });
+    this.rotateHint = h('div', { class: 'rotate-hint', 'aria-live': 'polite' }, h('div', { class: 'rotate-phone' }), this.rotateText);
+    root.append(this.layers.screen, this.layers.dialog, this.layers.modal, this.layers.toast, this.rotateHint);
     document.documentElement.classList.toggle('reduced-motion', !!this.settings.reducedMotion);
     const unlock = () => this.audio.unlock();
     window.addEventListener('pointerdown', unlock, { capture: true });
@@ -78,8 +83,23 @@ class App {
     r.setProperty('--res-w', resW0 + 'px');
     r.setProperty('--cs', (cardW / 100).toFixed(3));
     document.documentElement.classList.toggle('compact', H < 500);
+    // hand cards under ~72px wide (iPhone SE-size screens in landscape)
+    document.documentElement.classList.toggle('narrow', cardW < 72);
     document.documentElement.classList.toggle('portrait', H > W);
+    const rotate = H > W && W < 600;
+    document.documentElement.classList.toggle('rotate', rotate);
+    this.rotateText.textContent = t('Turn your device sideways to play');
+    // a fight does not go on behind the hint
+    if (rotate && this.battle && !this.paused) this.pause();
     if (this.battle) requestAnimationFrame(() => this.battle && this.battle.layout());
+  }
+
+  // Shown on the title screen, so a player on the first online launch knows when the game will
+  // also start without a connection.
+  setOffline(state) {
+    this.offline = state;
+    const el = document.querySelector('.title-offline');
+    if (el) el.textContent = S.offlineLabel(state);
   }
 
   // ───────────────────────── persistence ─────────────────────────
@@ -103,6 +123,7 @@ class App {
       this.battle.relocalize();
       this.paused = pauseOpen || settingsOpen;
     } else if (this.current) this.show(this.current[0], ...this.current[1]);
+    this.rotateText.textContent = t('Turn your device sideways to play');
     if (pauseOpen) this.pause();
     if (settingsOpen) this.openSettings();
   }
@@ -521,7 +542,18 @@ export function boot() {
   window.__sb = app;
   app.start();
   if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !location.hostname.includes('claude')) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    app.setOffline('caching');
+    navigator.serviceWorker.register('sw.js').then((reg) => {
+      const w = reg.installing || reg.waiting;
+      if (w) w.addEventListener('statechange', () => { if (w.state === 'redundant' && !reg.active) app.setOffline(null); });
+      // look for a newer build on each launch and whenever the app comes back to the foreground (a
+      // home-screen app is often resumed rather than relaunched); offline this fails quietly
+      if (reg.active) reg.update().catch(() => {});
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+      return navigator.serviceWorker.ready;
+    }).then(() => caches.match('index.html')).then((hit) => app.setOffline(hit ? 'ready' : null)).catch(() => app.setOffline(null));
+    // keep the cache and saves from being evicted under storage pressure (granted silently or ignored)
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   }
 }
 

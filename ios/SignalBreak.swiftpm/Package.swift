@@ -16,7 +16,7 @@ let package = Package(
             name: "SIGNAL BREAK",
             targets: ["AppModule"],
             bundleIdentifier: "com.example.signalbreak",
-            displayVersion: "0.1.1",
+            displayVersion: "0.1.2",
             bundleVersion: "1",
             appIcon: .asset("AppIcon"),
             accentColor: .presetColor(.orange),

@@ -8,8 +8,19 @@ Granraku, a cynical trash-game hunter, enters a malfunctioning experimental card
 
 - **Built game:** `dist/index.html` is self-contained (one HTML file with inline JS/CSS). Serve the `dist/` folder over HTTP to enable the offline service worker (`npm run serve` serves the repo root; `node tools/serve.mjs dist 8124` serves the build).
 - **Development:** `npm run serve`, then open `http://localhost:8123/index.html`. This runs the ES-module sources directly; there is no build step for development.
-- **Build:** `npm install && npm run build` writes `dist/index.html` (full PWA document), `dist/artifact.html` (page fragment for embedded hosting), `dist/sw.js`, the manifest and the icon.
+- **Build:** `npm install && npm run build` writes `dist/index.html` (full PWA document), `dist/artifact.html` (page fragment for embedded hosting), `dist/sw.js`, the manifest and the icons (`node tools/render-icon.mjs` renders the PNG icons from `public/app-icon.svg`).
 - **Tests:** `npm test` runs the engine, run-layer, systems and archetype tests (Node built-in test runner).
+
+### iPhone / iPad web app (no App Store)
+
+The game installs from Safari as a web app and then plays offline:
+
+1. Open **https://magma-rager.github.io/def/** in Safari.
+2. Share → **Add to Home Screen** → Add.
+3. Open it once from the home screen while online and wait for **Available offline** under the title menu (a few seconds).
+4. From then on it starts without a connection. New builds download in the background when online and are used from the next launch.
+
+Hosting: GitHub Pages serves the repository root (Settings → Pages → Deploy from a branch, folder `/`). The root `index.html` sends github.io visitors to `dist/`, and `.nojekyll` makes Pages serve files unprocessed. The home-screen app keeps its own saves, separate from Safari's. On a phone held upright the game asks to be turned sideways.
 
 ### iPad / iPhone App Store build (no Mac)
 
@@ -84,17 +95,17 @@ English and Russian. Switch on the title screen (top-left) or in Settings → La
 - Cyrillic comes from extra faces in the same font families (Fira Sans Extra Condensed for Barlow Condensed, Oswald for Big Shoulders Display, and Spectral's own Cyrillic), embedded in the build, so the game stays offline.
 - Card names and texts that run long shrink to fit (`fitCard` in `src/ui/cardView.js`), and names may take a second line.
 
-**Adding a language:** copy `src/i18n/ru.js` to `src/i18n/<code>.js`, translate the values (keep `{placeholders}`, and give plural groups as many forms as the language needs; `pluralIndex` in `index.js` decides which form is used), then register it in `DICTS` and `LANGS` in `src/i18n/index.js`. `npm test` lists anything untranslated, and `node tools/i18n-layout.mjs <outDir> <code>` reports clipped text on every screen at five viewports. Add font faces if the script needs them.
+**Adding a language:** copy `src/i18n/ru.js` to `src/i18n/<code>.js`, translate the values (keep `{placeholders}`, and give plural groups as many forms as the language needs; `pluralIndex` in `index.js` decides which form is used), then register it in `DICTS` and `LANGS` in `src/i18n/index.js`. `npm test` lists anything untranslated, and `node tools/i18n-layout.mjs <outDir> <code>` reports clipped text on every screen at six viewports. Add font faces if the script needs them.
 
 ## Version
 
-The version follows the development roadmap, and the title screen shows it ("Patched to version 0.1.1. Probably.").
+The version follows the development roadmap, and the title screen shows it ("Patched to version 0.1.2. Probably.").
 
 - `0.N.x`: N is the highest roadmap phase whose exit gate has passed, with the evidence recorded in `docs/AUDIT.md`.
 - `0.N.P`: P counts published builds with changes since that gate.
 - `1.0.0`: the Phase 9 release.
 
-Current: **0.1.1** (0.1.0 plus the Russian localization build). Phase 0 (audit) and Phase 1 (Act I → Act II with saves) have passed. Phase 2's gate requires a playthrough to reach the credits, and the game has an ending scene but no credits yet. The number lives in `src/version.js`; `package.json` and the iOS project must match it, and a test enforces that. The line under the title menu shows the build date and source commit.
+Current: **0.1.2** (0.1.0 plus two published builds: the Russian localization, then the iPhone/iPad web app). Phase 0 (audit) and Phase 1 (Act I → Act II with saves) have passed. Phase 2's gate requires a playthrough to reach the credits, and the game has an ending scene but no credits yet. The number lives in `src/version.js`; `package.json` and the iOS project must match it, and a test enforces that. The line under the title menu shows the build date and source commit.
 
 ## Verification tools
 
@@ -103,6 +114,7 @@ Current: **0.1.1** (0.1.0 plus the Russian localization build). Phase 0 (audit) 
 - `node tools/i18n-layout.mjs [outDir] [lang] [viewports]` opens every screen, modal, event, card and boss-preparation layout in a language and reports clipped, truncated or off-screen text.
 - `node tools/i18n-keys.mjs` lists interface keys missing from `ru.js`.
 - `node tools/milestone.mjs [outDir] [minutes] [stopAtAct] [w] [h]` plays a fresh run through the UI only, reloads the page and presses Continue at every major transition (mid-battle, boss fights, boss reward, mutation, act entries, ending), checks the restored state is identical, and checks the Museum unlock in the next run. Needs the dev server on port 8123. Writes `report.json` and screenshots. See `docs/AUDIT.md`. `SB_LANG=ru` plays in Russian (switching from the title screen) and scans every screen and the battle canvas for untranslated words and clipped text; `SB_FLOW=defeat` continues into a pause-menu restart, a lost run and a new run.
-- `node tools/flow.mjs`, `tools/screens.mjs`, `tools/bossfight.mjs` and `tools/offline.mjs` take screenshots of flows, screens, boss and interference visuals, and check offline PWA behavior.
+- `node tools/flow.mjs`, `tools/screens.mjs` and `tools/bossfight.mjs` take screenshots of flows, screens, boss and interference visuals.
+- `node tools/pwa.mjs [workDir]` checks the built web app as served from GitHub Pages: first online launch, offline launches with a battle, and the update to a new build.
 
 All art, animation, music and sound are generated procedurally in code; no external assets are used.

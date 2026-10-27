@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import { findIssues } from './lib/text-issues.mjs';
 const { chromium } = createRequire(import.meta.url)('playwright');
 
-const [outDir = 'layout-out', LANG = 'ru', vpArg = '844x390,900x500,1024x768,1194x834,1920x1080'] = process.argv.slice(2);
+const [outDir = 'layout-out', LANG = 'ru', vpArg = '667x375,844x390,900x500,1024x768,1194x834,1920x1080'] = process.argv.slice(2);
 const VIEWPORTS = vpArg.split(',').map((v) => v.split('x').map(Number));
 const URL = process.env.SB_URL || 'http://localhost:8123/index.html';
 fs.mkdirSync(outDir, { recursive: true });

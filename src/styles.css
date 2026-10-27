@@ -66,6 +66,15 @@ p { margin: 0 0 0.7em; line-height: 1.35; }
 .title-menu { display: flex; flex-direction: column; gap: 8px; }
 .title-foot { font-size: 0.85em; color: var(--cream3); }
 .title-build { font-size: 0.75em; color: var(--cream3); opacity: 0.7; margin-top: -8px; }
+/* phones in portrait */
+.rotate-hint { display: none; }
+html.rotate .rotate-hint { display: flex; position: fixed; inset: 0; z-index: 1000; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 24px; background: radial-gradient(ellipse at 50% 40%, #2a1a24, var(--char2) 70%); color: var(--cream); text-align: center; }
+.rotate-text { font-family: var(--font-display); font-weight: 800; font-size: 1.5em; letter-spacing: 0.04em; text-transform: uppercase; max-width: 16em; }
+.rotate-phone { width: 46px; height: 80px; border: 4px solid var(--brass-hi); border-radius: 9px; position: relative; animation: rotate-phone 2.4s ease-in-out infinite; }
+.rotate-phone::after { content: ''; position: absolute; left: 50%; bottom: 5px; width: 10px; height: 3px; margin-left: -5px; border-radius: 2px; background: var(--brass-hi); }
+@keyframes rotate-phone { 0%, 25% { transform: rotate(0deg); } 55%, 100% { transform: rotate(-90deg); } }
+html.reduced-motion .rotate-phone { animation: none; transform: rotate(-90deg); }
+.title-offline { font-size: 0.75em; color: var(--brass-hi); margin-top: -8px; min-height: 1.2em; }
 .lang-switch { display: inline-flex; border: 1px solid var(--brass-lo); border-radius: 4px; overflow: hidden; background: rgba(30, 16, 24, 0.85); }
 .title > .lang-switch { position: absolute; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); z-index: 2; }
 .lang-opt { appearance: none; border: 0; background: transparent; color: var(--cream2); font: inherit; font-weight: 700; font-size: 0.9em; padding: 0 0.9em; min-height: 40px; cursor: pointer; }
@@ -498,6 +507,9 @@ p { margin: 0 0 0.7em; line-height: 1.35; }
 .compact .hand .card-top .var { font-size: 11px; }
 .compact .hand .card-top .role-tag { font-size: 8px; padding: 1px 3px; }
 .compact .hand .reason, .compact .hand .graft, .compact .hand .mod { font-size: 8px; }
+.narrow .hand .rt-word { display: none; }
+.narrow .hand .role-tag i { margin-right: 0; }
+.narrow .hand .reason { font-size: 7px; letter-spacing: 0; }
 .compact .hand .owner-chip { font-size: 10px; }
 .in-battle .layer-toast { justify-content: flex-end; align-items: center; padding: 0 0 calc(var(--deck-h) + 10px) 0; }
 .in-battle .toast { max-width: min(380px, 46vw); font-size: 0.85em; opacity: 0.94; }
