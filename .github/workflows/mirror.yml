@@ -1,0 +1,47 @@
+# Copies the built web app (dist/) to an S3-compatible bucket with static website hosting, as a
+# second address for the game next to GitHub Pages (for networks where GitHub is unreliable).
+# Defaults to Yandex Object Storage; any S3-compatible storage works by setting MIRROR_ENDPOINT
+# and MIRROR_REGION. Does nothing until the bucket and keys below are set in the repository:
+#   Settings → Secrets and variables → Actions
+#     Secrets:   MIRROR_KEY_ID, MIRROR_SECRET (a static access key with write access to the bucket)
+#     Variables: MIRROR_BUCKET (bucket name); optional MIRROR_ENDPOINT, MIRROR_REGION
+name: Mirror web app
+
+on:
+  push:
+    branches: [main, claude/adoring-newton-e9l4sf]
+    paths: ['dist/**']
+  workflow_dispatch:
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    env:
+      BUCKET: ${{ vars.MIRROR_BUCKET }}
+      ENDPOINT: ${{ vars.MIRROR_ENDPOINT || 'https://storage.yandexcloud.net' }}
+      AWS_DEFAULT_REGION: ${{ vars.MIRROR_REGION || 'ru-central1' }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.MIRROR_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.MIRROR_SECRET }}
+      # newer AWS CLI versions add checksum headers that S3-compatible storage may reject
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+      AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+    steps:
+      - name: Mirror not configured
+        if: env.BUCKET == ''
+        run: echo "::notice::Set MIRROR_BUCKET, MIRROR_KEY_ID and MIRROR_SECRET to enable the mirror."
+      - uses: actions/checkout@v4
+        if: env.BUCKET != ''
+      - name: Upload
+        if: env.BUCKET != ''
+        run: |
+          put() { aws s3 cp "dist/$1" "s3://$BUCKET/$1" --endpoint-url "$ENDPOINT" --content-type "$2" --cache-control "$3" --only-show-errors; }
+          # icons and manifest first, then the page, then the service worker: a new worker only
+          # installs once everything it caches is in place
+          put icon.svg image/svg+xml "max-age=3600"
+          put icon-180.png image/png "max-age=3600"
+          put icon-192.png image/png "max-age=3600"
+          put icon-512.png image/png "max-age=3600"
+          put manifest.webmanifest application/manifest+json "no-cache"
+          put index.html "text/html; charset=utf-8" "no-cache"
+          put sw.js "application/javascript; charset=utf-8" "no-cache"
+          echo "Uploaded to $BUCKET"

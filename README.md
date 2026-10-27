@@ -20,7 +20,18 @@ The game installs from Safari as a web app and then plays offline:
 3. Open it once from the home screen while online and wait for **Available offline** under the title menu (a few seconds).
 4. From then on it starts without a connection. New builds download in the background when online and are used from the next launch.
 
-Hosting: GitHub Pages serves the repository root (Settings → Pages → Deploy from a branch, folder `/`). The root `index.html` sends github.io visitors to `dist/`, and `.nojekyll` makes Pages serve files unprocessed. The home-screen app keeps its own saves, separate from Safari's. On a phone held upright the game asks to be turned sideways.
+The home-screen app keeps its own saves, separate from Safari's. On a phone held upright the game asks to be turned sideways.
+
+**Hosting.** No single address is reachable from every network, so the same build can be served from two places; after the first launch the game no longer needs either.
+
+- **GitHub Pages** (most of the world; unreliable in Russia since May 2026 and in mainland China): Settings → Pages → Deploy from a branch, folder `/`. The root `index.html` sends github.io visitors to `dist/`, and `.nojekyll` makes Pages serve files unprocessed.
+- **Storage mirror** (for networks where GitHub is slow or blocked, e.g. Russia): `.github/workflows/mirror.yml` uploads the web app files to an S3-compatible bucket whenever `dist/` changes. Set up once with Yandex Object Storage:
+  1. In the Yandex Cloud console create a bucket (name without dots, e.g. `signalbreak-game`) with public read access to objects, and turn on Website hosting with `index.html` as the main page.
+  2. Create a service account with the `storage.editor` role and a static access key for it.
+  3. In GitHub: Settings → Secrets and variables → Actions → add secrets `MIRROR_KEY_ID` and `MIRROR_SECRET` (the key), and the variable `MIRROR_BUCKET` (the bucket name).
+  4. Actions → Mirror web app → Run workflow. The game is then at `https://website.yandexcloud.net/<bucket>/index.html`.
+
+  Another S3-compatible provider works the same way with the variables `MIRROR_ENDPOINT` and `MIRROR_REGION`.
 
 ### iPad / iPhone App Store build (no Mac)
 
@@ -115,6 +126,6 @@ Current: **0.1.2** (0.1.0 plus two published builds: the Russian localization, t
 - `node tools/i18n-keys.mjs` lists interface keys missing from `ru.js`.
 - `node tools/milestone.mjs [outDir] [minutes] [stopAtAct] [w] [h]` plays a fresh run through the UI only, reloads the page and presses Continue at every major transition (mid-battle, boss fights, boss reward, mutation, act entries, ending), checks the restored state is identical, and checks the Museum unlock in the next run. Needs the dev server on port 8123. Writes `report.json` and screenshots. See `docs/AUDIT.md`. `SB_LANG=ru` plays in Russian (switching from the title screen) and scans every screen and the battle canvas for untranslated words and clipped text; `SB_FLOW=defeat` continues into a pause-menu restart, a lost run and a new run.
 - `node tools/flow.mjs`, `tools/screens.mjs` and `tools/bossfight.mjs` take screenshots of flows, screens, boss and interference visuals.
-- `node tools/pwa.mjs [workDir]` checks the built web app as served from GitHub Pages: first online launch, offline launches with a battle, and the update to a new build.
+- `node tools/pwa.mjs [workDir]` checks the built web app as served from GitHub Pages (or, with `PWA_PATH=/name/`, from a bucket path like the storage mirror): first online launch, offline launches with a battle, and the update to a new build.
 
 All art, animation, music and sound are generated procedurally in code; no external assets are used.

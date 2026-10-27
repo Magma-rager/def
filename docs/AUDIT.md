@@ -155,7 +155,9 @@ Totals: 7 runs, 5 natural victories, 2 final-boss defeats, 242 of 242 checks pas
 | Phones in portrait: the game asks to turn the device and pauses a fight (an installed web app cannot lock orientation); iPad portrait plays normally | Working | P (844×390 → 390×844 → back: combat time frozen, pause menu on return; 834×1194 battle laid out) |
 | Smallest iPhones in landscape (667×375, iPhone SE size): hand cards show the role as its symbol only and their text may shrink a little more | Working | `tools/i18n-layout.mjs` at 667×375: 0 issues in both languages (English cards were also clipped there before) |
 | Audio after the app was in the background or a call | Implemented (resumes on the next touch) | Not tested on a device |
-| Hosting | GitHub Pages from this branch's root; the root page redirects to `dist/` on github.io; `.nojekyll` serves files as they are | Needs Pages switched on in the repository settings |
+| Hosting | GitHub Pages from this branch's root (the root page redirects to `dist/` on github.io; `.nojekyll` serves files as they are), plus an optional mirror in an S3-compatible bucket uploaded by `.github/workflows/mirror.yml` | `tools/pwa.mjs` passes for both layouts (16/16 Pages, 15/15 bucket path); Pages needs switching on in the repository settings; the mirror needs a bucket and keys; neither is live yet |
+
+Reachability: no single host is open on every network. GitHub has been degraded in Russia since May 2026 (OONI: 10–16% failed connections in early May; wider outages in July) and is intermittent in mainland China; Russian networks also throttle Cloudflare, Hetzner and DigitalOcean, while Russian-hosted services are reliable there (and Yandex is blocked in Ukraine). Hence two addresses. Once installed, the game runs offline wherever it is, so a block affects only installing and updates.
 
 Limits on iOS: the home-screen app keeps its own storage, separate from Safari, so a run started in Safari does not carry over; installed web apps are exempt from Safari's 7-day storage limit. Chromium stands in for Safari in `tools/pwa.mjs`; Safari itself has not been run.
 

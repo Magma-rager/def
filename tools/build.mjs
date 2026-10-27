@@ -85,7 +85,8 @@ ${FONTS}
 `;
 fs.writeFileSync('dist/app.html', app);
 
-// Web app files: the page is self-contained, so these are everything it needs offline.
+// Web app files: the page is self-contained, so these are everything it needs offline. The
+// storage mirror (.github/workflows/mirror.yml) uploads the same files.
 const WEB = ['manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 for (const f of WEB) fs.copyFileSync(`public/${f}`, `dist/${f}`);
 // The cache name is a hash of the cached files, so a new build replaces the cache and an

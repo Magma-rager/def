@@ -3,8 +3,9 @@
 //
 // Usage: node tools/pwa.mjs [workDir]   (after npm run build)
 // Copies dist/ to <workDir>/site/def/dist and serves it like GitHub Pages (site under /def/,
-// Cache-Control max-age=600, folder URLs open index.html). Chromium stands in for Safari; an iPhone
-// or iPad is still needed to confirm Add to Home Screen itself.
+// Cache-Control max-age=600, folder URLs open index.html). PWA_PATH=/signalbreak/ serves the build
+// at that path instead, as on the storage mirror (no site-root redirect then). Chromium stands in
+// for Safari; an iPhone or iPad is still needed to confirm Add to Home Screen itself.
 import { createRequire } from 'node:module';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -14,12 +15,14 @@ const { chromium } = createRequire(import.meta.url)('playwright');
 
 const work = path.resolve(process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'sb-pwa-')));
 const site = path.join(work, 'site');
-const dist = path.join(site, 'def', 'dist');
+const BASE = process.env.PWA_PATH || '/def/dist/';
+const PAGES = BASE === '/def/dist/';
+const dist = path.join(site, BASE);
 fs.rmSync(site, { recursive: true, force: true });
 fs.mkdirSync(path.dirname(dist), { recursive: true });
 fs.cpSync('dist', dist, { recursive: true });
 // the repository root page redirects to the build on github.io; here the host is localhost
-fs.writeFileSync(path.join(site, 'def', 'index.html'), fs.readFileSync('index.html', 'utf8').replace('/\\.github\\.io$/', '/^localhost$/'));
+if (PAGES) fs.writeFileSync(path.join(site, 'def', 'index.html'), fs.readFileSync('index.html', 'utf8').replace('/\\.github\\.io$/', '/^localhost$/'));
 
 const PORT = 8200;
 const HOST = `http://localhost:${PORT}`;
@@ -63,8 +66,8 @@ const open = async (url) => {
 };
 
 // 1. First launch, online, from the site address
-let p = await open(`${HOST}/def/`);
-check('Site root opens the built game', p.url() === `${HOST}/def/dist/`, p.url());
+let p = await open(PAGES ? `${HOST}/def/` : `${HOST}${BASE}index.html`);
+if (PAGES) check('Site root opens the built game', p.url() === `${HOST}/def/dist/`, p.url());
 await p.waitForFunction(() => window.__sb.offline === 'ready', null, { timeout: 30000 }).catch(() => {});
 check('Title screen reports the game is available offline', await p.evaluate(() => window.__sb.offline === 'ready'), await p.textContent('.title-offline'));
 const cached = await p.evaluate(async () => {
@@ -92,7 +95,7 @@ await p.close();
 await stop();
 await ctx.setOffline(true);
 requests = [];
-for (const url of [`${HOST}/def/dist/index.html`, `${HOST}/def/dist/`, `${HOST}/def/dist/index.html?source=homescreen`]) {
+for (const url of [`${HOST}${BASE}index.html`, `${HOST}${BASE}`, `${HOST}${BASE}index.html?source=homescreen`]) {
   let info = null;
   try {
     p = await open(url);
@@ -131,7 +134,7 @@ const sw = path.join(dist, 'sw.js');
 fs.writeFileSync(sw, fs.readFileSync(sw, 'utf8').replace(/signalbreak-[0-9a-f]+/, 'signalbreak-nextbuild'));
 await start();
 const isNext = () => p.evaluate(() => document.documentElement.outerHTML.includes('<!--next-build-->'));
-p = await open(`${HOST}/def/dist/index.html`);
+p = await open(`${HOST}${BASE}index.html`);
 const firstNext = await isNext();
 let names = [];
 for (let i = 0; i < 40; i++) {
@@ -141,13 +144,13 @@ for (let i = 0; i < 40; i++) {
 }
 await p.close();
 check('Update: the new build is cached and the old cache removed', names.join() === 'signalbreak-nextbuild', names.join());
-p = await open(`${HOST}/def/dist/index.html`);
+p = await open(`${HOST}${BASE}index.html`);
 const secondNext = await isNext();
 await p.close();
 check('Update: the next launch runs the new build', !firstNext && secondNext, `launch 1: ${firstNext ? 'new' : 'old'}, launch 2: ${secondNext ? 'new' : 'old'}`);
 await stop();
 await ctx.setOffline(true);
-p = await open(`${HOST}/def/dist/`);
+p = await open(`${HOST}${BASE}`);
 check('Update: the new build starts offline', await isNext());
 
 await b.close();
