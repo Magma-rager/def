@@ -16,7 +16,7 @@ Granraku, a cynical trash-game hunter, enters a malfunctioning experimental card
 The game installs from Safari as a web app and then plays offline:
 
 1. Open **https://magma-rager.github.io/def/** in Safari.
-2. Share → **Add to Home Screen** → Add.
+2. Share → **Add to Home Screen** (on iOS 26, keep **Open as Web App** on) → Add.
 3. Open it once from the home screen while online and wait for **Available offline** under the title menu (a few seconds).
 4. From then on it starts without a connection. New builds download in the background when online and are used from the next launch.
 
