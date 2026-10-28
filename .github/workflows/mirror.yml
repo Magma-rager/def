@@ -4,7 +4,8 @@
 # and MIRROR_REGION. Does nothing until the bucket and keys below are set in the repository:
 #   Settings → Secrets and variables → Actions
 #     Secrets:   MIRROR_KEY_ID, MIRROR_SECRET (a static access key with write access to the bucket)
-#     Variables: MIRROR_BUCKET (bucket name); optional MIRROR_ENDPOINT, MIRROR_REGION
+#     Variables: MIRROR_BUCKET (bucket name); optional MIRROR_ENDPOINT, MIRROR_REGION, and
+#                MIRROR_SITE_URL (the site address, for providers other than Yandex)
 name: Mirror web app
 
 # Runs on every push to these branches (a few small files). To upload right after setting the
@@ -21,6 +22,7 @@ jobs:
       BUCKET: ${{ vars.MIRROR_BUCKET }}
       ENDPOINT: ${{ vars.MIRROR_ENDPOINT || 'https://storage.yandexcloud.net' }}
       AWS_DEFAULT_REGION: ${{ vars.MIRROR_REGION || 'ru-central1' }}
+      SITE: ${{ vars.MIRROR_SITE_URL || format('https://{0}.website.yandexcloud.net/', vars.MIRROR_BUCKET) }}
       AWS_ACCESS_KEY_ID: ${{ secrets.MIRROR_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.MIRROR_SECRET }}
       # newer AWS CLI versions add checksum headers that S3-compatible storage may reject
@@ -46,3 +48,14 @@ jobs:
           put index.html "text/html; charset=utf-8" "no-cache"
           put sw.js "application/javascript; charset=utf-8" "no-cache"
           echo "Uploaded to $BUCKET"
+      - name: Check the site
+        if: env.BUCKET != ''
+        run: |
+          code=$(curl -s -o page.html -w '%{http_code}' "$SITE")
+          echo "$SITE answered HTTP $code"
+          if [ "$code" != 200 ]; then
+            echo "::error::The site answered $code instead of the game. Check that objects are readable by everyone and that Website hosting is on with index.html as the main page."
+            exit 1
+          fi
+          grep -q 'rel="manifest"' page.html || { echo "::error::$SITE does not serve the game page."; exit 1; }
+          echo "::notice::The game is live at $SITE ($(grep -o 'commit:"[^"]*"' page.html | head -1))"
