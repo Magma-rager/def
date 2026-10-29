@@ -34,6 +34,30 @@ jobs:
         run: echo "::notice::Set MIRROR_BUCKET, MIRROR_KEY_ID and MIRROR_SECRET to enable the mirror."
       - uses: actions/checkout@v4
         if: env.BUCKET != ''
+      - name: Check the key
+        if: env.BUCKET != ''
+        run: |
+          # keys never contain spaces; drop any copied along with them (a trailing newline or space
+          # breaks the request signature) and pass the cleaned keys to the next steps
+          id=$(printf %s "$AWS_ACCESS_KEY_ID" | tr -d '[:space:]')
+          secret=$(printf %s "$AWS_SECRET_ACCESS_KEY" | tr -d '[:space:]')
+          echo "::add-mask::$secret"
+          echo "Key ID: ${#id} characters (${#AWS_ACCESS_KEY_ID} before removing spaces); secret: ${#secret} characters (${#AWS_SECRET_ACCESS_KEY} before)"
+          echo "AWS_ACCESS_KEY_ID=$id" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=$secret" >> "$GITHUB_ENV"
+          # a listing returns an error code in its body (a HEAD request would only say 403)
+          if ! out=$(AWS_ACCESS_KEY_ID="$id" AWS_SECRET_ACCESS_KEY="$secret" aws s3api list-objects-v2 --bucket "$BUCKET" --max-keys 1 --endpoint-url "$ENDPOINT" 2>&1); then
+            echo "$out"
+            case "$out" in
+              *SignatureDoesNotMatch*) echo "::error::The secret key is wrong: MIRROR_SECRET does not belong to MIRROR_KEY_ID. Create a new static key and paste both values again." ;;
+              *InvalidAccessKeyId*) echo "::error::Unknown key ID: check MIRROR_KEY_ID." ;;
+              *AccessDenied*) echo "::error::The key is valid but its service account has no access: give it the storage.uploader role on the folder." ;;
+              *NoSuchBucket*) echo "::error::No bucket named $BUCKET: check MIRROR_BUCKET." ;;
+              *) echo "::error::Could not reach the bucket." ;;
+            esac
+            exit 1
+          fi
+          echo "The key works for bucket $BUCKET"
       - name: Upload
         if: env.BUCKET != ''
         run: |
