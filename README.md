@@ -27,9 +27,9 @@ The home-screen app keeps its own saves, separate from Safari's. On a phone held
 - **GitHub Pages** (most of the world; unreliable in Russia since May 2026 and in mainland China): Settings → Pages → Deploy from a branch, folder `/`. The root `index.html` sends github.io visitors to `dist/`, and `.nojekyll` makes Pages serve files unprocessed.
 - **Storage mirror** (for networks where GitHub is slow or blocked, e.g. Russia): `.github/workflows/mirror.yml` uploads the web app files to an S3-compatible bucket whenever `dist/` changes. Set up once with Yandex Object Storage:
   1. In the Yandex Cloud console create a bucket (name without dots, e.g. `signalbreak-game`) with object reading and object listing open to everyone, and turn on Website hosting with `index.html` as the main page.
-  2. Create a service account with the `storage.editor` role and a static access key for it.
+  2. Create a service account (e.g. `signalbreak-uploader`) and give it the `storage.uploader` role on the folder: folder → Права доступа → Настроить доступ → type the account's name in «Кому выдать доступ» → Добавить роль → Сохранить. Then open the account and create a static access key. Copy both values with the copy buttons: the secret key is 40 characters and is shown only once.
   3. In GitHub: Settings → Secrets and variables → Actions → add secrets `MIRROR_KEY_ID` and `MIRROR_SECRET` (the key), and the variable `MIRROR_BUCKET` (the bucket name).
-  4. Actions → Mirror web app → open the latest run → Re-run all jobs (later pushes upload by themselves). The run opens the site after uploading and reports whether the game is live. The game is then at `https://<bucket>.website.yandexcloud.net/`.
+  4. Actions → Mirror web app → open the latest run → Re-run all jobs (later pushes upload by themselves). The run checks the key, opens the site after uploading and reports whether the game is live. The game is then at `https://<bucket>.website.yandexcloud.net/`; install it on the iPhone or iPad as in steps 2–3 above.
 
   Another S3-compatible provider works the same way with the variables `MIRROR_ENDPOINT` and `MIRROR_REGION`.
 

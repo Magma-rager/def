@@ -49,7 +49,7 @@ jobs:
           if ! out=$(AWS_ACCESS_KEY_ID="$id" AWS_SECRET_ACCESS_KEY="$secret" aws s3api list-objects-v2 --bucket "$BUCKET" --max-keys 1 --endpoint-url "$ENDPOINT" 2>&1); then
             echo "$out"
             case "$out" in
-              *SignatureDoesNotMatch*) echo "::error::The secret key is wrong: MIRROR_SECRET does not belong to MIRROR_KEY_ID. Create a new static key and paste both values again." ;;
+              *SignatureDoesNotMatch*) echo "::error::The secret key is wrong: MIRROR_SECRET (${#secret} characters) does not belong to MIRROR_KEY_ID. A Yandex Cloud secret key is 40 characters; paste it again in full, or create a new static key and paste both values." ;;
               *InvalidAccessKeyId*) echo "::error::Unknown key ID: check MIRROR_KEY_ID." ;;
               *AccessDenied*) echo "::error::The key is valid but its service account has no access: give it the storage.uploader role on the folder." ;;
               *NoSuchBucket*) echo "::error::No bucket named $BUCKET: check MIRROR_BUCKET." ;;
