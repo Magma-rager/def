@@ -110,13 +110,13 @@ English and Russian. Switch on the title screen (top-left) or in Settings → La
 
 ## Version
 
-The version follows the development roadmap, and the title screen shows it ("Patched to version 0.1.2. Probably.").
+The version follows the development roadmap, and the title screen shows it ("Patched to version 0.2.0. Probably.").
 
 - `0.N.x`: N is the highest roadmap phase whose exit gate has passed, with the evidence recorded in `docs/AUDIT.md`.
 - `0.N.P`: P counts published builds with changes since that gate.
 - `1.0.0`: the Phase 9 release.
 
-Current: **0.1.2** (0.1.0 plus two published builds: the Russian localization, then the iPhone/iPad web app). Phase 0 (audit) and Phase 1 (Act I → Act II with saves) have passed. Phase 2's gate requires a playthrough to reach the credits, and the game has an ending scene but no credits yet. The number lives in `src/version.js`; `package.json` and the iOS project must match it, and a test enforces that. The line under the title menu shows the build date and source commit.
+Current: **0.2.0**. Phases 0 (audit), 1 (Act I → Act II with saves) and 2 (a normal playthrough reaches the credits and returns to the main loop; victory and defeat both resolve) have passed. Next is Phase 3: four distinct build families shown through play. The number lives in `src/version.js`; `package.json` and the iOS project must match it, and a test enforces that. The line under the title menu shows the build date and source commit.
 
 ## Verification tools
 

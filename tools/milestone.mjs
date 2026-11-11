@@ -86,6 +86,7 @@ async function scanScreen(name) {
       const n = walker.currentNode;
       const el = n.parentElement;
       if (!el || !el.getClientRects().length || el.closest('.dlg-text')) continue; // dialogue is typed out letter by letter
+      if (el.closest('[translate="no"]')) continue; // proper names (fonts and their authors in the credits)
       const t = n.textContent.replace(/\s+/g, ' ').trim();
       if (t) out.add(t);
     }
@@ -347,6 +348,28 @@ while (Date.now() < deadline) {
     await shot('04-act3-map');
     await reloadAndContinue('Act III entry');
     if (+stopAtAct <= 3) break;
+    continue;
+  }
+  if (s === 'credits') {
+    if (!done.has('credits')) {
+      done.add('credits');
+      await p.waitForTimeout(1500);
+      await shot('05a-credits');
+      const c = await p.evaluate(() => ({
+        cast: document.querySelectorAll('.cr-sec')[0].querySelectorAll('.cr-row').length,
+        thanks: document.querySelector('.cr-thanks').textContent,
+        rolling: !!document.querySelector('.credits-roll.rolling'),
+        recorded: window.__sb.meta.totalRuns, run: !!window.__sb.run,
+      }));
+      check('Victory rolls the credits after the ending', c.cast === 5 && !c.run && c.recorded >= 1, `"${c.thanks}", cast ${c.cast}, rolling ${c.rolling}, run already recorded (${c.recorded})`);
+    }
+    await click('.credits-foot .btn');
+    await p.waitForTimeout(500);
+    if (!done.has('credits-out')) {
+      done.add('credits-out');
+      const next = await screen();
+      check('Credits continue to the results screen', next === 'results', next);
+    }
     continue;
   }
   if (s === 'results' && !done.has('results')) {

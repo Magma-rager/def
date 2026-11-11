@@ -64,7 +64,8 @@ export function titleScreen(app, root) {
       menu,
       h('div', { class: 'title-foot' }, t('Runs {runs} · Wins {wins} · Best combo {n} {n|card|cards}', { runs: m.totalRuns, wins: m.wins, n: m.bestCombo })),
       h('div', { class: 'title-build' }, !BUILD ? t('Development build') : BUILD.commit ? t('Build {date} · {commit}', BUILD) : t('Build {date}', BUILD)),
-      h('div', { class: 'title-offline' }, offlineLabel(app.offline))));
+      h('div', { class: 'title-offline' }, offlineLabel(app.offline)),
+      h('button', { class: 'title-link', type: 'button', onclick: () => app.show(creditsScreen, () => app.toTitle()) }, t('Credits'))));
   clear(root).append(el);
   const sc = liveScene(canvas, { act: 1, party: true, enemy: null, dim: 0.25, left: true });
   app.audio.music('title');
@@ -685,6 +686,52 @@ export function resultsScreen(app, root, summary) {
   clear(root).append(h('div', { class: 'results screen' }, canvas, body));
   const sc = liveScene(canvas, { act: win ? 3 : 1, party: true, partyPose: win ? 'victory' : 'idle', dim: 0.45 });
   app.audio.music(win ? 'map' : 'title');
+  return () => sc.stop();
+}
+
+// ───────────────────────── CREDITS ─────────────────────────
+// Rolls after the ending (then the results screen) and opens from the title screen. Fonts are
+// credited as their licenses ask; proper names are marked translate="no".
+const FONT_CREDITS = [
+  ['Barlow Condensed', 'Jeremy Tribby'],
+  ['Big Shoulders Display', 'Patric King, Chicago Design System'],
+  ['Spectral', 'Production Type'],
+  ['Fira Sans Extra Condensed', 'Carrois Apostrophe, Mozilla'],
+  ['Oswald', 'Vernon Adams, Kalapi Gajjar, Cyreal'],
+];
+
+export function creditsScreen(app, root, onDone) {
+  const canvas = h('canvas', { class: 'scene-canvas' });
+  const name = (text) => h('span', { translate: 'no' }, text);
+  const row = (a, b) => h('div', { class: 'cr-row' }, h('b', {}, a), h('span', {}, b));
+  const section = (title, ...rows) => h('section', { class: 'cr-sec' }, h('h3', {}, title), ...rows);
+  const roll = h('div', { class: 'credits-roll' },
+    h('div', { class: 'logo' }, h('span', { class: 'logo-a' }, 'SIGNAL'), h('span', { class: 'logo-sl' }, '//'), h('span', { class: 'logo-b' }, 'BREAK')),
+    h('div', { class: 'cr-version' }, t('Version {v}', { v: VERSION })),
+    section(t('Cast'), ...['gran', 'dev', 'V', 'C', 'S'].map((who) => row(speakerName(who), speakerTitle(who)))),
+    section(t('Fonts'), ...FONT_CREDITS.map(([font, by]) => row(name(font), name(by))), h('div', { class: 'cr-note', translate: 'no' }, 'SIL Open Font License 1.1')),
+    h('blockquote', { class: 'cr-quote' }, h('p', {}, t('The credits are short. So is the team. Thank you for finishing my game.')), h('cite', {}, speakerName('dev'))),
+    h('div', { class: 'cr-thanks' }, t('Thank you for playing.')));
+  const view = h('div', { class: 'credits-view' }, roll);
+  const done = btn(t('Continue'), () => { finish(); }, 'primary');
+  let finished = false;
+  const finish = () => { if (finished) return; finished = true; onDone(); };
+  const el = h('div', { class: 'credits screen' }, canvas, view, h('div', { class: 'credits-foot' }, done));
+  clear(root).append(el);
+  // the roll scrolls up at a reading pace; with reduced motion it stays put and scrolls by hand
+  const reduced = document.documentElement.classList.contains('reduced-motion') || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!reduced) {
+    // from just below the view up to where the closing thanks sits in the middle, and it stays there
+    const thanks = roll.lastElementChild;
+    const from = view.clientHeight;
+    const to = Math.min(0, view.clientHeight / 2 - thanks.offsetTop - thanks.offsetHeight / 2);
+    roll.style.setProperty('--roll-from', `${from}px`);
+    roll.style.setProperty('--roll-to', `${to}px`);
+    roll.style.setProperty('--roll-dur', `${Math.max(10, (from - to) / 45).toFixed(1)}s`);
+    roll.classList.add('rolling');
+  } else view.classList.add('settled');
+  const sc = liveScene(canvas, { act: 3, party: true, partyPose: 'victory', dim: 0.6 });
+  app.audio.music('title');
   return () => sc.stop();
 }
 

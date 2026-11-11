@@ -195,6 +195,17 @@ for (const [W, H] of VIEWPORTS) {
     await ev(() => { const s = document.querySelector('.dlg-skip'); if (s) s.click(); });
   }
 
+  // credits: the roll mid-way, then laid out in full (as with reduced motion) to check every line
+  await route(async () => { const S = await import('/src/ui/screens.js'); window.__sb.show(S.creditsScreen, () => {}); });
+  await check('credits', true);
+  await ev(async () => {
+    document.documentElement.classList.add('reduced-motion');
+    const S = await import('/src/ui/screens.js');
+    window.__sb.show(S.creditsScreen, () => {});
+    document.documentElement.classList.remove('reduced-motion');
+  });
+  await check('credits-full', true);
+
   // ── battle: boss with adaptation, every tutorial card, banners, pause menu ──
   await route(async () => {
     const app = window.__sb;

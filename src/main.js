@@ -302,7 +302,7 @@ class App {
     if (result === 'defeat') {
       this.show(S.resultsScreen, summary);
       S.storyDialog(this, S.defeatLines(this), () => {});
-    } else this.show(S.resultsScreen, summary);
+    } else this.show(S.creditsScreen, () => this.show(S.resultsScreen, summary)); // the run is already recorded
   }
 
   // ───────────────────────── pause & modals ─────────────────────────

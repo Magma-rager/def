@@ -36,7 +36,7 @@ export function findIssues() {
     const range = document.createRange();
     range.selectNodeContents(n);
     const rects = [...range.getClientRects()].filter((r) => r.width > 0.5 && r.height > 0.5);
-    if (el.closest('.enter, .leaving, .dragging')) continue; // cards mid-animation
+    if (el.closest('.enter, .leaving, .dragging, .rolling')) continue; // cards mid-animation, credits rolling past the view
     // nearest clipping box, and whether the text sits in a scrollable container (then off-screen
     // parts are reachable by scrolling)
     let clip = null;

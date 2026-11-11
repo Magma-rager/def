@@ -53,7 +53,8 @@ Audit date: 2026-10-27. Baseline commit: `251bbb8` (branch `claude/adoring-newto
 | Build-responsive boss adaptations from current-run evidence | `run.js` `analyzeProfile`, `data/adaptations.js` | Working | U (run: needs real evidence), P (results log shows adaptations) |
 | Boss trophy relics, mutation choice, act transition | `run.js` | Working | U (run), **P (natural Act I → II → III, 5+ runs)** |
 | Defeat → results → Museum → new run | `main.js` `endRun` | Working | P (milestone run 2: final-boss defeat → results → next run) |
-| Final victory → ending scene → victory results | `run.js`, `main.js` | Working | S, **P (natural UI victories against both Act III bosses)** |
+| Final victory → ending scene → credits → victory results | `run.js`, `main.js`, `screens.js` `creditsScreen` | Working | S, **P (natural UI victories against both Act III bosses; credits reached and continued to results, English and Russian)** |
+| Credits: cast, fonts and their licenses, version; rolls after the ending and opens from the title screen; no personal credits yet (deferred to Phase 9) | `screens.js` `creditsScreen` | Working | P, layout check (both languages, all viewports) |
 
 ## Persistence and meta
 
@@ -108,7 +109,7 @@ Totals: 7 runs, 5 natural victories, 2 final-boss defeats, 242 of 242 checks pas
 8. Act II boss with Volatile preparation → outcome rolled, shown, and kept after reload (runs 6–7).
 9. Act III entry.
 10. Final boss fight → same boss.
-11. Ending scene → replays after Continue, then victory results.
+11. Ending scene → replays after Continue, then credits (added 2026-11-11), then victory results.
 12. After the results screen: no Continue offered, run recorded in the Museum exactly once.
 13. Next run: Stopwatch Gear (unlocked by the Act I boss kill) is selectable and present in the new run's relics.
 
@@ -169,10 +170,10 @@ Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exi
 |---|---|---|
 | 0 | Every major system has a recorded implementation and verification status | Passed (this document) |
 | 1 | Fresh run → Act I boss by ordinary play → mutation → Act II, state preserved through save/load | Passed (milestone runs 1–7) |
-| 2 | Normal playthrough reaches the credits and returns to the main loop; victory and defeat resolve | Not passed: victory, ending scene, defeat and return to the main loop are shown, but there are no credits |
+| 2 | Normal playthrough reaches the credits and returns to the main loop; victory and defeat resolve | Passed (2026-11-11): bot runs in English (1024×768, 43/43) and Russian (844×390, 49/49) each won all three acts by ordinary play: ending scene → credits → results → new run. The Russian run then lost a run (results screen and defeat dialogue) and started another |
 | 3 | Four distinct build families demonstrated through play | Not passed (all bot runs ended as Momentum Burst) |
 
-Current version: **0.1.2** (two published builds with changes since the Phase 1 gate: the localization, then the iPhone/iPad web app).
+Current version: **0.2.0** (Phase 2 gate passed; earlier 0.1.1 and 0.1.2 were the localization and the iPhone/iPad web app).
 
 ## Not present in this build
 
@@ -180,7 +181,7 @@ These roadmap references have no counterpart in this repository:
 
 - **"Junk Realm" setting.** The story here is set inside the fictional game itself (the Scrapworks, the Broken Protocol, the Severed Signal).
 - **Earlier Replit project assets.** Nothing from it exists in this repo.
-- **"Version 0.3.1"** was in-story flavor text in the title tagline, not a real version, and `package.json` said 1.0.0. Both now carry the real version (0.1.0, then 0.1.1 and 0.1.2), defined by roadmap gates (see "Version" above).
+- **"Version 0.3.1"** was in-story flavor text in the title tagline, not a real version, and `package.json` said 1.0.0. Both now carry the real version (0.1.0, then 0.1.1, 0.1.2 and 0.2.0), defined by roadmap gates (see "Version" above).
 
 ## Content inventory
 

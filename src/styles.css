@@ -74,6 +74,28 @@ html.rotate .rotate-hint { display: flex; position: fixed; inset: 0; z-index: 10
 .rotate-phone::after { content: ''; position: absolute; left: 50%; bottom: 5px; width: 10px; height: 3px; margin-left: -5px; border-radius: 2px; background: var(--brass-hi); }
 @keyframes rotate-phone { 0%, 25% { transform: rotate(0deg); } 55%, 100% { transform: rotate(-90deg); } }
 html.reduced-motion .rotate-phone { animation: none; transform: rotate(-90deg); }
+/* credits */
+.credits-view { position: relative; z-index: 1; flex: 1; min-height: 0; overflow: hidden; background: linear-gradient(90deg, transparent, rgba(14, 7, 11, 0.82) 22%, rgba(14, 7, 11, 0.82) 78%, transparent); -webkit-mask-image: linear-gradient(transparent, #000 10%, #000 90%, transparent); mask-image: linear-gradient(transparent, #000 10%, #000 90%, transparent); }
+.credits-roll { position: absolute; left: 50%; top: 0; width: min(620px, 90%); font-size: clamp(15px, 0.9vw + 9px, 21px); transform: translate(-50%, var(--roll-from, 0)); display: flex; flex-direction: column; align-items: center; gap: 30px; padding: 28px 0; text-align: center; }
+.credits-roll.rolling { animation: credits-roll var(--roll-dur, 30s) linear forwards; }
+@keyframes credits-roll { from { transform: translate(-50%, var(--roll-from)); } to { transform: translate(-50%, var(--roll-to)); } }
+.credits-view.settled { overflow: auto; -webkit-mask-image: none; mask-image: none; }
+.credits-view.settled .credits-roll { position: static; transform: none; margin: 0 auto; }
+.credits-roll .logo { justify-content: center; }
+.cr-version { margin-top: -18px; font-size: 0.8em; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cream3); }
+.cr-sec { width: 100%; }
+.cr-sec h3 { margin: 0 0 10px; font-size: 1.15em; letter-spacing: 0.14em; text-transform: uppercase; color: var(--brass-hi); }
+.cr-row { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 4px 10px; margin: 5px 0; }
+.cr-row b { color: var(--cream); font-size: 1.1em; }
+.cr-row span { color: var(--cream3); }
+.cr-note { margin-top: 10px; font-size: 0.8em; color: var(--cream3); }
+.cr-quote { margin: 0; max-width: 30em; font-family: var(--font-story); font-style: italic; font-size: 1.05em; color: var(--cream); }
+.cr-quote p { margin: 0; }
+.cr-quote cite { display: block; margin-top: 6px; font-family: var(--font-ui); font-style: normal; font-size: 0.85em; letter-spacing: 0.06em; color: var(--brass-hi); }
+.cr-thanks { font-family: var(--font-display); font-weight: 800; font-size: clamp(24px, 4vw, 38px); color: var(--brass-hi); }
+.credits-foot { position: relative; z-index: 2; flex: none; display: flex; justify-content: flex-end; padding: 8px max(16px, env(safe-area-inset-right, 0px)) max(10px, env(safe-area-inset-bottom, 0px)) 16px; }
+.title-link { align-self: flex-start; margin-top: -8px; padding: 2px 0; border: 0; background: none; color: var(--cream3); font: inherit; font-size: 0.75em; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.title-link:hover { color: var(--cream); }
 .title-offline { font-size: 0.75em; color: var(--brass-hi); margin-top: -8px; min-height: 1.2em; }
 .lang-switch { display: inline-flex; border: 1px solid var(--brass-lo); border-radius: 4px; overflow: hidden; background: rgba(30, 16, 24, 0.85); }
 .title > .lang-switch { position: absolute; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); z-index: 2; }
