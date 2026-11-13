@@ -162,6 +162,29 @@ Reachability: no single host is open on every network. GitHub has been degraded 
 
 Limits on iOS: the home-screen app keeps its own storage, separate from Safari, so a run started in Safari does not carry over; installed web apps are exempt from Safari's 7-day storage limit. Chromium stands in for Safari in `tools/pwa.mjs`; Safari itself has not been run.
 
+## Revised roadmap, Phase 1: beta-feedback patch (2026-11-13)
+
+The revised roadmap (2026-11-13) replaces the earlier one; its phase numbers are new, so the earlier "Phase 1" and "Phase 2" above are campaign-progression milestones, not evidence for this patch. Status words here: **implemented** (code merged), **tested** (automated checks below), **accepted** (human playtesting supports it). Nothing in this section is accepted yet.
+
+Every changed value is a prototype in `RULES` (`src/engine/combat.js`), not settled balance.
+
+| Requirement | What changed | Automated evidence | Human status |
+|---|---|---|---|
+| 1.1 Enemy ATB pressure | Enemy ATB speed ×0.70 in Act I, ×0.82 Act II, ×0.90 Act III (fast/normal/slow enemies keep their ratios). Two enemy actions are at least 1.2s apart (a full bar waits, longest-waiting first). Churning outside a combo still pushes enemy ATB 5%, now shown by a flash on every bar | U (spacing, pace per act, ATB push event); pacing tool, opening fights: 8–30 → 5–18 enemy actions/min; enemy actions less than 1s after the previous one: up to 45% (learner) and 63% (regular) → 0% | Pending |
+| 1.2 Time to build combos | Flow 3s → 5s; it holds 1.2s after the Opener while the swapped hand is read (the hold does not shorten the combo). Refund per card 0.18s → 0.8s, up to 5s per combo (was 1.2s); combo cap 6.2s → 14s. Momentum buys 1.5s (was 0.6s). Quick Cash Out needs 2.5s left (was 1.5s). Stumble penalty unchanged | U (hold, cap moves with the hold, six-card combo at 1.3s per card); pacing tool, learner: combos timing out 95–99% → 2–5%; average longest combo 3.0 → 4.9 cards | Pending |
+| 1.3 Downtime | After every combo a breather (0.8–1.2s, was 0.3–0.9s) in which enemies wait while the hand refills; the Flow strip reads "BREATHER · ENEMIES WAIT" and enemy bars dim. Enemy spacing gives relief between hits. Deciding (opener, no timer), holding (reading the new hand), acting (Flow) and the breather are separate, visible states | U (enemies wait during the breather) | Pending |
+| 1.4 Targeting | Gold brackets, a ring at the feet and a TARGET label on the selected enemy; a ⌖ chip above the hand names it and switches target on tap; a change snaps the brackets in. When the target dies the next enemy is picked and labeled NEW TARGET (`retarget` event). The hero an enemy is about to hit gets a red ring and "▼ damage" by their name, distinct from the player's gold target | `tools/targeting.mjs` through touch taps, English and Russian at 844×390, 1194×834, 667×375: 21/21 (tap to target, chip names it, chip cycles, retarget on death with label, incoming marker); V | Pending |
+| 1.5 Early encounters | Act I depth 0: two hounds, or a hound and one mite (one interference type). Two-mite, jammer and Iron Maw formations from depth 1; two interference types together from depth 2 | pacing tool, learner, opening fights: HP lost 24–87% → 4–19%; a hero knocked out in 80–93% of the four worst fights → 0%; fight length 48–108s → 19–32s. Act I later fights: mixed depth-4 fight won 0% → 100%, elites 0–18% → 93–100%, bosses 0–23% → 57–88% | Pending |
+| 1.6 Preservation | No shared HP, basic attacks, role, scheduling, Relay or card-catalogue changes. Text updated in both languages: first-battle tutorial, How to Play (new Targets section; Flow, Momentum and Churn sections), Stopwatch Gear, Flow Clamp's break condition (Perfect under 6s, was 3.5s) | U 63/63 (i18n keys complete); playthroughs with save/reload at every checkpoint: English 1024×768 45/45 (three-act victory, credits), Russian 844×390 50/50 on the final code (victory, restart encounter, defeat, new run; 0 untranslated texts, 0 layout issues); layout check at six viewports, every card in the hand included: 0 issues in Russian (1538 screens) and English (1540); PWA offline check 16/16 | — |
+
+Found while checking, and fixed: in natural play a hero initial on a card whose long text squeezed the art band was cut off (the initial's box is now as tall as the letter, and if the band is still too small the initial moves in front of the card name); the green "+" of an upgraded card made a two-line name taller than its box. The layout check now puts every card, plain and upgraded, into the battle hand at every viewport.
+
+Pacing tool (`node tools/pacing.mjs 40 --act1`): the "learner" reads a new hand for about 2s, plays a card about every 1.3s, taps a wrong card 8% of the time and uses no Momentum, Guard or Churn; the "regular" bot plays every ~0.55s and uses them. Neither stands in for a person.
+
+Full-run simulation (`tools/simulate.mjs`, 30 runs each): bot reacting every 0.55s won 19 → 29 runs; bot reacting every 1.0s won 0 → 4 and reached Act III in 0 → 23 runs (it used to die in Act I in 16 runs). The game is much easier for fast players; later acts still decide most slower runs. Re-tune after human feedback.
+
+Ready for a human playtest. Things to watch: whether the pace now feels too slow for players who already know the game; whether the Flow hold and breather are noticed; whether the red incoming ring is read as "an enemy will hit this hero"; whether the first two or three fights teach without being trivial.
+
 ## Version
 
 Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exit gate has passed with evidence here; the patch number counts published builds with changes since that gate; `1.0.0` is the Phase 9 release. The title tagline, the "Patch Notes" event, `package.json` and the iOS project all show the same number (enforced by a test).
@@ -173,7 +196,9 @@ Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exi
 | 2 | Normal playthrough reaches the credits and returns to the main loop; victory and defeat resolve | Passed (2026-11-11): bot runs in English (1024×768, 43/43) and Russian (844×390, 49/49) each won all three acts by ordinary play: ending scene → credits → results → new run. The Russian run then lost a run (results screen and defeat dialogue) and started another |
 | 3 | Four distinct build families demonstrated through play | Not passed (all bot runs ended as Momentum Burst) |
 
-Current version: **0.2.0** (Phase 2 gate passed; earlier 0.1.1 and 0.1.2 were the localization and the iPhone/iPad web app).
+The table above follows the earlier roadmap. From 2026-11-13 the revised roadmap applies: the number keeps counting from 0.2, the minor number advances when one of the revised roadmap's phase gates is accepted (Phase 1 needs human playtesting for that), and the patch number counts published builds in between.
+
+Current version: **0.2.1** (the beta-feedback patch, implemented and ready for testing; earlier 0.2.0 passed the old Phase 2 gate).
 
 ## Not present in this build
 

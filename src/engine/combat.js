@@ -5,14 +5,20 @@ import { CARDS, cardValue } from '../data/cards.js';
 import { ENEMIES } from '../data/enemies.js';
 import { RNG } from '../core/rng.js';
 
+// Timing values marked "prototype" were set by the beta-feedback patch (players had too little time
+// to read a new hand and build a combo, and enemies acted too often). They are starting points for
+// human playtesting, not settled balance.
 export const RULES = {
   HAND: 6,
-  FLOW_INITIAL: 3.0,
-  FLOW_REFUND: 0.18,
-  FLOW_REFUND_MAX: 1.2,
-  FLOW_ABS_MAX: 6.2,
+  FLOW_INITIAL: 5.0, // prototype (was 3.0)
+  FLOW_READ_GRACE: 1.2, // prototype: Flow holds this long after the opener, while the new hand is read
+  FLOW_REFUND: 0.8, // prototype (was 0.18): per valid card
+  FLOW_REFUND_MAX: 5.0, // prototype (was 1.2): per combo
+  FLOW_ABS_MAX: 14, // prototype (was 6.2): longest combo, counted from the opener, not counting the grace
+  FLOW_BAR_SECONDS: 8, // the Flow bar's full width
+  QUICK_CASH_LEFT: 2.5, // prototype (was 1.5): Flow left for a Quick Cash Out
   MOMENTUM_COST: 3,
-  FLOW_SPEND: 0.6,
+  FLOW_SPEND: 1.5, // prototype (was 0.6)
   GUARD_SPEND: 8,
   LOCK_DURATION: 3.0,
   SCRAMBLE_DURATION: 5.0,
@@ -23,7 +29,9 @@ export const RULES = {
   STUMBLE_FLOW: 0.4,
   MAX_STUMBLES: 3,
   CASHOUT_MIN: 2,
-  RECOVER: { perfect: 0.45, cashout: 0.3, forced: 0.9 },
+  RECOVER: { perfect: 1.0, cashout: 0.8, forced: 1.2 }, // prototype (was 0.45/0.3/0.9): a breather; enemies wait too
+  ENEMY_PACE: { 1: 0.7, 2: 0.82, 3: 0.9 }, // prototype: enemy ATB speed by act (was 1 everywhere)
+  ENEMY_SPACING: 1.2, // prototype: at least this many seconds between two enemy actions
   GUARD_DECAY_DELAY: 2.0,
   GUARD_DECAY_RATE: 1.0,
   GUARD_CAP: 80,
@@ -66,6 +74,7 @@ export class Combat {
     this.profileArch = opts.profileArch || null;
     this.t = 0;
     this.hold = 0;
+    this.lastEnemyActT = -10;
     this.phase = 'PRE';
     this.handMode = 'open';
     this.events = [];
@@ -207,7 +216,7 @@ export class Combat {
     return Math.max(1, c);
   }
   flowSpendAmount() {
-    return this.mutations.has('long_breath') ? 0.8 : RULES.FLOW_SPEND;
+    return RULES.FLOW_SPEND + (this.mutations.has('long_breath') ? 0.5 : 0);
   }
   guardSpendAmount() {
     return this.relics.has('tower_plate') ? 12 : RULES.GUARD_SPEND;
@@ -270,8 +279,12 @@ export class Combat {
   flowLeft() {
     return this.combo ? Math.max(0, this.combo.deadline - this.t) : 0;
   }
+  // The grace after the opener shifts both the deadline and the cap, so it never costs combo length.
   flowCap() {
-    return this.combo ? this.combo.start + RULES.FLOW_ABS_MAX : 0;
+    return this.combo ? this.combo.start + this.combo.graceUsed + RULES.FLOW_ABS_MAX : 0;
+  }
+  flowHeld() {
+    return !!(this.combo && this.combo.graceUntil > this.t);
   }
   aliveEnemies() {
     return this.enemies.filter((e) => e.alive);
@@ -431,6 +444,7 @@ export class Combat {
     this.combo = {
       start: this.t,
       deadline: Math.min(this.t + RULES.FLOW_INITIAL + extra, this.t + RULES.FLOW_ABS_MAX),
+      graceUntil: 0, graceUsed: 0,
       refundUsed: 0, cards: [], rank: 0, variant: null, owner: null, relays: 0, crosses: 0, steps: 0, climbs: 0,
       convCount: 0, damage: 0, guardGained: 0, stumbles: 0, owners: [], suits: [], stepBonus: 0, refundBonus: 0,
       relayEcho: 0, relayEchoUsed: false, nextRelayEcho: 0, cashPct: 0, cashPerCard: 0, stored: [], pendingBonus: 0,
@@ -442,14 +456,14 @@ export class Combat {
 
   naturalRefund(entryIndex, times = 1) {
     const c = this.combo;
-    let per = (this.relics.has('brass_metronome') ? 0.24 : RULES.FLOW_REFUND) + c.refundBonus;
+    let per = RULES.FLOW_REFUND * (this.relics.has('brass_metronome') ? 1.33 : 1) + c.refundBonus;
     if (this.mutations.has('ascendant_ladder') && c.cards[entryIndex] && c.cards[entryIndex].kind === 'step') per += 0.06;
     if (this.adaptOn('long_chain') && entryIndex >= 4) per *= 0.5;
     const amt = Math.min(per * times, RULES.FLOW_REFUND_MAX - c.refundUsed);
     if (amt <= 0) return 0;
     c.refundUsed += amt;
     const before = c.deadline;
-    c.deadline = Math.min(c.deadline + amt, c.start + RULES.FLOW_ABS_MAX);
+    c.deadline = Math.min(c.deadline + amt, this.flowCap());
     return c.deadline - before;
   }
 
@@ -457,7 +471,7 @@ export class Combat {
     if (!this.combo) return 0;
     if (this.adaptOn('flow_clamp')) sec *= 0.5;
     const before = this.combo.deadline;
-    this.combo.deadline = Math.min(this.combo.deadline + sec, this.combo.start + RULES.FLOW_ABS_MAX);
+    this.combo.deadline = Math.min(this.combo.deadline + sec, this.flowCap());
     const got = this.combo.deadline - before;
     this.stats.flowGained += got;
     if (got > 0) this.emit({ type: 'flow', amount: got });
@@ -605,8 +619,12 @@ export class Combat {
     else this.discard.push(uid);
 
     if (this.phase === 'END') return; // fx may have ended the battle
-    if (isOpen) this.transitionHand('chain');
-    else this.refill();
+    if (isOpen) {
+      this.transitionHand('chain');
+      // the hand has just changed: Flow holds while the player reads it
+      c.graceUntil = this.t + RULES.FLOW_READ_GRACE;
+      this.emit({ type: 'flowHold', until: c.graceUntil });
+    } else this.refill();
 
     if (d.role === 'close') this.finishCombo(c.closeAsCashOut ? 'cashout' : 'perfect');
     else if (c.deadline <= this.t) this.finishCombo('forced');
@@ -768,7 +786,10 @@ export class Combat {
       if (this.combo) this.combo.churned = true;
       if (!this.relics.has('oiled_bearings')) {
         if (this.phase === 'ACTIVE') this.combo.deadline = Math.max(this.t + 0.2, this.combo.deadline - 0.3);
-        else for (const e of this.aliveEnemies()) e.atb = Math.min(0.97, e.atb + 0.05);
+        else {
+          for (const e of this.aliveEnemies()) e.atb = Math.min(0.97, e.atb + 0.05);
+          this.emit({ type: 'atbPush', amount: 0.05 }); // shown on the enemy bars: Churning outside a combo costs time
+        }
       }
       const inst = this.cards.get(uid);
       if (inst.graft === 'churnfed') { this.gainMomentum(1, 'Churnfed'); this.addGuard(2); }
@@ -776,7 +797,10 @@ export class Combat {
         const t = this.rng.pick(this.aliveEnemies());
         if (t) this.dealDamage(t, 4, { src: 'V', tag: 'grinder' });
       }
-      if (this.adaptOn('churn_tax')) for (const e of this.aliveEnemies()) if (e.tier === 'boss') e.atb = Math.min(0.97, e.atb + 0.15);
+      if (this.adaptOn('churn_tax')) {
+        for (const e of this.aliveEnemies()) if (e.tier === 'boss') e.atb = Math.min(0.97, e.atb + 0.15);
+        this.emit({ type: 'atbPush', amount: 0.15, boss: true });
+      }
     }
     this.emit({ type: 'churn', uid, slot, junk });
     this.refill(uid);
@@ -813,7 +837,7 @@ export class Combat {
   spendMomentumFlow() {
     const cost = this.momentumCostFlow();
     if (this.phase !== 'ACTIVE' || this.momentum < cost) return { ok: false, text: this.phase !== 'ACTIVE' ? 'No combo running' : 'Not enough Momentum' };
-    if (this.combo.deadline >= this.flowCap() - 0.01) return { ok: false, text: 'At 6.2s combo cap' };
+    if (this.combo.deadline >= this.flowCap() - 0.01) return { ok: false, text: 'At the combo cap' };
     this.momentum -= cost;
     this.stats.momentumSpent += cost;
     if (this.adaptOn('momentum_drain')) this.adaptProgress(cost);
@@ -857,7 +881,7 @@ export class Combat {
     for (const e of c.cards) if (this.cards.get(e.uid).graft === 'ledger') ledger += 3;
     let amt = 4 + 3 * len + c.rank + (c.cashPerCard || 0) * len + ledger;
     let pct = 1 + (c.cashPct || 0) + (this.relics.has('riveted_ledger') ? 0.3 : 0) + (this.mutations.has('quick_exit') ? 0.4 : 0);
-    const quick = this.flowLeft() >= 1.5;
+    const quick = this.flowLeft() >= RULES.QUICK_CASH_LEFT;
     if (quick) pct += 0.25;
     if (this.adaptOn('payout_audit')) pct *= 0.6;
     if (this.payoutSealUntil && this.payoutSealUntil > this.t) pct *= 0.5;
@@ -940,7 +964,7 @@ export class Combat {
       case 'payout_audit': if (s.type === 'perfect') this.adaptProgress(1); break;
       case 'churn_tax': if (s.type !== 'forced' && !s.churned) this.adaptProgress(1); break;
       case 'relay_jam': if (s.type === 'perfect' && s.relays <= 1) this.adaptProgress(1); break;
-      case 'flow_clamp': if (s.type === 'perfect' && s.duration < 3.5) this.adaptProgress(1); break;
+      case 'flow_clamp': if (s.type === 'perfect' && s.duration < 6) this.adaptProgress(1); break; // prototype (was 3.5s, before the longer Flow)
       default: break;
     }
   }
@@ -1055,7 +1079,10 @@ export class Combat {
     e.atb = 0;
     this.emit({ type: 'enemyDie', uid: e.uid, boss: e.tier === 'boss' });
     if (e.tier === 'boss') for (const x of this.enemies) if (x.alive && x.summoned) { x.alive = false; x.hp = 0; this.emit({ type: 'enemyDie', uid: x.uid }); }
-    this.currentTarget();
+    const was = this.target;
+    const next = this.currentTarget();
+    // the selected enemy died: the next attack goes to another one, and the view says so
+    if (next && was !== next.uid) this.emit({ type: 'retarget', uid: next.uid, from: was });
     this.checkEnd();
   }
 
@@ -1370,7 +1397,7 @@ export class Combat {
   }
 
   enemySpeed(e) {
-    let s = 1;
+    let s = RULES.ENEMY_PACE[this.act] || 1;
     if ((e.st.shock || 0) > 0) s *= 0.65;
     if (e.hasteUntil > this.t) s *= e.hasteMult;
     if (this.trait === 'HOTWIRE') s *= 1.15;
@@ -1399,6 +1426,12 @@ export class Combat {
   step(dt) {
     this.t += dt;
     const t = this.t;
+    if (this.phase === 'ACTIVE' && this.combo && this.combo.graceUntil > t - dt) {
+      // Flow is held: move the deadline with the clock (the cap moves with it in flowCap)
+      const held = Math.min(dt, this.combo.graceUntil - (t - dt));
+      this.combo.deadline += held;
+      this.combo.graceUsed += held;
+    }
     if (this.phase === 'ACTIVE' && this.combo && t >= this.combo.deadline) this.finishCombo('forced');
     if (this.phase === 'RECOVER' && t >= this.recoverUntil) {
       this.phase = 'PRE';
@@ -1454,15 +1487,25 @@ export class Combat {
       }
     }
     if (this.phase === 'END') return;
-    // enemy ATB
-    for (const e of this.enemies) {
-      if (!e.alive) continue;
-      e.atb += (dt / e.actTime) * this.enemySpeed(e);
-      if (e.atb >= 1) {
-        e.atb = 0;
-        this.enemyAct(e);
-        if (this.phase === 'END') return;
+    // enemy ATB: it waits during the breather after a combo, and two enemies never act within
+    // ENEMY_SPACING of each other (a full bar holds until then; the bar shows it as ready)
+    if (this.phase !== 'RECOVER') {
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        e.atb = Math.min(1, e.atb + (dt / e.actTime) * this.enemySpeed(e));
       }
+      if (t - this.lastEnemyActT >= RULES.ENEMY_SPACING) {
+        // the enemy that has waited longest at full goes first
+        for (const e of this.enemies) if (e.alive && e.atb >= 1 && !e.readyAt) e.readyAt = t;
+        const e = this.enemies.filter((x) => x.alive && x.atb >= 1).sort((a, b) => a.readyAt - b.readyAt)[0];
+        if (e) {
+          e.atb = 0;
+          e.readyAt = 0;
+          this.lastEnemyActT = t;
+          this.enemyAct(e);
+          if (this.phase === 'END') return;
+        }
+      } else for (const e of this.enemies) if (e.alive && e.atb >= 1 && !e.readyAt) e.readyAt = t;
     }
     this.checkEnd();
   }

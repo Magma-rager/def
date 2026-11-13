@@ -230,6 +230,10 @@ export class BattleView {
         case 'enemyHeal': { const a = this.enemyActors.get(ev.uid); if (a) this.enemyNumber(a, `+${ev.amount}`, '#8ed49a', 13); break; }
         case 'banner': this.hooks.banner && this.hooks.banner(msg(ev.text), msg(ev.sub), ev.tone); break;
         case 'drain': this.flashScreen = 0.25; this.flashColor = '#7a4ab0'; this.sfx('drain'); break;
+        // target chosen by the player, or moved because the selected enemy died
+        case 'target': this.targetFx = { uid: ev.uid, t0: this.time, auto: false }; break;
+        case 'retarget': this.schedule(0.35, () => { this.targetFx = { uid: ev.uid, t0: this.time, auto: true }; this.sfx('click'); }); break;
+        case 'atbPush': this.atbPushAt = this.time; break;
         default: break;
       }
     }
@@ -584,6 +588,7 @@ export class BattleView {
     ctx.restore();
 
     this.drawEnemyHud(ctx, t);
+    this.incoming = this.drawIncoming(ctx, t);
     this.drawPartyHud(ctx, t);
     this.drawNumbers(ctx);
     if (this.flashScreen > 0) {
@@ -919,7 +924,7 @@ export class BattleView {
       const top = y + b[1] * sc - (compact ? 22 : 30);
       const bx = x + (b[0] + b[2]) * 0.5 * sc - bw / 2;
       this.drawBars(ctx, e, bx, top, bw, compact, t);
-      if (c.target === e.uid) this.drawTargetMarker(ctx, x + (b[0] + b[2]) * 0.5 * sc, y + b[1] * sc * 0.5, (b[2] - b[0]) * sc, -b[1] * sc, t);
+      if (c.target === e.uid) this.drawTargetMarker(ctx, x + (b[0] + b[2]) * 0.5 * sc, y + b[1] * sc * 0.5, (b[2] - b[0]) * sc, -b[1] * sc, t, e.uid, y + b[3] * sc);
     }
   }
 
@@ -963,6 +968,16 @@ export class BattleView {
     const hot = atb > 0.8;
     ctx.fillStyle = hot ? (Math.sin(t * 20) > 0 ? '#ff5a3a' : '#ffb35a') : '#d9b45a';
     ctx.fillRect(bx, ay + 1, aw * atb, 3);
+    // Churning outside a combo pushed every bar forward: flash them
+    if (this.atbPushAt && this.time - this.atbPushAt < 0.6) {
+      ctx.fillStyle = `rgba(255,255,255,${0.8 * (1 - (this.time - this.atbPushAt) / 0.6)})`;
+      ctx.fillRect(bx, ay + 1, aw * atb, 3);
+    }
+    // the breather after a combo: enemies wait, the bar dims
+    if (c.phase === 'RECOVER') {
+      ctx.fillStyle = 'rgba(20,8,14,0.45)';
+      ctx.fillRect(bx, ay + 1, aw, 3);
+    }
     // intent bubble
     this.drawIntent(ctx, e, bx - (compact ? 30 : 36), top - 4, compact, t);
     // statuses
@@ -1049,18 +1064,34 @@ export class BattleView {
     const a = [...this.enemyActors.values()].find((x) => x.uid === e.uid);
     if (a && this.combat.target === e.uid) {
       const [x, y, sc, b] = this.enemyPos(a);
-      this.drawTargetMarker(ctx, x + (b[0] + b[2]) * 0.5 * sc, y + b[1] * sc * 0.5, (b[2] - b[0]) * sc, -b[1] * sc, t);
+      this.drawTargetMarker(ctx, x + (b[0] + b[2]) * 0.5 * sc, y + b[1] * sc * 0.5, (b[2] - b[0]) * sc, -b[1] * sc, t, e.uid, y + b[3] * sc);
     }
   }
 
-  drawTargetMarker(ctx, cx, cy, w, h, t) {
-    const pad = 8 + Math.sin(t * 6) * 3;
+  // The player's target: gold corner brackets, a ring at its feet and a label under it. A change of
+  // target (tapped, or automatic after the selected enemy died) snaps the brackets in from wide.
+  drawTargetMarker(ctx, cx, cy, w, h, t, uid, footY) {
+    const fx = this.targetFx && this.targetFx.uid === uid ? this.targetFx : null;
+    const age = fx ? this.time - fx.t0 : 9;
+    const snap = age < 0.35 ? (1 - age / 0.35) ** 2 : 0;
+    const pad = 8 + Math.sin(t * 6) * 3 + snap * 40;
     const x0 = cx - w / 2 - pad, x1 = cx + w / 2 + pad, y0 = cy - h / 2 - pad, y1 = cy + h / 2 + pad;
-    const L = Math.min(16, w * 0.3);
+    const L = Math.min(18, w * 0.32);
+    const compact = this.h < 300;
     ctx.save();
+    // ring at the feet
+    if (footY !== undefined) {
+      ctx.beginPath();
+      ctx.ellipse(cx, footY, w * 0.55 + 6, Math.max(5, w * 0.12), 0, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,211,106,0.75)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
     ctx.strokeStyle = '#ffd36a';
-    ctx.lineWidth = 2.5;
-    ctx.globalAlpha = 0.85;
+    ctx.lineWidth = 3.5;
+    ctx.shadowColor = 'rgba(255,190,80,0.8)';
+    ctx.shadowBlur = 8 + snap * 12;
+    ctx.globalAlpha = 0.9 + snap * 0.1;
     ctx.beginPath();
     for (const [x, y, dx, dy] of [[x0, y0, 1, 1], [x1, y0, -1, 1], [x0, y1, 1, -1], [x1, y1, -1, -1]]) {
       ctx.moveTo(x + dx * L, y);
@@ -1068,7 +1099,52 @@ export class BattleView {
       ctx.lineTo(x, y + dy * L);
     }
     ctx.stroke();
+    ctx.shadowBlur = 0;
+    // label under the enemy: "TARGET", or "NEW TARGET" for a while after an automatic switch
+    const label = fx && fx.auto && age < 2 ? tr('NEW TARGET') : tr('TARGET');
+    const ly = (footY !== undefined ? footY : y1) + (compact ? 7 : 10);
+    ctx.font = `800 ${compact ? 9 : 11}px "Barlow Condensed", "Arial Narrow", sans-serif`;
+    const tw = ctx.measureText(label).width + 16;
+    roundRect(ctx, cx - tw / 2, ly, tw, compact ? 14 : 17, 7);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = fx && fx.auto && age < 2 ? '#ffb35a' : '#ffd36a';
+    ctx.fill();
+    ctx.fillStyle = '#1a0a10';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, cx, ly + (compact ? 7.5 : 9));
     ctx.restore();
+  }
+
+  // An enemy about to attack: a red ring under each hero it will hit and the damage it shows, so the
+  // enemy's target is never confused with the player's (gold) target.
+  drawIncoming(ctx, t) {
+    const c = this.combat;
+    const k = this.unit();
+    const threat = {};
+    for (const e of c.enemies) {
+      const it = e.alive && e.intent;
+      if (!it || !it.dmg || e.atb < 0.55) continue;
+      if (c.trait === 'BLACKOUT' && e.atb < 0.75) continue;
+      const ids = it.kind === 'aoe' ? c.party.filter((p) => !p.ko).map((p) => p.id) : it.target ? [it.target] : [];
+      for (const id of ids) {
+        const cur = threat[id] || { dmg: 0, atb: 0 };
+        threat[id] = { dmg: cur.dmg + it.dmg, atb: Math.max(cur.atb, e.atb) };
+      }
+    }
+    for (const [id, th] of Object.entries(threat)) {
+      const [hx, hy] = this.partyPos(id);
+      const urgency = clamp((th.atb - 0.55) / 0.45, 0, 1);
+      const pulse = 0.55 + 0.45 * Math.sin(t * (6 + urgency * 10));
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(hx, hy - 2, 30 * k + 10, 7 * k + 4, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255,80,58,${0.45 + 0.5 * pulse * urgency + 0.05})`;
+      ctx.lineWidth = 2.5 + urgency * 1.5;
+      ctx.stroke();
+      ctx.restore();
+    }
+    return threat;
   }
 
   drawPartyHud(ctx, t) {
@@ -1094,6 +1170,21 @@ export class BattleView {
       ctx.textAlign = 'right';
       ctx.fillStyle = '#efe2c6';
       ctx.fillText(`${Math.ceil(p.hp)}/${p.maxHp}`, bx + bw, by + (compact ? 6 : 9));
+      const th = this.incoming && this.incoming[p.id];
+      if (!p.ko && th) {
+        // incoming damage, shown by the hero who takes it
+        const txt = `▼ ${th.dmg}`;
+        ctx.font = `900 ${fs + 1}px "Big Shoulders Display", Impact, sans-serif`;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#1a0a10';
+        ctx.strokeText(txt, bx + bw + 4, by + 8);
+        ctx.fillStyle = '#ff6a4a';
+        ctx.fillText(txt, bx + bw + 4, by + 8);
+        ctx.font = `700 ${fs}px "Barlow Condensed", sans-serif`;
+        ctx.textBaseline = 'top';
+      }
       if (!p.ko && p.st.weak && p.st.weak > c.t) {
         const left = p.st.weak - c.t;
         drawIcon(ctx, 'down', bx - 9, by + 3, 12, '#9ec4d8');

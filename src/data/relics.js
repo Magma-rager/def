@@ -2,7 +2,7 @@
 // keyed by relic id; the text here is the player-facing contract.
 export const RELICS = {
   beta_badge: { name: "Beta Tester's Badge", rarity: 'starter', icon: 'badge', tag: 'churn', text: 'The first Churn each battle is free.' },
-  stopwatch_gear: { name: 'Stopwatch Gear', rarity: 'common', icon: 'clock', tag: 'flow', text: 'Your first combo each battle gains +1.0s Flow (6.2s cap still applies).' },
+  stopwatch_gear: { name: 'Stopwatch Gear', rarity: 'common', icon: 'clock', tag: 'flow', text: 'Your first combo each battle gains +1.0s Flow (the combo cap still applies).' },
   pressure_gauge: { name: 'Pressure Gauge', rarity: 'common', icon: 'gauge', tag: 'momentum', text: 'Max Momentum +3. Start each battle with 2 Momentum.' },
 
   junk_dividend: { name: 'Junk Dividend', rarity: 'uncommon', icon: 'coin', tag: 'cashout', text: 'Each Cash Out: +1 Momentum and 3 Scrap (max 15 Scrap per battle).' },

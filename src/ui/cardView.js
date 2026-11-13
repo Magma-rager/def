@@ -70,7 +70,7 @@ export function cardEl(inst, opts = {}) {
         <span class="role-tag" title="${esc(roleName(def.role))}"><i>${ROLE_GLYPH[def.role]}</i><span class="rt-word">${esc(roleName(def.role))}</span></span>
       </div>
       <div class="card-art"${def.owner && vignette(def.owner, def.anim) ? ` style="--vig:url(${vignette(def.owner, def.anim)})"` : ''}>${artSvg(def)}<span class="owner-chip">${owner === 'X' ? '!' : ownerInitial(owner)}</span>${def.rarity === 'rare' ? '<span class="rare-gem"></span>' : ''}</div>
-      <div class="card-name">${esc(cardName(def.id))}${inst.up ? '<sup>+</sup>' : ''}</div>
+      <div class="card-name"><span class="name-owner">${owner === 'X' ? '!' : ownerInitial(owner)}</span>${esc(cardName(def.id))}${inst.up ? '<sup>+</sup>' : ''}</div>
       <div class="card-text">${cardText(def, inst.up)}</div>
       <div class="card-foot">${inst.graft ? `<span class="graft">${esc(graftName(inst.graft))}</span>` : ''}${mods.join('')}<span class="reason"></span></div>
     </div>
@@ -127,12 +127,23 @@ export function fitText(node, min = 0.72, alsoFits = null) {
 export function fitCard(el) {
   const frame = el.querySelector('.card-frame');
   const name = el.querySelector('.card-name');
-  name.classList.remove('two-line');
-  if (!fitText(name, 0.8)) { name.classList.add('two-line'); fitText(name, 0.68); }
-  // the text also gives way when the card as a whole would overflow (e.g. a two-line name); the
-  // smallest phones (html.narrow) allow a little more shrinking
-  const min = document.documentElement.classList.contains('narrow') ? 0.6 : 0.7;
-  fitText(el.querySelector('.card-text'), min, () => frame.scrollHeight > frame.clientHeight + 1);
+  const fitAll = () => {
+    name.classList.remove('two-line');
+    if (!fitText(name, 0.8)) { name.classList.add('two-line'); fitText(name, 0.68); }
+    // the text also gives way when the card as a whole would overflow (e.g. a two-line name); the
+    // smallest phones (html.narrow) allow a little more shrinking
+    const min = document.documentElement.classList.contains('narrow') ? 0.6 : 0.7;
+    fitText(el.querySelector('.card-text'), min, () => frame.scrollHeight > frame.clientHeight + 1);
+  };
+  el.classList.remove('chip-out');
+  fitAll();
+  // a long text can squeeze the art band below the hero initial: show the initial before the name
+  const art = el.querySelector('.card-art');
+  const chip = el.querySelector('.owner-chip');
+  if (art && chip && art.clientHeight < chip.offsetHeight) {
+    el.classList.add('chip-out');
+    fitAll();
+  }
 }
 
 export function cardTooltip(inst) {

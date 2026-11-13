@@ -250,6 +250,34 @@ for (const [W, H] of VIEWPORTS) {
     for (let i = 0; i < ids.length; i += 4) out.push(ids.slice(i, i + 4));
     return out;
   });
+  // every card in the battle hand, six at a time (hand cards are the smallest)
+  const handGroups = await ev(async () => {
+    const { CARD_LIST } = await import('/src/data/cards.js');
+    const ids = CARD_LIST.map((c) => c.id);
+    const out = [];
+    for (let i = 0; i < ids.length; i += 6) out.push(ids.slice(i, i + 6));
+    return out;
+  });
+  const savedHand = await ev(() => [...window.__sb.battle.combat.hand]);
+  for (const g of handGroups) {
+    for (const up of [false, true]) {
+      await ev(([ids, upg]) => {
+        const bs = window.__sb.battle;
+        const c = bs.combat;
+        ids.forEach((id, k) => {
+          const uid = `layh_${id}_${upg ? 'u' : 'p'}`;
+          if (!c.cards.has(uid)) c.cards.set(uid, { uid, id, up: upg });
+          c.hand[k] = uid;
+        });
+        bs.updateHud(true);
+      }, [g, up]);
+      await p.waitForTimeout(80);
+      const issues = (await p.evaluate(findIssues)).filter((i) => /hand|slot/.test(i.where));
+      report.screens++;
+      for (const i of issues) report.issues.push({ viewport: vp, screen: `hand-${up ? 'up-' : ''}${g.join(',')}`, ...i });
+    }
+  }
+  await ev((hd) => { const bs = window.__sb.battle; hd.forEach((u, k) => { bs.combat.hand[k] = u; }); bs.updateHud(true); }, savedHand);
   const savedReserve = await ev(() => [...window.__sb.battle.combat.reserve]);
   for (const g of resGroups) {
     await ev((ids) => {

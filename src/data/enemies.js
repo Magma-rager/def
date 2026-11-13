@@ -308,12 +308,15 @@ export const ENEMIES = {
 
 // Encounter formations by act. Each entry: [weight, [enemy ids], minDepth]
 export const FORMATIONS = {
+  // [weight, enemies, first depth]. Act I teaches one kind of interference at a time: plain attackers
+  // first, then a single interference type, and two kinds together only from depth 2.
   1: [
     [3, ['rush_hound', 'rush_hound'], 0],
-    [3, ['interference_mite', 'interference_mite', 'rush_hound'], 0],
-    [3, ['wire_jammer', 'rush_hound'], 0],
+    [2, ['rush_hound', 'interference_mite'], 0],
+    [3, ['interference_mite', 'interference_mite', 'rush_hound'], 1],
+    [3, ['wire_jammer', 'rush_hound'], 1],
     [2, ['iron_maw'], 1],
-    [3, ['churn_snare', 'interference_mite'], 1],
+    [3, ['churn_snare', 'interference_mite'], 2],
     [3, ['wire_jammer', 'interference_mite', 'interference_mite'], 2],
     [2, ['iron_maw', 'interference_mite'], 3],
     [3, ['churn_snare', 'rush_hound', 'wire_jammer'], 4],

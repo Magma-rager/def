@@ -55,7 +55,7 @@ test('opening hand is all Openers and zones are intact', () => {
   assert.deepEqual(c.verifyZones(), { ok: true });
 });
 
-test('first opener starts the 3s Flow window exactly once; enemies advance during PRE', () => {
+test('first opener starts the Flow window exactly once; enemies advance during PRE', () => {
   const c = mk();
   const atb0 = c.enemies[0].atb;
   advance(c, 1.0);
@@ -78,7 +78,7 @@ test('first opener starts the 3s Flow window exactly once; enemies advance durin
   assert.deepEqual(c.verifyZones(), { ok: true });
 });
 
-test('natural refunds cap at 1.2s and the combo never exceeds 6.2s', () => {
+test('natural refunds are capped per combo and the combo never exceeds its cap', () => {
   const c = mk({ relics: ['brass_metronome'] });
   c.playCard(legal(c)[0]);
   const combo = c.combo;
@@ -87,18 +87,19 @@ test('natural refunds cap at 1.2s and the combo never exceeds 6.2s', () => {
   c.momentum = 30;
   for (let i = 0; i < 10; i++) c.spendMomentumFlow();
   c.addFlow(10);
-  assert.ok(combo.deadline - combo.start <= RULES.FLOW_ABS_MAX + 1e-9);
+  assert.ok(combo.deadline - combo.start <= RULES.FLOW_ABS_MAX + combo.graceUsed + 1e-9);
+  assert.ok(combo.deadline <= c.flowCap() + 1e-9);
 });
 
 test('Flow expiry forces resolution and returns to an Opener hand', () => {
   const c = mk();
   c.momentum = 4;
   c.playCard(legal(c)[0]);
-  advance(c, 3.2);
+  advance(c, RULES.FLOW_READ_GRACE + RULES.FLOW_INITIAL + 0.2);
   assert.notEqual(c.phase, 'ACTIVE');
   assert.equal(c.history[0].type, 'forced');
   assert.equal(c.momentum <= 4, true);
-  advance(c, 1.0);
+  advance(c, RULES.RECOVER.forced + 0.1);
   assert.equal(c.phase, 'PRE');
   for (const u of c.hand) if (u && c.roleOf(u) !== 'junk') assert.equal(c.roleOf(u), 'open');
   assert.deepEqual(c.verifyZones(), { ok: true });
@@ -271,4 +272,66 @@ test('stand-in rule: when only knocked-out heroes own Openers, a standing ally p
   c.playCard(op);
   assert.notEqual(c.combo.owner, 'S');
   assert.deepEqual(c.verifyZones(), { ok: true });
+});
+
+// ── beta-feedback pacing ──
+test('Flow holds while the new hand is read, without shortening the combo', () => {
+  const c = mk();
+  c.playCard(legal(c)[0]);
+  const left0 = c.flowLeft();
+  assert.ok(c.flowHeld());
+  advance(c, RULES.FLOW_READ_GRACE * 0.8);
+  assert.ok(Math.abs(c.flowLeft() - left0) < 0.02, `held: ${left0} -> ${c.flowLeft()}`);
+  advance(c, RULES.FLOW_READ_GRACE * 0.2 + 1);
+  assert.ok(!c.flowHeld());
+  assert.ok(c.flowLeft() < left0 - 0.9, 'drains after the grace');
+  assert.ok(Math.abs(c.flowCap() - (c.combo.start + RULES.FLOW_READ_GRACE + RULES.FLOW_ABS_MAX)) < 0.02, 'the cap moves with the grace');
+});
+
+test('the Flow rules give a learning player time for a six-card combo', () => {
+  const c = mk();
+  c.playCard(legal(c)[0]);
+  advance(c, RULES.FLOW_READ_GRACE); // reading the new hand costs no Flow
+  for (let i = 0; i < 5; i++) {
+    advance(c, 1.3); // a learning player's pace per card
+    assert.ok(c.combo, `combo still running before card ${i + 2}`);
+    c.naturalRefund(c.combo.cards.length); // what a valid card refunds
+  }
+  assert.ok(c.flowLeft() > 1.5, `Flow left after six cards: ${c.flowLeft().toFixed(2)}s`);
+});
+
+test('enemies never act within ENEMY_SPACING of each other', () => {
+  const c = mk({ enemies: ['rush_hound', 'rush_hound', 'interference_mite'] });
+  for (const e of c.enemies) e.atb = 0.99;
+  const acts = [];
+  for (let i = 0; i < 600; i++) { c.update(1 / 60); for (const ev of c.drainEvents()) if (ev.type === 'enemyAct') acts.push(ev.t); }
+  assert.ok(acts.length >= 3, `${acts.length} actions`);
+  for (let i = 1; i < acts.length; i++) assert.ok(acts[i] - acts[i - 1] >= RULES.ENEMY_SPACING - 1e-6, `gap ${acts[i] - acts[i - 1]}`);
+});
+
+test('enemies wait during the breather after a combo', () => {
+  const c = mk({ enemies: ['rush_hound'] });
+  c.playCard(legal(c)[0]);
+  advance(c, RULES.FLOW_READ_GRACE + RULES.FLOW_INITIAL + 0.1); // the combo drops
+  assert.equal(c.phase, 'RECOVER');
+  const atb = c.enemies[0].atb;
+  advance(c, RULES.RECOVER.forced * 0.8);
+  assert.equal(c.enemies[0].atb, atb);
+  advance(c, RULES.RECOVER.forced * 0.2 + 0.5);
+  assert.equal(c.phase, 'PRE');
+  assert.ok(c.enemies[0].atb > atb);
+});
+
+test('enemy pace is set per act and keeps fast and slow enemies apart', () => {
+  const rate = (act, id) => { const c = mk({ enemies: [id], opts: { act } }); const e = c.enemies[0]; return c.enemySpeed(e) / e.actTime; };
+  assert.ok(rate(1, 'rush_hound') < rate(3, 'rush_hound'));
+  assert.ok(rate(1, 'rush_hound') > rate(1, 'iron_maw'));
+});
+
+test('Churning outside a combo pushes enemy ATB and says so', () => {
+  const c = mk({ enemies: ['rush_hound'] });
+  c.drainEvents();
+  const u = c.hand.find(Boolean);
+  c.churnCard(u);
+  assert.ok(c.drainEvents().some((ev) => ev.type === 'atbPush'));
 });

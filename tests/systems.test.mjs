@@ -17,13 +17,13 @@ function mk(ids = STARTER_DECK, enemies = ['foundry_warden'], extra = {}) {
 }
 const legal = (c, role) => [...c.hand, ...c.reserve].find((u) => u && c.check(u).ok && (!role || c.roleOf(u) === role));
 
-test('Momentum: 3 buys +0.6s Flow (within cap) and 3 buys +8 Guard', () => {
+test('Momentum: 3 buys Flow (within cap) and 3 buys +8 Guard', () => {
   const c = mk();
   c.momentum = 6;
   c.playCard(legal(c, 'open'));
   const d0 = c.combo.deadline;
   assert.ok(c.spendMomentumFlow().ok);
-  assert.ok(Math.abs(c.combo.deadline - d0 - 0.6) < 1e-9);
+  assert.ok(Math.abs(c.combo.deadline - d0 - RULES.FLOW_SPEND) < 1e-9);
   const g0 = c.guard;
   assert.ok(c.spendMomentumGuard().ok);
   assert.equal(c.guard - g0, 8);

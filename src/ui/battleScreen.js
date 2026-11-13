@@ -62,7 +62,10 @@ export class BattleScreen {
     this.flowCap = h('div', { class: 'flow-cap' });
     this.flowText = h('div', { class: 'flow-text' });
     this.flowBar = h('div', { class: 'flow-bar' }, this.flowCap, this.flowFill, this.flowText);
-    const strip = h('div', { class: 'strip' }, h('div', { class: 'combo-wrap' }, this.chipsEl, this.nextEl), this.flowBar);
+    // who the next attack hits; tap to switch to the next enemy (enemies can also be tapped directly)
+    this.targetChip = h('button', { class: 'target-chip', type: 'button' }, h('span', { class: 'tc-ico', 'aria-hidden': 'true' }, '⌖'), h('span', { class: 'tc-name' }), h('span', { class: 'tc-cycle', 'aria-hidden': 'true' }, '⟳'));
+    this.targetChip.addEventListener('click', () => this.cycleTarget());
+    const strip = h('div', { class: 'strip' }, this.targetChip, h('div', { class: 'combo-wrap' }, this.chipsEl, this.nextEl), this.flowBar);
     this.reserveEl = h('div', { class: 'reserve' }, h('div', { class: 'zone-label' }));
     this.reserveSlots = h('div', { class: 'reserve-slots' });
     this.reserveEl.append(this.reserveSlots);
@@ -132,7 +135,7 @@ export class BattleScreen {
   relocalize() {
     this.applyLabels();
     this.renderTop();
-    for (const k of ['_ft', '_fbs', '_gbs', '_gh', '_ch', '_cs', 'chipSig', 'momSig', 'resSig', 'adaptHtml']) this[k] = undefined;
+    for (const k of ['_ft', '_fbs', '_gbs', '_gh', '_ch', '_cs', 'chipSig', 'momSig', 'resSig', 'adaptHtml', 'tgtSig']) this[k] = undefined;
     for (const s of this.slots) {
       if (s.el) s.el.remove();
       s.el = null;
@@ -243,13 +246,18 @@ export class BattleScreen {
     else if (e.key === 'f' || e.key === 'F') this.doSpend('flow');
     else if (e.key === 'g' || e.key === 'G') this.doSpend('guard');
     else if (e.key === 'Tab') {
-      const alive = c.aliveEnemies();
-      if (alive.length) {
-        const i = alive.findIndex((x) => x.uid === c.target);
-        c.setTarget(alive[(i + 1) % alive.length].uid);
-      }
+      this.cycleTarget();
       e.preventDefault();
     }
+  }
+
+  cycleTarget() {
+    const c = this.combat;
+    const alive = c.aliveEnemies();
+    if (alive.length < 2) return;
+    const i = alive.findIndex((x) => x.uid === c.target);
+    c.setTarget(alive[(i + 1) % alive.length].uid);
+    this.app.audio.sfx('click');
   }
 
   // ───────────────────────── actions ─────────────────────────
@@ -413,8 +421,8 @@ export class BattleScreen {
     const meta = this.app.meta;
     if (!this.app.settings.hints || meta.tut[key]) return;
     const TXT = {
-      start: ['THE RELAY', 'Your three heroes share one hand of six cards. Enemies act in real time — watch their ATB bars and intent bubbles (the dot shows who they will hit).<br><br><b>Tap an OPENER</b> to start a combo. Tap an enemy to target it.'],
-      opened: ['FLOW IS TICKING', 'The combo has <b>3 seconds of Flow</b>. Your hand swapped to <b>Converters ⟳</b> and <b>Closers ■</b>.<br><br>Each card must have a <b>higher rank</b>. Same suit (A→A, B→B): any higher rank. Switching suit (A↔B) is a <b>Cross</b>: exactly +1. <b>EX</b> fits anything.<br><br>Bright cards are legal. Each valid card refunds a little Flow.'],
+      start: ['THE RELAY', 'Your three heroes share one hand of six cards. Enemies act in real time — watch their ATB bars and intent bubbles. A <b>red ring</b> under a hero shows who an enemy is about to hit.<br><br>Your attacks hit the enemy in <b>gold brackets</b> (TARGET). <b>Tap an enemy</b> to choose another.<br><br><b>Tap an OPENER</b> to start a combo.'],
+      opened: ['FLOW IS TICKING', 'Your hand swapped to <b>Converters ⟳</b> and <b>Closers ■</b>. Flow <b>holds for a moment</b> so you can read them, then counts down from 5 seconds.<br><br>Each card must have a <b>higher rank</b>. Same suit (A→A, B→B): any higher rank. Switching suit (A↔B) is a <b>Cross</b>: exactly +1. <b>EX</b> fits anything.<br><br>Bright cards are legal. Each valid card gives back 0.8s of Flow, so take a moment to choose.'],
       closer: ['CLOSE IT', 'A <b>Closer</b> is legal now. Closers end the combo with a payoff based on everything you played before — card count, Relays between heroes, Steps, Crosses.<br><br>A Closer ending is a <b>PERFECT</b>: +2 Momentum and a Churn charge.'],
       afterCombo: ['MORE TOOLS', '<b>Swipe a card DOWN</b> to Churn it (uses a charge, replaces it).<br><b>Swipe UP</b> to stash it in Reserve; Reserve cards can be played later.<br><b>CASH OUT</b> ends a combo of 2+ cards early for a guaranteed payout (bonus if 1.5s+ Flow remains).<br><b>Momentum</b> buys +Flow or +Guard. Guard is shared and slowly fades.'],
       lock: ['CARD LOCKED', 'An enemy <b>Locked</b> a card (chain icon). Locks show their source and expire after their timer runs out — even between combos. Plan around them.'],
@@ -447,20 +455,33 @@ export class BattleScreen {
     const c = this.combat;
     this.updateHand();
     this.updateReserve();
+    const tgt = c.enemies.find((e) => e.uid === c.target && e.alive);
+    const tsig = tgt ? `${tgt.uid}|${c.aliveEnemies().length}` : '-';
+    if (force || tsig !== this.tgtSig) {
+      this.tgtSig = tsig;
+      this.targetChip.querySelector('.tc-name').textContent = tgt ? enemyName(tgt.id, tgt.lvl) : '—';
+      const many = c.aliveEnemies().length > 1;
+      this.targetChip.classList.toggle('many', many);
+      this.targetChip.title = many ? t('Target: {e}. Tap an enemy, or here, to switch.', { e: tgt ? enemyName(tgt.id, tgt.lvl) : '' }) : t('Target: {e}', { e: tgt ? enemyName(tgt.id, tgt.lvl) : '' });
+      this.targetChip.classList.remove('flash');
+      void this.targetChip.offsetWidth;
+      if (tgt) this.targetChip.classList.add('flash');
+    }
     // flow strip (writes only when values change)
     const set = (key, fn, val) => { if (this[key] !== val) { this[key] = val; fn(val); } };
     if (c.phase === 'ACTIVE' && c.combo) {
       const left = c.flowLeft();
       const cap = c.flowCap() - c.t;
-      set('_ff', (v) => (this.flowFill.style.width = v), `${Math.min(100, (left / RULES.FLOW_ABS_MAX) * 100).toFixed(1)}%`);
-      set('_fc', (v) => (this.flowCap.style.width = v), `${Math.min(100, (cap / RULES.FLOW_ABS_MAX) * 100).toFixed(1)}%`);
-      set('_ft', (v) => (this.flowText.textContent = v), t('FLOW {s}', { s: secs(left, 1) }));
-      set('_fb', (v) => (this.flowBar.className = v), `flow-bar active${left < 1 ? ' low' : ''}`);
+      set('_ff', (v) => (this.flowFill.style.width = v), `${Math.min(100, (left / RULES.FLOW_BAR_SECONDS) * 100).toFixed(1)}%`);
+      set('_fc', (v) => (this.flowCap.style.width = v), `${Math.min(100, (cap / RULES.FLOW_BAR_SECONDS) * 100).toFixed(1)}%`);
+      const held = c.flowHeld();
+      set('_ft', (v) => (this.flowText.textContent = v), held ? t('FLOW {s} · HOLDING', { s: secs(left, 1) }) : t('FLOW {s}', { s: secs(left, 1) }));
+      set('_fb', (v) => (this.flowBar.className = v), `flow-bar active${held ? ' held' : left < 1.5 ? ' low' : ''}`);
     } else {
       set('_ff', (v) => (this.flowFill.style.width = v), '0%');
       set('_fc', (v) => (this.flowCap.style.width = v), '0%');
-      set('_ft', (v) => (this.flowText.textContent = v), c.phase === 'RECOVER' ? t('RECOVERING…') : c.phase === 'END' ? '—' : t('PRE-COMBO · PLAY AN OPENER'));
-      set('_fb', (v) => (this.flowBar.className = v), `flow-bar ${c.phase === 'PRE' ? 'pre' : ''}`);
+      set('_ft', (v) => (this.flowText.textContent = v), c.phase === 'RECOVER' ? t('BREATHER · ENEMIES WAIT') : c.phase === 'END' ? '—' : t('PRE-COMBO · PLAY AN OPENER'));
+      set('_fb', (v) => (this.flowBar.className = v), `flow-bar ${c.phase === 'PRE' ? 'pre' : c.phase === 'RECOVER' ? 'breather' : ''}`);
     }
     // combo chips
     const combo = c.combo;

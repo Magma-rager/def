@@ -78,13 +78,13 @@ test('Momentum Burst: Pressure Valve converts Momentum into damage', () => {
   assert.ok(h0 - hp(c) >= 24);
 });
 
-test('Flow Extension: Overclock adds Flow within the 6.2s cap', () => {
+test('Flow Extension: Overclock adds Flow within the combo cap', () => {
   const c = mk(['hotwire', 'overclock', 'scrapfall']);
   play(c, 'hotwire');
   const d0 = c.combo.deadline;
   play(c, 'overclock');
   assert.ok(c.combo.deadline - d0 > 0.5);
-  assert.ok(c.combo.deadline - c.combo.start <= 6.2 + 1e-9);
+  assert.ok(c.combo.deadline <= c.flowCap() + 1e-9);
 });
 
 test('Churn Engine: Junk Toss scales with Churns used this battle', () => {

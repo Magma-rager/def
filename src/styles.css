@@ -327,10 +327,13 @@ html.reduced-motion .rotate-phone { animation: none; transform: rotate(-90deg); 
 .card-glyph .g-line { fill: none; stroke: #fff4dc; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5)); }
 .card-glyph .g-fill { fill: #fff4dc; filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5)); }
 .card-glyph .g-gear { fill: none; stroke: rgba(255, 230, 180, 0.25); stroke-width: 1.4; stroke-dasharray: 2 1.5; }
-.owner-chip { position: absolute; left: calc(3px * var(--cs)); bottom: calc(2px * var(--cs)); font-family: var(--font-display); font-weight: 900; font-size: calc(11px * var(--cs)); color: #fff; text-shadow: 0 1px 0 #000; z-index: 1; }
+.card-name .name-owner { display: none; }
+.card.chip-out .owner-chip { display: none; }
+.card.chip-out .card-name .name-owner { display: inline; margin-right: 0.3em; padding: 0 0.25em; border-radius: 3px; background: var(--oc); color: #fff; font-family: var(--font-display); font-weight: 900; }
+.owner-chip { position: absolute; line-height: 1; left: calc(3px * var(--cs)); bottom: calc(2px * var(--cs)); font-family: var(--font-display); font-weight: 900; font-size: calc(11px * var(--cs)); color: #fff; text-shadow: 0 1px 0 #000; z-index: 1; }
 .rare-gem { position: absolute; right: calc(3px * var(--cs)); top: calc(3px * var(--cs)); width: calc(7px * var(--cs)); height: calc(7px * var(--cs)); background: #ffb35a; transform: rotate(45deg); box-shadow: 0 0 6px #ffb35a; z-index: 1; }
 .card-name { font-family: var(--font-display); font-weight: 800; font-size: calc(12.5px * var(--cs) * var(--fit, 1)); line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; color: var(--ink); }
-.card-name sup { color: #2a8a4a; font-size: 0.8em; }
+.card-name sup { color: #2a8a4a; font-size: 0.85em; line-height: 0; vertical-align: baseline; } /* on the baseline: a raised + was cut off, or made a two-line name taller */
 .card-text { font-size: calc(9.4px * var(--cs) * var(--fit, 1)); line-height: 1.18; flex: none; color: #3a2420; max-height: calc(48px * var(--cs)); overflow: hidden; }
 .card-text b { font-weight: 800; color: var(--ink); }
 .card-text b.upv { color: #2a8a4a; }
@@ -417,6 +420,17 @@ html.reduced-motion .rotate-phone { animation: none; transform: rotate(-90deg); 
 .deck { font-size: clamp(12px, calc(var(--deck-h) * 0.058), 17px); position: relative; flex: none; height: var(--deck-h); display: flex; flex-direction: column; background: linear-gradient(#2a1820, #170d12); border-top: 2px solid var(--brass-lo); padding: 0 8px 6px; padding-left: max(8px, env(safe-area-inset-left, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5); }
 .strip { height: var(--strip-h); flex: none; display: flex; align-items: center; gap: 8px; }
 .combo-wrap { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; overflow: hidden; }
+/* who the next attack hits */
+.target-chip { flex: 0 1 auto; min-width: 0; max-width: 34%; display: inline-flex; align-items: center; gap: 4px; height: calc(var(--strip-h) - 6px); padding: 0 8px; border: 1.5px solid #ffd36a; border-radius: 999px; background: rgba(40, 26, 10, 0.85); color: #ffd36a; font: inherit; font-weight: 800; font-size: 0.82em; letter-spacing: 0.03em; text-transform: uppercase; cursor: pointer; }
+.target-chip .tc-ico { font-size: 1.15em; line-height: 1; }
+.target-chip .tc-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.target-chip .tc-cycle { display: none; opacity: 0.8; }
+.target-chip.many .tc-cycle { display: inline; }
+.target-chip.flash { animation: tc-flash 0.5s ease-out; }
+@keyframes tc-flash { from { background: #ffd36a; color: #1a0a10; } to { background: rgba(40, 26, 10, 0.85); color: #ffd36a; } }
+.flow-bar.held { border-color: #9ec4d8; }
+.flow-bar.held .flow-fill { background: linear-gradient(90deg, #6f9fb8, #b8dcef); box-shadow: 0 0 10px rgba(158, 196, 216, 0.6); }
+.flow-bar.breather .flow-text { color: #9ec4d8; }
 .combo-chips { display: flex; gap: 3px; flex: none; }
 .chip { display: inline-flex; align-items: baseline; gap: 1px; font-weight: 800; font-size: 0.8em; padding: 1px 5px; border: 2px solid; border-radius: 4px; background: rgba(0, 0, 0, 0.4); color: var(--cream); }
 .chip b { font-family: var(--font-display); font-size: 1.15em; }
