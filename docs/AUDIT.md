@@ -185,6 +185,27 @@ Full-run simulation (`tools/simulate.mjs`, 30 runs each): bot reacting every 0.5
 
 Ready for a human playtest. Things to watch: whether the pace now feels too slow for players who already know the game; whether the Flow hold and breather are noticed; whether the red incoming ring is read as "an enemy will hit this hero"; whether the first two or three fights teach without being trivial.
 
+### Follow-up (0.2.2, 2026-11-14): ordinary encounters, decision time, readability
+
+Known-good baseline before this follow-up: commit `fba3e85` (0.2.1); `git checkout fba3e85` restores it.
+
+**Measured in ordinary post-tutorial fights** (`tools/encounter.mjs`: real game, touch input, no tutorial pop-ups; the first fight entered from the map, four more with a set Act I formation):
+- First enemy action: 3.2–4.6s after the fight starts in two-enemy fights, 8.8–10.6s against Iron Maw. Gaps between enemy actions: median 2.5–4.9s (11.3s for Iron Maw), never under 1.2s.
+- Enemy ATB, per enemy per second: 0.21 for Rush Hound (0.7 ÷ 3.4s; 0.29 during its Frenzy), 0.13 for Wire Jammer, 0.17 for Interference Mite, 0.097 for Iron Maw (measured: 0.097); the same while deciding, while Flow holds and during a combo; zero during the breather after a combo and during a finisher (combat time stops); none during tutorial or menu pauses.
+- Enemies never acted during the breather or a finisher, or while the player had no playable card. They do act while Flow holds (about once per fight): the hold pauses Flow, not the fight, and the player can act.
+- The UI never blocks input during animations; the only lock-out is the breather, when enemies wait too.
+
+**Reproduced and corrected**
+- *Decision time spent watching.* Each card's attack plays for 0.5–0.7s (melee 0.66, cast 0.62, shoot 0.48, guard 0.72) and the replacement card slides in over 0.36s, all while Flow drained. A player reading 2–3s per card dropped most combos (pacing tool: 34–42% at 2.0s, 71–76% at 2.5s, 92–95% at 3.0s), and the long fights that followed drained HP (knock-outs in up to 37% of fights at 2.5s). Now Flow also holds 0.7s after each valid card (`FLOW_CARD_HOLD`) and each valid card refunds 1.0s (was 0.8s). Result: 6–7% at 2.0s, 14–22% at 2.5s, 58–63% at 3.0s; HP lost at 2.5s 26–62% → 17–40%; knock-outs at 2.5s up to 37% → up to 10%. Real UI, slow player in Russian at 732×510 (3s to read a new hand, 2.5s per card): dropped combos 15/24 → 4/17, total fight time 358s → 257s, heroes knocked out 2 → 1.
+- *Card text at 732×510* (the recording's size). The phone layout was chosen by screen height alone (under 500px), so a 510px-high screen got the larger layout, whose type scales with card width: 63px cards, effect text 6.1–6.5px, role label 5.5px, suit 8.3px. The compact layout now also applies when cards would be narrower than 80px: effect text 7.6/10px (smallest/median), role 8px, suit 11px, name 9.8/12px, rank 20px (`tools/readability.mjs`). Holding a card, which pauses the battle, is now taught in the in-battle tutorial and How to Play for the longest texts (6.4–7.6px at phone sizes).
+- *Stale numbers in text:* the in-battle tutorial and the Quick Exit mutation still said Quick Cash Out needs 1.5s of Flow (it needs 2.5s); Long Breath still said +0.8s instead of +0.6s (now +2.0s instead of +1.5s). Fixed in both languages.
+
+**Checked, not reproduced:** excessive enemy action frequency in ordinary early fights (above); targeting (`tools/targeting.mjs`, touch taps, English and Russian at 844×390, 1194×834, 667×375 and 732×510: tap to target, the ⌖ chip names it and cycles, the attack hits the tapped enemy and no other, retarget with NEW TARGET when it dies, red marker on the hero an enemy will hit: 32/32).
+
+**Verification:** unit tests 64/64 (new: Flow holds while each card resolves, not after a wrong card); layout check at seven viewports including 732×510, every card in the hand included: Russian 0 issues (1794 screens); English 1 issue ("CONVERTER" did not fit the 67px cards at 732×510), fixed by showing the role symbol only on cards under 78px and re-checked at 732×510 and 844×390 in English and 732×510 in Russian: 0 issues; full-run simulation, 30 runs each: bot reacting every 0.55s won 26 (0.2.1: 29), every 1.0s won 5 (0.2.1: 4); playthroughs with save/reload and Continue at every checkpoint: English 1024×768 43/43 (shop, elites, three-act victory, credits, Museum record), Russian 732×510 49/49 (victory, restart encounter, defeat with results and defeat dialogue, new run; 0 untranslated texts, 0 layout issues); the ordinary fights above went on to the reward screen; offline web app check 16/16.
+
+**Still for human judgment:** whether the pace now feels right (or too slow for experienced players); whether players notice and use the holds, the breather and hold-to-read; whether 8px role labels and 7–10px effect text are readable on real phones; the two-hound opening fight for very slow players (one knock-out at 2.5s per card, from attack frequency over a long fight, not per-hit damage or interference).
+
 ## Version
 
 Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exit gate has passed with evidence here; the patch number counts published builds with changes since that gate; `1.0.0` is the Phase 9 release. The title tagline, the "Patch Notes" event, `package.json` and the iOS project all show the same number (enforced by a test).
@@ -198,7 +219,7 @@ Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exi
 
 The table above follows the earlier roadmap. From 2026-11-13 the revised roadmap applies: the number keeps counting from 0.2, the minor number advances when one of the revised roadmap's phase gates is accepted (Phase 1 needs human playtesting for that), and the patch number counts published builds in between.
 
-Current version: **0.2.1** (the beta-feedback patch, implemented and ready for testing; earlier 0.2.0 passed the old Phase 2 gate).
+Current version: **0.2.2** (the beta-feedback patch and its follow-up, implemented and ready for testing; earlier 0.2.0 passed the old Phase 2 gate).
 
 ## Not present in this build
 

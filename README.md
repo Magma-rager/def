@@ -63,7 +63,7 @@ The home-screen app keeps its own saves, separate from Safari's. On a phone held
 
 - **Hand:** six slots, shared by Hessa (Vanguard), Corvin (Channeler) and Pin (Striker). The hand is role-phased. Before a combo (PRE-COMBO) it holds Openers. Once a combo starts, Openers are tucked under the draw pile and the hand refills with Converters and Closers. When the combo ends it swaps back. Card instances keep their identity across every zone (draw, hand, Reserve, discard, exhaust).
 - **Sequence:** each card needs a higher rank (1–9). Same suit (A→A, B→B): any higher rank (+1 exactly is a **Step**). Switching suit A↔B is a **Cross**: exactly +1, and it grants Momentum. **EX** fits anything. Converters can Rewind the rank or change the suit. A Closer needs at least one Converter before it.
-- **Flow:** the Opener starts a 5s window, which holds for 1.2s while the new hand is read. Each valid continuation refunds 0.8s, up to 5s per combo. Momentum can buy +1.5s. A combo lasts at most 14s (plus the hold). If Flow expires, the combo is **Dropped** (−2 Momentum). An illegal card is a **Stumble** (−0.4s, −1 Momentum); a third stumble drops the combo. These are prototype values from the beta-feedback patch, kept in `RULES` in `src/engine/combat.js`.
+- **Flow:** the Opener starts a 5s window, which holds for 1.2s while the new hand is read, and for 0.7s after every later valid card while it plays out (its attack animation takes 0.5–0.7s and the replacement card slides in). Each valid continuation refunds 1.0s, up to 5s per combo. Momentum can buy +1.5s. A combo lasts at most 14s, not counting the holds. If Flow expires, the combo is **Dropped** (−2 Momentum). An illegal card is a **Stumble** (−0.4s, −1 Momentum); a third stumble drops the combo. These are prototype values from the beta-feedback patch, kept in `RULES` in `src/engine/combat.js`.
 - **Pacing:** enemy ATB runs at 70% speed in Act I, 82% in Act II and 90% in Act III. Two enemy actions are always at least 1.2s apart. After each combo comes a breather (0.8–1.2s) in which enemies wait while the hand refills.
 - **Endings:** a Closer ending is a **Perfect** (+2 Momentum, +1 Churn charge, Finisher cut-in at 5+ cards or rank 9). **Cash Out** (2+ cards) ends the combo immediately for a payout scaled by length and rank, with +25% if 2.5s+ Flow remains, but gives up the Perfect bonus.
 - **Relay & Echo:** a card owned by a different hero is a Relay: that hero acts, and you gain +1 Momentum. Echoes repeat earlier cards' damage, Guard, healing and statuses at reduced power. They never repeat Flow, Momentum, rank or suit changes, or other Echoes.
@@ -112,13 +112,13 @@ English and Russian. Switch on the title screen (top-left) or in Settings → La
 
 ## Version
 
-The version follows the development roadmap, and the title screen shows it ("Patched to version 0.2.1. Probably.").
+The version follows the development roadmap, and the title screen shows it ("Patched to version 0.2.2. Probably.").
 
 - `0.N.x`: N is the highest roadmap phase whose exit gate has passed, with the evidence recorded in `docs/AUDIT.md`.
 - `0.N.P`: P counts published builds with changes since that gate.
 - `1.0.0`: the Phase 9 release.
 
-Current: **0.2.1**. Under the first roadmap, phases 0 (audit), 1 (Act I → Act II with saves) and 2 (credits and the return to the main loop) passed. The revised roadmap (2026-11-13) replaced it; its Phase 1, the beta-feedback patch, is implemented and waiting for a human playtest (see `docs/AUDIT.md`). From here the minor number advances when one of the revised roadmap's phase gates is accepted. The number lives in `src/version.js`; `package.json` and the iOS project must match it, and a test enforces that. The line under the title menu shows the build date and source commit.
+Current: **0.2.2**. Under the first roadmap, phases 0 (audit), 1 (Act I → Act II with saves) and 2 (credits and the return to the main loop) passed. The revised roadmap (2026-11-13) replaced it; its Phase 1, the beta-feedback patch (with a follow-up in 0.2.2), is implemented and waiting for a human playtest (see `docs/AUDIT.md`). From here the minor number advances when one of the revised roadmap's phase gates is accepted. The number lives in `src/version.js`; `package.json` and the iOS project must match it, and a test enforces that. The line under the title menu shows the build date and source commit.
 
 ## Verification tools
 
@@ -130,6 +130,8 @@ Current: **0.2.1**. Under the first roadmap, phases 0 (audit), 1 (Act I → Act 
 - `node tools/flow.mjs`, `tools/screens.mjs` and `tools/bossfight.mjs` take screenshots of flows, screens, boss and interference visuals.
 - `node tools/pacing.mjs [battles] [--act1]` plays the opening Act I encounters (and with `--act1` the later ones, elites and bosses) headless with a simulated learning player and a faster one, and reports enemy action frequency, Flow timeouts, combo length, damage and survival.
 - `node tools/targeting.mjs [outDir]` checks targeting through touch taps in English and Russian at phone and tablet sizes: tap to target, the ⌖ chip, retargeting when the target dies, and the marker on the hero an enemy is about to hit.
+- `node tools/encounter.mjs [outDir] [lang] [WxH]` plays ordinary post-tutorial fights in the real game with a slow player tapping the touchscreen (`SB_READ`, `SB_CARD` set its pace) and reports, per combat state, how much time passes, how far enemy ATB advances and when enemies act.
+- `node tools/readability.mjs [lang] [sizes]` reports the rendered font size of every piece of card information in the battle hand, for every card, at the supported landscape sizes.
 - `node tools/pwa.mjs [workDir]` checks the built web app as served from GitHub Pages (or, with `PWA_PATH=/name/`, from a bucket path like the storage mirror): first online launch, offline launches with a battle, and the update to a new build.
 
 All art, animation, music and sound are generated procedurally in code; no external assets are used.

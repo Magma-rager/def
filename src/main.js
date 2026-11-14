@@ -68,12 +68,16 @@ class App {
     const W = window.innerWidth, H = window.innerHeight;
     const r = document.documentElement.style;
     const deckH = Math.round(Math.max(150, Math.min(300, H * 0.38)));
-    const stripH = H < 500 ? 26 : 34;
     const ctlW = Math.round(Math.max(176, Math.min(290, W * 0.22)));
-    const resW0 = H < 500 ? 58 : 82;
+    // The compact (phone) layout uses fixed, readable type sizes; the larger layout scales type with
+    // the card width. Use compact on short screens, and also when the cards would come out narrower
+    // than 80px (e.g. 732x510), where scaled type would drop to about 6px.
+    const cardWFor = (cmp) => Math.min((deckH - (cmp ? 26 : 34) - 14) * (cmp ? 0.86 : 0.72), (W - ctlW - (cmp ? 58 : 82) - 16 - 7 * 6) / 6);
+    const compact = H < 500 || cardWFor(false) < 80;
+    const stripH = compact ? 26 : 34;
+    const resW0 = compact ? 58 : 82;
     let cardH = deckH - stripH - 14;
-    const ratio = H < 500 ? 0.86 : 0.72;
-    let cardW = Math.min(cardH * ratio, (W - ctlW - resW0 - 16 - 7 * 6) / 6);
+    let cardW = cardWFor(compact);
     cardH = Math.min(cardH, cardW / 0.6);
     r.setProperty('--deck-h', deckH + 'px');
     r.setProperty('--strip-h', stripH + 'px');
@@ -82,9 +86,10 @@ class App {
     r.setProperty('--ctl-w', ctlW + 'px');
     r.setProperty('--res-w', resW0 + 'px');
     r.setProperty('--cs', (cardW / 100).toFixed(3));
-    document.documentElement.classList.toggle('compact', H < 500);
-    // hand cards under ~72px wide (iPhone SE-size screens in landscape)
-    document.documentElement.classList.toggle('narrow', cardW < 72);
+    document.documentElement.classList.toggle('compact', compact);
+    // hand cards under ~78px wide (iPhone SE-size screens in landscape, 732x510): the role label
+    // shows its symbol only, since "CONVERTER" no longer fits
+    document.documentElement.classList.toggle('narrow', cardW < 78);
     document.documentElement.classList.toggle('portrait', H > W);
     const rotate = H > W && W < 600;
     document.documentElement.classList.toggle('rotate', rotate);
@@ -514,10 +519,10 @@ class App {
       sec('target', 'Targets', 'Your attacks hit the enemy in <b>gold brackets</b>, labeled TARGET; its name is also on the ⌖ button above your hand. <b>Tap an enemy</b> (or that button) to switch. If your target falls, the next enemy is chosen and labeled NEW TARGET. A <b>red ring</b> under a hero, with ▼ and a number by their name, shows who an enemy is about to hit and for how much.'),
       sec('sequence', 'Opener → Converter → Closer', 'Tap an <b>Opener ▶</b> to start a combo. The hand switches to <b>Converters ⟳</b> and <b>Closers ■</b>. A Closer needs at least one Converter before it, and ends the combo with a payoff based on everything played.'),
       sec('ranks', 'Ranks & suits', 'Every card must have a <b>higher rank</b> than the last. Same suit (A→A, B→B): any higher rank (exactly +1 is a <b>Step</b>). Switching suit A↔B is a <b>Cross</b>: exactly +1, and it grants Momentum. <b>EX</b> cards fit with anything. Converters can <b>Rewind</b> the rank or change the suit.'),
-      sec('flow', 'Flow', 'The Opener starts <b>5s of Flow</b>, which <b>holds for a moment</b> while you read your new hand. Each valid card refunds 0.8s (up to 5s per combo), so there is time to look before each card. A combo lasts at most 14s. If Flow runs out the combo is <b>Dropped</b> (−2 Momentum). Wrong cards cause a <b>Stumble</b> (−0.4s, −1 Momentum; three stumbles drop the combo). After every combo comes a short <b>breather</b>: enemies wait while your hand refills.'),
+      sec('flow', 'Flow', 'The Opener starts <b>5s of Flow</b>, which <b>holds for a moment</b> while you read your new hand. Each valid card refunds 0.8s (up to 5s per combo), and Flow holds again while that card plays out, so there is time to look before each card. A combo lasts at most 14s, not counting the holds. If Flow runs out the combo is <b>Dropped</b> (−2 Momentum). Wrong cards cause a <b>Stumble</b> (−0.4s, −1 Momentum; three stumbles drop the combo). After every combo comes a short <b>breather</b>: enemies wait while your hand refills.'),
       sec('relay', 'Relay & Echo', 'Playing a card owned by a different hero is a <b>Relay</b>: that hero takes over the action (+1 Momentum). Echo effects repeat earlier cards\' damage, Guard, healing and statuses at reduced power (never Flow, Momentum, rank changes or other Echoes).'),
       sec('momentum', 'Momentum, Guard, Cash Out', '<b>Momentum</b> comes from Relays, Crosses, Perfect combos and cards. Spend 3 for <b>+1.5s Flow</b> (within the combo cap) or <b>+8 Guard</b>. Guard is shared by the party and fades slowly. <b>CASH OUT</b> ends a combo of 2+ cards immediately for a payout (+25% if 2.5s+ Flow is left) — but gives up the Perfect bonus.'),
-      sec('churn', 'Churn & Reserve', '<b>Swipe a card down</b> to Churn it (uses a charge; charges refill over time; outside a combo it also nudges every enemy\'s ATB forward, and their bars flash). <b>Swipe up</b> to stash it in Reserve (2 slots); Reserve cards stay through combo phases and can be played when legal. <b>Hold</b> a card for details.'),
+      sec('churn', 'Churn & Reserve', '<b>Swipe a card down</b> to Churn it (uses a charge; charges refill over time; outside a combo it also nudges every enemy\'s ATB forward, and their bars flash). <b>Swipe up</b> to stash it in Reserve (2 slots); Reserve cards stay through combo phases and can be played when legal. <b>Hold</b> a card to read it in full; the battle pauses while you read.'),
       sec('interference', 'Interference', 'Enemies Lock cards (3s), Scramble ranks/suits, jam slots, snare Churn, latch your Reserve and steal Flow. Every effect shows its source and timer and always expires.'),
       sec('keyboard', 'Keyboard', '<b>1–6</b> play · <b>Shift+1–6</b> Churn · <b>Alt+1–6</b> Reserve · <b>7/8</b> play Reserve · <b>Space</b> Cash Out · <b>F</b> +Flow · <b>G</b> +Guard · <b>Tab</b> cycle target · <b>Esc</b> pause'),
       h('div', { class: 'row-btns end' }, btn(t('Close'), () => close(), 'primary'))), { dismiss: true });

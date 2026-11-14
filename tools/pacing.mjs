@@ -37,6 +37,9 @@ const PLAYERS = {
   learner: { read: 2.0, card: 1.3, misTap: 0.08, tools: false },
   regular: { read: 0.55, card: 0.55, misTap: 0, tools: true },
 };
+// --pace=2.5 adds a slower reader (seconds per card) to study where combos stop being buildable
+for (const a of process.argv) if (a.startsWith('--pace=')) for (const v of a.slice(7).split(',')) PLAYERS[`slow${v}`] = { read: 2.5, card: +v, misTap: 0.08, tools: false };
+if (process.argv.includes('--only-slow')) { delete PLAYERS.learner; delete PLAYERS.regular; }
 
 function setupFor(enc, seed) {
   const run = Run.create({ seed, tutorial: false });

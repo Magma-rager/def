@@ -12,7 +12,8 @@ export const RULES = {
   HAND: 6,
   FLOW_INITIAL: 5.0, // prototype (was 3.0)
   FLOW_READ_GRACE: 1.2, // prototype: Flow holds this long after the opener, while the new hand is read
-  FLOW_REFUND: 0.8, // prototype (was 0.18): per valid card
+  FLOW_CARD_HOLD: 0.7, // prototype: and this long after every other valid card, while its attack plays (0.5-0.7s) and the new card slides in
+  FLOW_REFUND: 1.0, // prototype (was 0.18, then 0.8): per valid card
   FLOW_REFUND_MAX: 5.0, // prototype (was 1.2): per combo
   FLOW_ABS_MAX: 14, // prototype (was 6.2): longest combo, counted from the opener, not counting the grace
   FLOW_BAR_SECONDS: 8, // the Flow bar's full width
@@ -624,7 +625,11 @@ export class Combat {
       // the hand has just changed: Flow holds while the player reads it
       c.graceUntil = this.t + RULES.FLOW_READ_GRACE;
       this.emit({ type: 'flowHold', until: c.graceUntil });
-    } else this.refill();
+    } else {
+      this.refill();
+      // watching a committed card play out is not decision time
+      if (d.role !== 'close') c.graceUntil = Math.max(c.graceUntil, this.t + RULES.FLOW_CARD_HOLD);
+    }
 
     if (d.role === 'close') this.finishCombo(c.closeAsCashOut ? 'cashout' : 'perfect');
     else if (c.deadline <= this.t) this.finishCombo('forced');

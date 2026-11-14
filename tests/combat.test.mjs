@@ -335,3 +335,23 @@ test('Churning outside a combo pushes enemy ATB and says so', () => {
   c.churnCard(u);
   assert.ok(c.drainEvents().some((ev) => ev.type === 'atbPush'));
 });
+
+test('Flow also holds while each played card resolves, but not after a wrong card', () => {
+  const c = mk({ ids: ['scrapline', 'hotwire', 'salvage', 'rivet_jab', 'step_up', 'gear_swap', 'relay_baton', 'shuffle_step', 'scrapfall', 'last_word', 'grand_relay', 'spark_primer'] });
+  c.playCard(legal(c)[0]);
+  advance(c, RULES.FLOW_READ_GRACE + 0.5);
+  const conv = legal(c).find((u) => c.roleOf(u) === 'conv');
+  assert.ok(conv, 'a playable Converter');
+  c.playCard(conv);
+  assert.ok(c.flowHeld(), 'held after a valid card');
+  const left = c.flowLeft();
+  advance(c, RULES.FLOW_CARD_HOLD * 0.8);
+  assert.ok(Math.abs(c.flowLeft() - left) < 0.02);
+  advance(c, RULES.FLOW_CARD_HOLD * 0.2 + 0.3);
+  assert.ok(!c.flowHeld());
+  const bad = c.hand.find((u) => u && !c.check(u).ok && c.roleOf(u) !== 'junk' && !c.isLocked(u));
+  if (bad) {
+    c.playCard(bad);
+    assert.ok(!c.flowHeld(), 'a stumble does not hold Flow');
+  }
+});

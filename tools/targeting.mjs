@@ -13,7 +13,7 @@ const results = [];
 const check = (name, ok, info = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${info ? ' — ' + info : ''}`); };
 
 const b = await chromium.launch();
-for (const [lang, w, h] of [['en', 844, 390], ['ru', 1194, 834], ['ru', 667, 375]]) {
+for (const [lang, w, h] of [['en', 844, 390], ['ru', 1194, 834], ['ru', 667, 375], ['en', 732, 510]]) {
   const tag = `${lang} ${w}×${h}`;
   const ctx = await b.newContext({ viewport: { width: w, height: h }, hasTouch: true, isMobile: false });
   await ctx.addInitScript((l) => localStorage.setItem('signalbreak.settings.v1', JSON.stringify({ lang: l, hints: false })), lang);
@@ -56,6 +56,27 @@ for (const [lang, w, h] of [['en', 844, 390], ['ru', 1194, 834], ['ru', 667, 375
   await tapEnemy(2);
   const s2 = await state();
   check(`${tag}: tapping another enemy moves the target`, s2.target === s2.alive[2], s2.target);
+  // 1b. an attack lands on the tapped enemy (a single-target Opener, tapped like a player would)
+  const hit = await p.evaluate(() => {
+    const bs = window.__sb.battle;
+    const c = bs.combat;
+    for (const e of c.enemies) e.atb = 0; // no enemy action in between
+    const uid = c.hand.find((u) => u && c.check(u).ok && ['scrapline', 'rivet_jab', 'pinprick'].includes(c.def(u).id));
+    const el = uid && document.querySelector(`.hand .card[data-uid="${uid}"]`);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { uid, x: r.left + r.width / 2, y: r.top + r.height / 2, hp: c.enemies.map((e) => [e.uid, e.hp + e.guard]) };
+  });
+  if (hit) {
+    await p.touchscreen.tap(hit.x, hit.y);
+    await p.waitForTimeout(150);
+    const after = await p.evaluate(() => window.__sb.battle.combat.enemies.map((e) => [e.uid, e.hp + e.guard]));
+    const tgt = (await state()).target;
+    const hurt = after.filter(([u, v], k) => v < hit.hp[k][1]).map(([u]) => u);
+    check(`${tag}: the attack hits the tapped enemy and no other`, hurt.length === 1 && hurt[0] === tgt, `target ${tgt}, damaged ${hurt.join(',') || 'none'}`);
+    await p.evaluate(() => { const c = window.__sb.battle.combat; if (c.combo) c.finishCombo('forced'); });
+    await p.waitForTimeout(1600);
+  } else check(`${tag}: the attack hits the tapped enemy and no other`, false, 'no single-target Opener in hand');
   // 2. the ⌖ chip cycles targets
   await p.tap('.target-chip');
   await p.waitForTimeout(150);
