@@ -19,7 +19,7 @@ import {
   t, msg, list, LANGS, lang, cardName, relicName, relicText, starterHint, mutName, mutText, tagName, archName,
   adaptName, adaptDesc, adaptBreak, traitName, traitText, nodeName, enemyName, enemyLore, eventTitle, eventText,
   choiceLabel, choiceHint, eventResult, speakerName, speakerTitle, defeatLines as defeatLinesFor, planName, planText,
-  volName, volText, themeName, graftName, graftText, ownerName,
+  volName, volText, themeName, graftName, graftText,
 } from '../i18n/index.js';
 
 function iconSvg(name, cls = '') {
@@ -172,13 +172,11 @@ export function storyDialog(app, lines, onDone) {
 // ───────────────────────── MAP ─────────────────────────
 export function partyStrip(app) {
   const run = app.run;
-  const el = h('div', { class: 'party-strip' });
-  for (const p of run.d.party) {
-    const pct = Math.round((p.hp / p.maxHp) * 100);
-    el.append(h('div', { class: `ps-member m-${p.id}` }, h('span', { class: 'ps-name' }, ownerName(p.id)),
-      h('span', { class: 'ps-bar' }, h('i', { style: { width: pct + '%' } })), h('span', { class: 'ps-hp' }, `${p.hp}/${p.maxHp}`)));
-  }
-  return el;
+  // one shared HP pool for the party
+  const pct = Math.round((run.d.hp / run.d.maxHp) * 100);
+  return h('div', { class: `party-strip${pct < 30 ? ' low' : ''}` },
+    h('div', { class: 'ps-member' }, h('span', { class: 'ps-name' }, t('PARTY')),
+      h('span', { class: 'ps-bar' }, h('i', { style: { width: pct + '%' } })), h('span', { class: 'ps-hp' }, `${run.d.hp}/${run.d.maxHp}`)));
 }
 
 export function runHeader(app, title) {
@@ -503,10 +501,10 @@ export function restScreen(app, root) {
       return;
     }
     const opts = [
-      ['recover', t('Recover'), t('Heal every ally {n}% of max HP.', { n: p.quiet ? 45 : 30 }), 'heal'],
+      ['recover', t('Recover'), t('Heal the party {n}% of max HP.', { n: p.quiet ? 45 : 30 }), 'heal'],
       ['tune', t('Tune-up'), t('Upgrade a card of your choice.'), 'wrench'],
       ['fortify', t('Fortify'), t('Next Elite or Boss: start with 12 Guard and 2 Momentum.'), 'shield'],
-      ['overdrive', t('Overdrive'), t('Upgrade 2 random cards. Every ally loses 15% of current HP.'), 'bolt'],
+      ['overdrive', t('Overdrive'), t('Upgrade 2 random cards. The party loses 15% of current HP.'), 'bolt'],
     ];
     const list = h('div', { class: 'rest-opts' });
     for (const [k, name, desc, ic] of opts) {

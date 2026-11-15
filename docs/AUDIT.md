@@ -34,7 +34,7 @@ Audit date: 2026-10-27. Baseline commit: `251bbb8` (branch `claude/adoring-newto
 | Real-time enemy ATB, continues before a combo, frozen by pause | `combat.js` `step`; pause = no `update()` | Working | U (combat) |
 | Timed Locks (3 s, source and countdown, expire in PRE, frozen by pause) | `combat.js` `lockCards` | Working | U (combat), V |
 | Scramble, jammed slots, Churn snare, Reserve latch, Flow drain, Glitch cards, Citations | `combat.js` enemy API | Working | U (combat, systems), V |
-| Party HP/KO, stand-in rule when only downed heroes own a role, defeat | `combat.js` | Working | U (combat), S, P |
+| Shared party HP pool, per-hero Defense, Cover, defeat at 0 (replaced per-hero HP, knockouts and the stand-in rule in 0.2.3) | `combat.js` `hitParty`, `hitAll`, `mitigate`; `run.js` | Working | U (combat, run), S, P (Phase 3 section) |
 | Guard (shared, decays, capped at 80; enemy Guard capped) | `combat.js` | Working | U (systems) |
 | Ten build archetypes | `data/cards.js`, relics, mutations | Working | U (archetypes: one signature test each) |
 
@@ -206,6 +206,32 @@ Known-good baseline before this follow-up: commit `fba3e85` (0.2.1); `git checko
 
 **Still for human judgment:** whether the pace now feels right (or too slow for experienced players); whether players notice and use the holds, the breather and hold-to-read; whether 8px role labels and 7–10px effect text are readable on real phones; the two-hound opening fight for very slow players (one knock-out at 2.5s per card, from attack frequency over a long fight, not per-hit damage or interference).
 
+## Revised roadmap, Phase 3: shared party HP and individual Defense (0.2.3, 2026-11-15)
+
+Specification: `docs/COMBAT_SPEC.md` §4 (party and shared resources), §15 (damage), §18.6 (conversion of run effects), §19 (saves). Reference build for regressions: 0.2.2 (`46d01a5`). Status words as in the Phase 1 section; nothing here is accepted by human play yet (the roadmap places the next human checkpoint at Phase 5).
+
+**Implemented**
+- *One HP pool.* The heroes' three pools became one (`combat.hp`/`maxHp`, run `d.hp`/`d.maxHp`). Heroes are never knocked out: the KO state, the "DOWN" card overlay, the tucking of a fallen hero's cards and the stand-in rule are gone. The battle is lost when the pool reaches 0 (all three heroes collapse, DEFEAT); a won battle leaves at least 1 HP.
+- *Defense.* Hessa 30%, Pin 15%, Corvin 0% (`RULES.DEFENSE`), applied to each enemy hit aimed at that hero before Guard, minimum 1 damage. Pierce skips Guard, not Defense; reflected damage and self-inflicted costs skip both. Enemies that used to pick the most hurt hero (`targetMode: 'lowest'`: Predator Needle, Null Knight) now pick the lowest Defense (Corvin).
+- *Area attacks.* Each hero's share is reduced by that hero's Defense; shared Guard absorbs the total once; on-hit effects (Counter, Heat Shield, Bastion Protocol) fire once per attack, not once per hero.
+- *Cover.* When Hessa resolves one of her Guard cards she covers the party for 4s: single-target hits aimed at Corvin or Pin land on her and use her Defense; area attacks are not redirected. These nine cards end their text with "Cover." (a keyword added to the card face), and holding one explains it.
+- *Healing and HP effects* now act on the pool, converted per spec §18.6 ("every ally" amounts ×3): Mend Circuit, Tuning Fork (Perfect: heal the party 3), Patch Kit (12 after each battle), rests (30%/45%), act transitions (75% of missing HP), events (e.g. Pay in Blood −15, Drink the Current +30, Harmonize +45), Glass Cannon and Core Dump (−15%/−10% max HP), Overdrive (−15% of current), Redline (−10% of max). Dead Man's Switch now fires once per battle, the first time party HP falls below 25%. Overture gives 1 Momentum per hero in the party.
+- *Pool size.* 130 at the start of a run: the old 46 + 34 + 38 = 118 plus 12 (`PARTY_HP_BONUS`, prototype). The bonus replaces what the old rules forgave without saying so: damage past a falling hero's last HP was lost, area attacks skipped fallen heroes, and a fallen hero came back at 10% after the battle. Measured below.
+- *Saves.* Version 4. A version-3 save converts once when loaded: HP and max HP become the sums (a knocked-out hero counts 0) plus the same 12, and the party keeps only the hero ids.
+- *Interface.* One party HP bar at the top left of the battlefield (one line in the phone layout), with Guard after the HP and the damage the enemies are winding up (after Defense, minus Guard) pulsing at its end; hero plates with name and Defense %; a COVER badge with countdown over Hessa and a COVER float when a hit is redirected; the red incoming ring and its "▼ n" number now show damage after Defense and move to Hessa under Cover; heals show on the bar. The map/shop/rest header shows the same single bar. How to Play has a new "Party HP, Defense, Cover" section. All new text in English and Russian.
+- *Fixed on the way:* the How to Play and in-battle tutorial still said a valid card refunds 0.8s of Flow (it is 1.0s since 0.2.1); Brass Metronome's text still described the old 0.24s/1.2s refunds. Both languages corrected.
+
+**Tested**
+- Unit tests 75/75 (new: one pool and no knockout API; Defense per hero and minimum 1; Guard after Defense; area attack with Defense per hero and Guard once; Cover started by a resolved Hessa Guard card, redirecting single-target hits but not area attacks, and expiring; pierce versus reflect; lowest-Defense targeting; pool healing; Dead Man's Switch once below 25%; defeat at 0 with the pool in the outcome; v3→v4 conversion, applied once; battles read and write the pool; Patch Kit; events take and give pool HP; every event choice leaves a whole-number HP within 1..max). The last check caught a missed conversion (the vending machine's "Kick it" still passed a hero id, which made party HP NaN); fixed.
+- Battle screen through touch input, English 844×390 and Russian 667×375 (`tools/party.mjs`, 8/8 each): the tapped Salvage says "Cover." and starts Cover; the red ring moves to Hessa; the hit aimed at Corvin costs 7 of 10; healing fills the bar; with the pool at 3 a real enemy attack loses the battle, the heroes collapse and the run-over screen follows; no page errors.
+- Targeting (`tools/targeting.mjs`, 4 sizes, both languages): 32/32.
+- Layout (`tools/i18n-layout.mjs`, 7 viewports, every card in hand and Reserve): Russian 1800 screens, English 1797 screens, 0 issues.
+- Card readability (`tools/readability.mjs`): identical to 0.2.2 at 667×375, 732×510 (both languages) and 844×390 — smallest effect text 6.4px, median 9.4–10px.
+- Ordinary play through the UI only, with reload and Continue at every checkpoint: English 1024×768 43/43 (three acts won, a shop, two elites, Volatile Redline at the Act II boss, credits, Museum unlock); Russian 732×510 49/49 (three acts won, credits, restart encounter, a run lost at the Act I boss as the pool ran out — 52 → 13 → 0 — with the results screen and defeat dialogue, then a new run to its first victory; 0 untranslated texts, 0 layout issues).
+- Balance, same seeds against 0.2.2 (`tools/pacing.mjs 30 --act1`, slow "learner" bot: 2s to read a hand, 1.3s per card, occasional wrong taps, no Momentum or Churn): ordinary Act I fights cost about a fifth less HP (e.g. two hounds 19% → 13% of the pool, snare + hound + jammer 32% → 23%); elites 40% → 29% (Foundry Warden) and 82% → 60% (Hound Mother, now 100% won); bosses won 83% → 77% (Scrap Tyrant) and 57% → 90% (Clockwork Regent). Without the 12-HP bonus the bosses fell to 57%/57%; with 142 HP they would be 90%/97%. The faster "regular" bot is unaffected (100% everywhere). Full runs (`tools/simulate.mjs 30`, bot reacting every 0.55s): 28/30 won (0.2.2: 26/30), HP lost per battle 5.0 (6.8), no errors, every run reached Act III.
+
+**Still for human judgment:** whether one shared bar reads better than three; whether players notice Defense and Cover and change how they play (the bots do not use Cover deliberately); whether the game is now too forgiving for experienced players (the full-run bot wins more often; Act I retuning belongs to Phase 6); whether "Cover." on nine cards is understood without opening the card.
+
 ## Version
 
 Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exit gate has passed with evidence here; the patch number counts published builds with changes since that gate; `1.0.0` is the Phase 9 release. The title tagline, the "Patch Notes" event, `package.json` and the iOS project all show the same number (enforced by a test).
@@ -219,7 +245,7 @@ Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exi
 
 The table above follows the earlier roadmap. From 2026-11-13 the revised roadmap applies: the number keeps counting from 0.2, the minor number advances when one of the revised roadmap's phase gates is accepted (Phase 1 needs human playtesting for that), and the patch number counts published builds in between.
 
-Current version: **0.2.2** (the beta-feedback patch and its follow-up, implemented and ready for testing; earlier 0.2.0 passed the old Phase 2 gate).
+Current version: **0.2.3** (the beta-feedback patch and its follow-up, plus revised-roadmap Phase 3: shared party HP and individual Defense; Phase 1 still waits for human playtesting, so the minor number stays at 2; earlier 0.2.0 passed the old Phase 2 gate).
 
 ## Not present in this build
 

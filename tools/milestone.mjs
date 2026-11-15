@@ -66,7 +66,7 @@ const snap = () => p.evaluate(() => {
   return {
     act: d.act, floors: d.floors, scrap: d.scrap, seed: d.seed,
     deck: d.deck.map((c) => `${c.uid}:${c.id}${c.up ? '+' : ''}${c.graft ? '/' + c.graft : ''}${c.rankMod ? '/r' + c.rankMod : ''}${c.variant ? '/' + c.variant : ''}`),
-    relics: d.relics.slice(), mutations: d.mutations.slice(), party: d.party.map((m) => `${m.id}:${m.hp}/${m.maxHp}`),
+    relics: d.relics.slice(), mutations: d.mutations.slice(), hp: `${d.hp}/${d.maxHp}`,
     path: d.path.slice(), pending: d.pending ? JSON.stringify(d.pending) : null,
     map: d.map ? d.map.nodes.map((n) => `${n.id}:${n.type}:${n.trait || ''}:${n.edges.join('|')}`).join(',') : null,
     bossDecisions: JSON.stringify(d.bossDecisions),
@@ -146,7 +146,7 @@ async function fightLog() {
     const c = window.__sb.battle && window.__sb.battle.combat;
     if (!c) return null;
     const roles = c.hand.map((u) => (u ? c.roleOf(u) : '-')).join(',');
-    return `t=${c.t.toFixed(0)}s enemies ${c.enemies.filter((e) => e.alive).map((e) => `${e.id} ${Math.round(e.hp)}/${e.maxHp} g${Math.round(e.guard)}`).join(' ')} | party ${c.party.map((m) => (m.ko ? 'KO' : Math.round(m.hp))).join('/')} | ${c.phase} hand ${roles} | glitch in draw ${c.draw.filter((u) => c.roleOf(u) === 'junk').length} | churn ${c.churn.charges}`;
+    return `t=${c.t.toFixed(0)}s enemies ${c.enemies.filter((e) => e.alive).map((e) => `${e.id} ${Math.round(e.hp)}/${e.maxHp} g${Math.round(e.guard)}`).join(' ')} | party ${Math.round(c.hp)}/${c.maxHp} g${Math.round(c.guard)} | ${c.phase} hand ${roles} | glitch in draw ${c.draw.filter((u) => c.roleOf(u) === 'junk').length} | churn ${c.churn.charges}`;
   });
   if (f) log(`fight ${f}`);
   await scanScreen('battle');
@@ -412,7 +412,7 @@ while (Date.now() < deadline) {
     }
     case 'map': {
       // prefer rests when hurt, avoid elites when hurt
-      const { hp, scrap } = await p.evaluate(() => ({ hp: window.__sb.run.d.party.reduce((a, m) => a + m.hp / m.maxHp, 0) / 3, scrap: window.__sb.run.d.scrap }));
+      const { hp, scrap } = await p.evaluate(() => ({ hp: window.__sb.run.d.hp / window.__sb.run.d.maxHp, scrap: window.__sb.run.d.scrap }));
       const hurt = hp < 0.55;
       if (!hurt && hp >= 0.75 && st.act <= 2 && !elitesTaken.has(st.act) && (await click('.map-node.avail.t-elite'))) { elitesTaken.add(st.act); await p.waitForTimeout(80); await clickText('Travel'); break; }
       if (!shopDone && scrap >= 70 && (await click('.map-node.avail.t-shop'))) { await p.waitForTimeout(80); await clickText('Travel'); break; }

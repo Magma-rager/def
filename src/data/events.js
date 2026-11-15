@@ -22,7 +22,7 @@ export const EVENTS = [
       { label: 'Insert 25 Scrap', hint: 'Upgrade a random card.', req: (R) => R.scrap >= 25 || need(25),
         results: { ok: 'The kiosk plays a 3-second clip that is somehow useful. {card} upgraded.', none: 'Nothing left to teach you.' },
         run: (R) => { R.spend(25); const c = R.upgradeRandom(1); return { text: c.length ? say('ok', { card: card(c[0]) }) : say('none') }; } },
-      { label: 'Smash it', hint: 'Gain 40 Scrap. Hessa takes 8 damage.', results: { ok: 'Hessa punches the kiosk. Coins and one tooth (hers?) clatter out.' }, run: (R) => { R.gain(40); R.hurt('V', 8); return { text: say('ok') }; } },
+      { label: 'Smash it', hint: 'Gain 40 Scrap. The party loses 8 HP.', results: { ok: 'Hessa punches the kiosk. Coins and one tooth (hers?) clatter out.' }, run: (R) => { R.gain(40); R.hurt(8); return { text: say('ok') }; } },
       { label: 'Walk away', hint: 'Nothing happens.', results: { ok: 'Granraku: "I have seen enough tutorials for one lifetime."' }, run: () => ({ text: say('ok') }) },
     ],
   },
@@ -31,8 +31,8 @@ export const EVENTS = [
     text: 'A conveyor drags rejected cards toward an incinerator. Some of them look... fine, actually. Ozmund\'s voice crackles: "Those were CUT for a REASON."',
     choices: [
       { label: 'Grab one', hint: 'Choose 1 of 3 cards to add.', results: {}, run: (R) => R.offerCards(3, 'common') },
-      { label: 'Grab the whole stack', hint: 'Add 2 random cards. A random ally loses 5 max HP.', results: { ok: 'You haul {cards} off the belt. {hero} strained something structural.' },
-        run: (R) => { const a = R.addRandomCards(2); const who = R.loseMaxHpRandom(5); return { text: say('ok', { cards: cards(a), hero: { hero: who } }) }; } },
+      { label: 'Grab the whole stack', hint: 'Add 2 random cards. The party loses 5 max HP.', results: { ok: 'You haul {cards} off the belt. Somebody strained something structural.' },
+        run: (R) => { const a = R.addRandomCards(2); R.loseMaxHp(5); return { text: say('ok', { cards: cards(a) }) }; } },
       { label: 'Throw one in', hint: 'Remove a card from your deck.', results: { ok: 'Pick something to feed the fire.' }, run: () => ({ text: say('ok'), select: { title: 'Remove a card', filter: 'removable', action: 'remove' } }) },
     ],
   },
@@ -40,7 +40,7 @@ export const EVENTS = [
     id: 'save_point', acts: [1], title: 'Abandoned Save Point', art: 'save',
     text: 'A crystal hums with "SAVE?" in three languages, two of them invented. A sticky note reads: "do not use, corrupts relics :) - O."',
     choices: [
-      { label: 'Rest at it', hint: 'Heal every ally 25% of max HP.', results: { ok: 'Warm light. Your progress bar feels respected.' }, run: (R) => { R.healPct(0.25); return { text: say('ok') }; } },
+      { label: 'Rest at it', hint: 'Heal the party 25% of max HP.', results: { ok: 'Warm light. Your progress bar feels respected.' }, run: (R) => { R.healPct(0.25); return { text: say('ok') }; } },
       { label: 'Corrupt the save', hint: 'Gain a random relic. A random card loses 1 rank... or gains it.', results: { ok: 'The crystal coughs up {relic}. {change}' },
         run: (R) => { const r = R.addRandomRelic(); const c = R.mutateRandomRank(); return { text: say('ok', { relic: relic(r), change: { m: c } }) }; } },
     ],
@@ -58,7 +58,7 @@ export const EVENTS = [
     id: 'rust_oracle', acts: [1, 2], title: 'The Rust Oracle', art: 'oracle',
     text: 'An automaton made entirely of rust offers surgery. "Payment: a little blood. Or a lot of oil. We are out of oil."',
     choices: [
-      { label: 'Pay in blood', hint: 'Each ally loses 5 HP. Graft a card (choice of 3 grafts).', results: {}, run: (R) => { R.hurtAll(5); return R.offerGraft(); } },
+      { label: 'Pay in blood', hint: 'The party loses 15 HP. Graft a card (choice of 3 grafts).', results: {}, run: (R) => { R.hurt(15); return R.offerGraft(); } },
       { label: 'Ask for a reading', hint: 'Upgrade a card of your choice. Lose 20 Scrap.', req: (R) => R.scrap >= 20 || need(20), results: { ok: '"Your future... has a +2 in it."' }, run: (R) => { R.spend(20); return { text: say('ok'), select: { title: 'Upgrade a card', filter: 'upgradable', action: 'upgrade' } }; } },
       { label: 'Leave', hint: 'Nothing happens.', results: { ok: 'The Oracle flakes away, offended.' }, run: () => ({ text: say('ok') }) },
     ],
@@ -67,8 +67,8 @@ export const EVENTS = [
     id: 'vending', acts: [1, 3], title: 'Broken Vending Machine', art: 'vending',
     text: 'A vending machine full of relics. The OUT OF ORDER sign is load-bearing. Hessa cracks her knuckles.',
     choices: [
-      { label: 'Kick it (Hessa -6 HP)', hint: '40% chance for a relic. Can be repeated.', req: (R) => R.hp('V') > 6 || 'Hessa is too hurt', results: { win: 'CLUNK. {relic} drops out.', miss: 'The machine rattles smugly.' },
-        run: (R) => { R.hurt('V', 6); if (R.rng.chance(0.4)) { const r = R.addRandomRelic(); return { text: say('win', { relic: relic(r) }), repeat: false }; } return { text: say('miss'), repeat: true }; } },
+      { label: 'Kick it (party −6 HP)', hint: '40% chance for a relic. Can be repeated.', req: (R) => R.hp() > 6 || 'The party is too hurt', results: { win: 'CLUNK. {relic} drops out.', miss: 'The machine rattles smugly.' },
+        run: (R) => { R.hurt(6); if (R.rng.chance(0.4)) { const r = R.addRandomRelic(); return { text: say('win', { relic: relic(r) }), repeat: false }; } return { text: say('miss'), repeat: true }; } },
       { label: 'Pay 60 Scrap', hint: 'Gain a random relic.', req: (R) => R.scrap >= 60 || need(60), results: { ok: 'It works perfectly. Suspicious. You get {relic}.' }, run: (R) => { R.spend(60); return { text: say('ok', { relic: relic(R.addRandomRelic()) }) }; } },
       { label: 'Leave', hint: 'Nothing happens.', results: { ok: 'Pin: "We could have been heroes."' }, run: () => ({ text: say('ok') }) },
     ],
@@ -77,8 +77,8 @@ export const EVENTS = [
     id: 'cable_garden', acts: [1, 2, 3], title: 'Cable Garden', art: 'garden',
     text: 'Someone planted cables in neat rows and they grew. Soft blue current drips from the leaves.',
     choices: [
-      { label: 'Drink the current', hint: 'Heal every ally 10 HP.', results: { ok: 'Corvin: "Tastes like a battery. In a good way."' }, run: (R) => { R.healFlat(10); return { text: say('ok') }; } },
-      { label: 'Prune a card', hint: 'Remove a card. Each ally loses 4 HP.', results: { ok: 'The vines take their payment.' }, run: (R) => { R.hurtAll(4); return { text: say('ok'), select: { title: 'Remove a card', filter: 'removable', action: 'remove' } }; } },
+      { label: 'Drink the current', hint: 'Heal the party 30 HP.', results: { ok: 'Corvin: "Tastes like a battery. In a good way."' }, run: (R) => { R.healFlat(30); return { text: say('ok') }; } },
+      { label: 'Prune a card', hint: 'Remove a card. The party loses 12 HP.', results: { ok: 'The vines take their payment.' }, run: (R) => { R.hurt(12); return { text: say('ok'), select: { title: 'Remove a card', filter: 'removable', action: 'remove' } }; } },
     ],
   },
 
@@ -108,7 +108,7 @@ export const EVENTS = [
     id: 'signal_choir', acts: [2], title: 'The Signal Choir', art: 'choir',
     text: 'Three broken speakers sing the battle theme a half-step apart. It is, somehow, beautiful.',
     choices: [
-      { label: 'Harmonize', hint: 'Every ally heals 15 HP.', results: { ok: 'The party hums along. Even Hessa.' }, run: (R) => { R.healFlat(15); return { text: say('ok') }; } },
+      { label: 'Harmonize', hint: 'Heal the party 45 HP.', results: { ok: 'The party hums along. Even Hessa.' }, run: (R) => { R.healFlat(45); return { text: say('ok') }; } },
       { label: 'Record it', hint: 'Gain Echo-themed relic if you lack it, else 40 Scrap.', results: { got: 'You capture the echo. Gained {relic}.', sold: 'You already have one. You sell the bootleg for 40 Scrap.' },
         run: (R) => { if (!R.hasRelic('echo_splice')) { R.addRelic('echo_splice'); return { text: say('got', { relic: relic('echo_splice') }) }; } R.gain(40); return { text: say('sold') }; } },
     ],
@@ -139,7 +139,7 @@ export const EVENTS = [
     choices: [
       { label: 'Trade a card for a relic', hint: 'Remove a card of your choice. Gain a random relic.', results: { ok: 'It hands you {relic}. "TRADE." It seems happy.' },
         run: (R) => { const r = R.addRandomRelic(); return { text: say('ok', { relic: relic(r) }), select: { title: 'Give a card', filter: 'removable', action: 'remove' } }; } },
-      { label: 'Give it a name', hint: 'Story. Heal every ally 8.', results: { ok: 'Pin names it "Gerald". Gerald says "TRADE?" with new dignity.' }, run: (R) => { R.flag('namedNPC'); R.healFlat(8); return { text: say('ok') }; } },
+      { label: 'Give it a name', hint: 'Story. Heal the party 24 HP.', results: { ok: 'Pin names it "Gerald". Gerald says "TRADE?" with new dignity.' }, run: (R) => { R.flag('namedNPC'); R.healFlat(24); return { text: say('ok') }; } },
     ],
   },
 
@@ -148,8 +148,8 @@ export const EVENTS = [
     id: 'core_dump', acts: [3], title: 'Core Dump', art: 'dump',
     text: 'A pile of memory spills across the floor: half-loaded relics, deleted cards, a developer\'s grocery list.',
     choices: [
-      { label: 'Dig through it', hint: 'Every ally loses 10% max HP. Gain 2 random relics.', results: { ok: 'You surface with {a} and {b}, and a little less of yourselves.' },
-        run: (R) => { R.loseMaxHpPctAll(0.1); const a = R.addRandomRelic(); const b = R.addRandomRelic(); return { text: say('ok', { a: relic(a), b: relic(b) }) }; } },
+      { label: 'Dig through it', hint: 'The party loses 10% of max HP. Gain 2 random relics.', results: { ok: 'You surface with {a} and {b}, and a little less of yourselves.' },
+        run: (R) => { R.loseMaxHpPct(0.1); const a = R.addRandomRelic(); const b = R.addRandomRelic(); return { text: say('ok', { a: relic(a), b: relic(b) }) }; } },
       { label: 'Take one thing', hint: 'Gain a random relic.', results: { ok: 'You take {relic} and leave the grocery list. (It says "more mugs".)' }, run: (R) => ({ text: say('ok', { relic: relic(R.addRandomRelic()) }) }) },
     ],
   },
@@ -177,7 +177,7 @@ export const EVENTS = [
     text: 'Time has stopped in this room, mid-explosion. You can walk between the sparks.',
     choices: [
       { label: 'Steal a moment', hint: 'Graft "Quick" onto a card.', results: { ok: 'You pocket a fraction of a second.' }, run: () => ({ text: say('ok'), select: { title: { k: 'Graft {g}', p: { g: { graft: 'quick' } } }, filter: 'graftable', action: 'graft:quick' } }) },
-      { label: 'Rest in the stillness', hint: 'Every ally heals 20% max HP.', results: { ok: 'Nothing moves. For once, neither do you.' }, run: (R) => { R.healPct(0.2); return { text: say('ok') }; } },
+      { label: 'Rest in the stillness', hint: 'Heal the party 20% of max HP.', results: { ok: 'Nothing moves. For once, neither do you.' }, run: (R) => { R.healPct(0.2); return { text: say('ok') }; } },
     ],
   },
   {
@@ -192,7 +192,7 @@ export const EVENTS = [
     id: 'last_checkpoint', acts: [3], title: 'The Last Checkpoint', art: 'save',
     text: 'A checkpoint flag, slightly on fire. Beyond it the map simply stops being drawn.',
     choices: [
-      { label: 'Touch the flag', hint: 'Every ally heals 40% max HP.', results: { ok: 'CHECKPOINT REACHED. The music swells, then glitches, then recovers.' }, run: (R) => { R.healPct(0.4); return { text: say('ok') }; } },
+      { label: 'Touch the flag', hint: 'Heal the party 40% of max HP.', results: { ok: 'CHECKPOINT REACHED. The music swells, then glitches, then recovers.' }, run: (R) => { R.healPct(0.4); return { text: say('ok') }; } },
       { label: 'Pull the flag up', hint: 'Gain 90 Scrap.', results: { ok: 'The flagpole is solid brass. Very sellable.' }, run: (R) => { R.gain(90); return { text: say('ok') }; } },
     ],
   },
@@ -210,7 +210,7 @@ export const EVENTS = [
     choices: [
       { label: 'Re-gauge a card up', hint: 'Raise a card\'s rank by 1.', results: { ok: 'Click-click-click.' }, run: () => ({ text: say('ok'), select: { title: 'Raise rank', filter: 'rankup', action: 'rankup' } }) },
       { label: 'Re-gauge a card down', hint: 'Lower a card\'s rank by 1.', results: { ok: 'Click... click.' }, run: () => ({ text: say('ok'), select: { title: 'Lower rank', filter: 'rankdown', action: 'rankdown' } }) },
-      { label: 'Plate armor (Hessa)', hint: 'Hessa gains 6 max HP.', results: { ok: 'Hessa bolts on a spare boiler plate. Fashion.' }, run: (R) => { R.gainMaxHp('V', 6); return { text: say('ok') }; } },
+      { label: 'Plate armor (Hessa)', hint: 'The party gains 6 max HP.', results: { ok: 'Hessa bolts on a spare boiler plate. Fashion.' }, run: (R) => { R.gainMaxHp(6); return { text: say('ok') }; } },
     ],
   },
 ];

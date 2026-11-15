@@ -118,8 +118,8 @@ card({
 });
 card({
   id: 'overture', name: 'Overture', owner: 'C', role: 'open', rank: 4, variant: 'EX', rarity: 'rare', anim: 'cast', glyph: 'star',
-  v: { d: [5, 7] }, text: 'Deal {d} to ALL. Gain 1 Momentum per standing ally.', tags: ['momentum', 'relay'],
-  fx: (A) => { A.dmg(A.v('d'), { all: true }); A.mom(A.c.party.filter((p) => !p.ko).length); },
+  v: { d: [5, 7] }, text: 'Deal {d} to ALL. Gain 1 Momentum per hero in the party.', tags: ['momentum', 'relay'],
+  fx: (A) => { A.dmg(A.v('d'), { all: true }); A.mom(A.c.party.length); },
 });
 card({
   id: 'deadeye_set', name: 'Deadeye Set', owner: 'S', role: 'open', rank: 4, variant: 'A', rarity: 'rare', anim: 'shoot', glyph: 'eye',
@@ -377,8 +377,8 @@ card({
 });
 card({
   id: 'mend_circuit', name: 'Mend Circuit', owner: 'C', role: 'close', rank: 5, variant: 'B', rarity: 'common', anim: 'cast', glyph: 'wave', big: true,
-  v: { h: [3, 5] }, text: 'Heal all allies {h} + 1 per card in this combo.', tags: ['guard'],
-  fx: (A) => A.heal(A.v('h') + A.ctx.len, 'all'),
+  v: { h: [9, 15] }, text: 'Heal the party {h} + 3 per card in this combo.', tags: ['guard'],
+  fx: (A) => A.heal(A.v('h') + 3 * A.ctx.len, 'all'),
 });
 card({
   id: 'detonate', name: 'Detonate', owner: 'C', role: 'close', rank: 7, variant: 'B', rarity: 'uncommon', anim: 'cast', glyph: 'flame', big: true,

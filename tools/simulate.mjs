@@ -55,7 +55,7 @@ function botBattle(setup, rng) {
     if (!z.ok) throw new Error('zone corruption: ' + z.error);
   }
   if (c.phase !== 'END') {
-    const dump = { t: c.t, phase: c.phase, enemies: c.enemies.map((e) => ({ id: e.id, hp: e.hp, guard: e.guard, alive: e.alive, st: e.st })), party: c.party.map((p) => [p.id, p.hp, p.ko]), guard: c.guard, mom: c.momentum, hand: c.hand.map((u) => u && `${c.def(u).id}:${c.check(u).text || 'ok'}`), reserve: c.reserve.map((u) => c.def(u).id), draw: c.draw.length, discard: c.discard.length, churn: c.churn };
+    const dump = { t: c.t, phase: c.phase, enemies: c.enemies.map((e) => ({ id: e.id, hp: e.hp, guard: e.guard, alive: e.alive, st: e.st })), hp: c.hp, guard: c.guard, mom: c.momentum, hand: c.hand.map((u) => u && `${c.def(u).id}:${c.check(u).text || 'ok'}`), reserve: c.reserve.map((u) => c.def(u).id), draw: c.draw.length, discard: c.discard.length, churn: c.churn };
     throw new Error(`battle timeout vs ${setup.enemies.join(',')} ${JSON.stringify(dump)}`);
   }
   return { out: c.outcome(), t: c.t, c };
@@ -63,7 +63,7 @@ function botBattle(setup, rng) {
 
 function pickNode(run, rng) {
   const ids = run.availableNodes();
-  const lowHp = run.d.party.reduce((a, p) => a + p.hp / p.maxHp, 0) / 3 < 0.5;
+  const lowHp = run.d.hp / run.d.maxHp < 0.5;
   const w = ids.map((id) => {
     const n = run.node(id);
     const base = { battle: 4, event: 3, elite: lowHp ? 0.5 : 2, shop: run.d.scrap > 100 ? 4 : 1, rest: lowHp ? 6 : 1, surgery: 2, treasure: 5, boss: 10 }[n.type];
@@ -88,13 +88,13 @@ function playRun(seed) {
         break;
       case 'battle': {
         const setup = run.battleSetup();
-        const before = run.d.party.reduce((a, x) => a + x.hp, 0);
+        const before = run.d.hp;
         const { out, t, c } = botBattle(setup, rng);
         log.battles++;
         if (setup.kind === 'elite') log.elites++;
         log.durations.push(t);
         log.combos += out.stats.combos;
-        const after = out.party.reduce((a, x) => a + x.hp, 0);
+        const after = out.hp;
         log.hpLoss.push(before - after);
         if (VERBOSE) console.log(`  act${setup.act} d${setup.depth} ${setup.kind} ${setup.enemies.join('+')} ${out.victory ? 'WIN' : 'LOSS'} t=${t.toFixed(1)}s hp ${before}->${after} combos ${out.stats.combos} perfect ${out.stats.perfect} co ${out.stats.cashouts} forced ${out.stats.forced}`);
         if (!out.victory) log.deaths = `act${setup.act} ${setup.kind} ${setup.enemies.join('+')}`;
@@ -138,7 +138,7 @@ function playRun(seed) {
         break;
       }
       case 'rest': {
-        const avg = run.d.party.reduce((a, x) => a + x.hp / x.maxHp, 0) / 3;
+        const avg = run.d.hp / run.d.maxHp;
         if (avg < 0.7) run.restChoose('recover');
         else { const t = run.d.deck.find((x) => !x.up); if (t) run.applySelect('upgrade', t.uid); }
         run.leaveNode();

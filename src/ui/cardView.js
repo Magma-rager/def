@@ -32,12 +32,16 @@ function vignette(owner, anim) {
 const GLYPH_MAP = { gear: 'summon', bolt: 'bolt', arrow: 'sword', shield: 'shield', hammer: 'sword', flame: 'flame', spiral: 'scramble', box: 'chest', star: 'star', eye: 'eye', coin: 'coin', ladder: 'up', wave: 'wave', prism: 'prism', hook: 'hook', clock: 'hourglass', chain: 'lock', glitch: 'glitch' };
 const ROLE_GLYPH = { open: '▶', conv: '⟳', close: '■', junk: '✕' };
 
+// Hessa's Guard cards also start Cover (engine/combat.js): the card says so.
+export const coversParty = (def) => def.owner === 'V' && (def.tags || []).includes('guard');
+
 export function cardText(def, up) {
-  return cardTemplate(def.id).replace(/\{(\w+)\}/g, (_, k) => {
+  const text = cardTemplate(def.id).replace(/\{(\w+)\}/g, (_, k) => {
     const v = cardValue(def, up, k);
     const base = cardValue(def, false, k);
     return up && v !== base ? `<b class="upv">${num(v)}</b>` : `<b>${num(v)}</b>`;
   });
+  return coversParty(def) ? `${text} <b class="kw-cover">${esc(t('Cover.'))}</b>` : text;
 }
 
 function artSvg(def) {
@@ -75,8 +79,7 @@ export function cardEl(inst, opts = {}) {
       <div class="card-foot">${inst.graft ? `<span class="graft">${esc(graftName(inst.graft))}</span>` : ''}${mods.join('')}<span class="reason"></span></div>
     </div>
     <div class="card-lock"><svg viewBox="0 0 36 36"><circle class="lock-ring" cx="18" cy="18" r="15"/></svg><span class="lock-icon">⛓</span><span class="lock-time"></span><span class="lock-src"></span></div>
-    <div class="card-scramble"></div>
-    <div class="card-ko">${t('DOWN')}</div>`;
+    <div class="card-scramble"></div>`;
   queueFit(el);
   return el;
 }
@@ -150,6 +153,7 @@ export function cardTooltip(inst) {
   const def = CARDS[inst.id];
   const lines = [`<b>${esc(cardName(def.id))}${inst.up ? '+' : ''}</b> · ${esc(roleName(def.role))} · ${esc(ownerName(def.owner))}`];
   lines.push(cardText(def, inst.up));
+  if (coversParty(def)) lines.push(`<span class="kw-cover">${esc(t('Cover: for 4s, hits aimed at Corvin or Pin land on Hessa, and her 30% Defense applies.'))}</span>`);
   if (inst.graft) lines.push(`<i>${esc(t('Graft — {g}:', { g: graftName(inst.graft) }))}</i> ${esc(graftText(inst.graft))}`);
   if (def.rarity) lines.push(`<span class="dim">${esc(rarityName(def.rarity))}${def.tags.length ? ' · ' + def.tags.map((x) => esc(tagName(x))).join(', ') : ''}</span>`);
   return lines.join('<br>');

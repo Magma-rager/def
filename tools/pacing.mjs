@@ -46,6 +46,8 @@ function setupFor(enc, seed) {
   return {
     deck: run.d.deck.map((c) => ({ ...c })),
     party: run.d.party.map((p) => ({ ...p })),
+    hp: run.d.hp,
+    maxHp: run.d.maxHp,
     enemies: enc.enemies,
     seed: seed * 31 + 7,
     relics: [],
@@ -65,9 +67,9 @@ function play(enc, player, seed) {
   const rng = new RNG(seed * 13 + 5);
   const c = new Combat(setupFor(enc, seed));
   const P = PLAYERS[player];
-  const hp0 = c.party.reduce((a, p) => a + p.hp, 0);
+  const hp0 = c.hp;
   const dt = 1 / 60;
-  const m = { enemyActs: [], damage: 0, combos: 0, forcedByTime: 0, cards: 0, longest: 0, time: { PRE: 0, ACTIVE: 0, RECOVER: 0 }, firstKO: null };
+  const m = { enemyActs: [], damage: 0, combos: 0, forcedByTime: 0, cards: 0, longest: 0, time: { PRE: 0, ACTIVE: 0, RECOVER: 0 }, firstLow: null };
   let think = P.read;
   let handSig = '';
   for (let i = 0; i < 60 * 900 && c.phase !== 'END'; i++) {
@@ -75,7 +77,7 @@ function play(enc, player, seed) {
     if (c.phase !== 'END') m.time[c.phase] = (m.time[c.phase] || 0) + dt;
     for (const ev of c.drainEvents()) {
       if (ev.type === 'enemyAct') m.enemyActs.push(ev.t);
-      if (ev.type === 'partyKO' && m.firstKO === null) m.firstKO = ev.t;
+      if (ev.type === 'partyHit' && m.firstLow === null && c.hp < c.maxHp * 0.25) m.firstLow = ev.t;
       if (ev.type === 'comboEnd') {
         m.combos++;
         m.longest = Math.max(m.longest, ev.len);
@@ -128,14 +130,14 @@ function play(enc, player, seed) {
       }
     }
   }
-  const hp1 = c.party.reduce((a, p) => a + Math.max(0, p.hp), 0);
+  const hp1 = Math.max(0, c.hp);
   const gaps = [];
   for (let k = 1; k < m.enemyActs.length; k++) gaps.push(m.enemyActs[k] - m.enemyActs[k - 1]);
   return {
     win: !!(c.result && c.result.victory), t: c.t, hpLost: (hp0 - hp1) / hp0,
     actsPerMin: (m.enemyActs.length / c.t) * 60, gaps, dmgPerMin: (c.stats.damageTaken / c.t) * 60,
     combos: m.combos, forced: m.forcedByTime, longest: m.longest, cardsPerCombo: m.combos ? c.stats.cardsPlayed / m.combos : 0,
-    time: m.time, firstKO: m.firstKO,
+    time: m.time, firstLow: m.firstLow,
   };
 }
 
@@ -161,16 +163,16 @@ for (const enc of ENCOUNTERS) {
       timedOut: mean(rs.map((r) => (r.combos ? r.forced / r.combos : 0))),
       longest: mean(rs.map((r) => r.longest)),
       cardsPerCombo: mean(rs.map((r) => r.cardsPerCombo)),
-      firstKO: median(rs.filter((r) => r.firstKO !== null).map((r) => r.firstKO)),
-      koRate: mean(rs.map((r) => (r.firstKO !== null ? 1 : 0))),
+      firstLow: median(rs.filter((r) => r.firstLow !== null).map((r) => r.firstLow)),
+      lowRate: mean(rs.map((r) => (r.firstLow !== null ? 1 : 0))),
     };
     report.push(row);
   }
 }
 if (JSON_OUT) console.log(JSON.stringify(report, null, 1));
 else {
-  console.log('encounter                     player   win  time  hpLost  acts/min medGap <1s  dmg/min combos timeout longest cards/combo KO%  firstKO');
+  console.log('encounter                     player   win  time  hpLost  acts/min medGap <1s  dmg/min combos timeout longest cards/combo <25% first<25%');
   for (const r of report) {
-    console.log(`${r.encounter.padEnd(29)} ${r.player.padEnd(8)} ${pct(r.win).padStart(4)} ${r.seconds.toFixed(0).padStart(4)}s ${pct(r.hpLost).padStart(6)} ${r.enemyActsPerMin.toFixed(1).padStart(8)} ${r.medianGap.toFixed(2).padStart(6)} ${pct(r.shortGaps).padStart(4)} ${r.dmgPerMin.toFixed(0).padStart(7)} ${r.combos.toFixed(1).padStart(6)} ${pct(r.timedOut).padStart(7)} ${r.longest.toFixed(1).padStart(7)} ${r.cardsPerCombo.toFixed(1).padStart(11)} ${pct(r.koRate).padStart(4)} ${r.firstKO ? r.firstKO.toFixed(0) + 's' : '-'}`);
+    console.log(`${r.encounter.padEnd(29)} ${r.player.padEnd(8)} ${pct(r.win).padStart(4)} ${r.seconds.toFixed(0).padStart(4)}s ${pct(r.hpLost).padStart(6)} ${r.enemyActsPerMin.toFixed(1).padStart(8)} ${r.medianGap.toFixed(2).padStart(6)} ${pct(r.shortGaps).padStart(4)} ${r.dmgPerMin.toFixed(0).padStart(7)} ${r.combos.toFixed(1).padStart(6)} ${pct(r.timedOut).padStart(7)} ${r.longest.toFixed(1).padStart(7)} ${r.cardsPerCombo.toFixed(1).padStart(11)} ${pct(r.lowRate).padStart(4)} ${r.firstLow ? r.firstLow.toFixed(0) + 's' : '-'}`);
   }
 }

@@ -261,17 +261,135 @@ test('randomized soak: thousands of actions keep zones intact and timers sane', 
   }
 });
 
-test('stand-in rule: when only knocked-out heroes own Openers, a standing ally plays them', () => {
-  const ids = ['scrapline', 'scrapline', 'step_up', 'splitter', 'bolt_volley', 'rethread', 'last_word'];
-  const c = new Combat({ deck: ids.map((id, i) => ({ uid: `s${i}`, id })), party: PARTY.map((p) => ({ ...p })), enemies: ['iron_maw'], seed: 4, act: 1 });
-  c.enemies[0].atb = -100;
-  c.koMember(c.member('S'));
-  const op = c.hand.find((u) => u && c.roleOf(u) === 'open');
-  assert.ok(op, 'opener still in hand');
-  assert.ok(c.check(op).ok, 'opener playable via stand-in');
-  c.playCard(op);
-  assert.notEqual(c.combo.owner, 'S');
-  assert.deepEqual(c.verifyZones(), { ok: true });
+// ── shared party HP and individual Defense ──
+const quiet = (extra) => { const c = mk(extra); for (const e of c.enemies) e.atb = -100; c.drainEvents(); return c; };
+
+test('the party shares one HP pool: the sum of the three heroes, no knockouts', () => {
+  const c = quiet();
+  assert.equal(c.maxHp, 118);
+  assert.equal(c.hp, 118);
+  assert.equal(c.koMember, undefined, 'no knockout API');
+  const e = c.enemies[0];
+  c.hitParty(e, 'C', 30);
+  c.hitParty(e, 'C', 30);
+  assert.equal(c.hp, 58, 'Corvin has no Defense: two 30-damage hits cost 60 from the pool');
+  for (const u of c.hand) if (u) assert.notEqual(c.check(u).reason, 'ko');
+  assert.equal(c.phase !== 'END', true, 'a hero taking more than its old HP does not end anything');
+});
+
+test('Defense reduces a hit on that hero before Guard; minimum 1 damage', () => {
+  const c = quiet();
+  const e = c.enemies[0];
+  const lose = (pid, n) => { const before = c.hp; c.hitParty(e, pid, n); return before - c.hp; };
+  assert.equal(lose('V', 10), 7, 'Hessa 30%');
+  assert.equal(lose('S', 20), 17, 'Pin 15%');
+  assert.equal(lose('C', 10), 10, 'Corvin 0%');
+  assert.equal(lose('V', 1), 1, 'minimum 1');
+  c.guard = 5;
+  assert.equal(lose('V', 10), 2, 'Defense first (10 → 7), then Guard 5');
+  assert.equal(c.guard, 0);
+  const evs = c.drainEvents().filter((x) => x.type === 'partyHit');
+  assert.deepEqual(evs.map((x) => x.who), ['V', 'S', 'C', 'V', 'V']);
+  const last = evs.at(-1);
+  assert.deepEqual([last.who, last.amount, last.blocked, last.src], ['V', 2, 5, e.uid]);
+});
+
+test('an area attack applies each hero\'s Defense once and Guard once to the total', () => {
+  const c = quiet();
+  const e = c.enemies[0];
+  c.hitAll(e, 10);
+  assert.equal(c.hp, 118 - (7 + 9 + 10));
+  c.guard = 20;
+  const absorbed = c.stats.guardAbsorbed;
+  c.hitAll(e, 10);
+  assert.equal(c.hp, 118 - 26 - 6, 'Guard 20 absorbs 20 of the 26 once');
+  assert.equal(c.guard, 0);
+  assert.equal(c.stats.guardAbsorbed - absorbed, 20);
+  const hits = c.drainEvents().filter((x) => x.type === 'partyHit');
+  assert.equal(hits.length, 6, 'one partyHit per hero per area attack');
+  assert.equal(hits.slice(3).reduce((a, x) => a + x.amount + x.blocked, 0), 26, 'parts add up, nothing counted twice');
+});
+
+test('Cover: Hessa\'s Guard card redirects single-target hits to her; area attacks are not redirected', () => {
+  const c = new Combat({ deck: deck(Array(14).fill('salvage')), party: PARTY.map((p) => ({ ...p })), enemies: ['iron_maw'], seed: 3, act: 1 });
+  for (const e of c.enemies) e.atb = -100;
+  assert.equal(c.coverActive(), false);
+  c.playCard(legal(c)[0]);
+  assert.equal(c.coverActive(), true, 'a resolved Hessa Guard card starts Cover');
+  assert.ok(c.drainEvents().some((x) => x.type === 'cover'));
+  c.guard = 0;
+  const e = c.enemies[0];
+  let before = c.hp;
+  c.hitParty(e, 'C', 10);
+  assert.equal(before - c.hp, 7, 'the hit aimed at Corvin lands on Hessa and uses her 30%');
+  const evs = c.drainEvents();
+  assert.ok(evs.some((x) => x.type === 'covered' && x.who === 'V' && x.from === 'C'));
+  assert.equal(evs.find((x) => x.type === 'partyHit').who, 'V');
+  before = c.hp;
+  c.hitAll(e, 10);
+  assert.equal(before - c.hp, 26, 'area attack: each hero still takes their own share');
+  c.t = c.coverUntil + 0.01;
+  before = c.hp;
+  c.hitParty(e, 'C', 10);
+  assert.equal(before - c.hp, 10, 'Cover expires');
+});
+
+test('pierce ignores Guard but not Defense; reflected and self damage ignore both', () => {
+  const c = quiet();
+  const e = c.enemies[0];
+  c.guard = 50;
+  let before = c.hp;
+  c.hitParty(e, 'V', 10, { pierce: true });
+  assert.equal(before - c.hp, 7);
+  assert.equal(c.guard, 50);
+  before = c.hp;
+  c.hitParty(e, 'V', 10, { reflect: true, pierce: true });
+  assert.equal(before - c.hp, 10);
+});
+
+test('enemies that went for the most hurt hero now pick the lowest Defense; others favour Hessa', () => {
+  const c = quiet({ enemies: ['predator_needle', 'iron_maw'] });
+  const [needle, maw] = c.enemies;
+  for (let i = 0; i < 20; i++) assert.equal(c.pickTargetMember(needle).id, 'C');
+  const n = { V: 0, C: 0, S: 0 };
+  for (let i = 0; i < 400; i++) n[c.pickTargetMember(maw).id]++;
+  assert.ok(n.V > n.C && n.V > n.S, JSON.stringify(n));
+});
+
+test('healing restores the pool up to max HP; Tuning Fork heals the party on a Perfect', () => {
+  const c = quiet();
+  c.hp = 50;
+  c.healParty(30);
+  assert.equal(c.hp, 80);
+  c.healParty(500);
+  assert.equal(c.hp, 118);
+  const h = c.drainEvents().filter((x) => x.type === 'heal');
+  assert.deepEqual(h.map((x) => [x.who, x.amount]), [['party', 30], ['party', 38]]);
+});
+
+test("Dead Man's Switch fires once, when party HP first falls below 25%", () => {
+  const c = quiet({ relics: ['dead_mans_switch'] });
+  const e = c.enemies[0];
+  const ehp = e.hp + e.guard;
+  c.hp = 40;
+  c.hitParty(e, 'C', 5);
+  assert.equal(c.momentum, 0, 'still above 25%');
+  c.hitParty(e, 'C', 10);
+  assert.equal(c.hp, 25);
+  assert.ok(e.hp + e.guard <= ehp - 15, '15 to all enemies');
+  assert.equal(c.momentum, 5);
+  c.hitParty(e, 'C', 5);
+  assert.equal(c.momentum, 5, 'only once per battle');
+});
+
+test('defeat when the pool reaches 0; the outcome reports the pool', () => {
+  const c = quiet();
+  c.hp = 5;
+  c.hitParty(c.enemies[0], 'V', 40);
+  assert.equal(c.phase, 'END');
+  assert.equal(c.result.victory, false);
+  assert.deepEqual([c.outcome().hp, c.outcome().maxHp], [0, 118]);
+  assert.equal(c.outcome().party, undefined);
 });
 
 // ── beta-feedback pacing ──

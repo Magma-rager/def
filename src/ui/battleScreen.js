@@ -272,7 +272,7 @@ export class BattleScreen {
       if (this.setup.tutorial) {
         if (def.role === 'open') this.tutorial('opened');
       }
-    } else if (res.reason === 'locked' || res.reason === 'junk' || res.reason === 'ko' || res.reason === 'recover' || res.reason === 'latched') {
+    } else if (res.reason === 'locked' || res.reason === 'junk' || res.reason === 'recover' || res.reason === 'latched') {
       this.app.audio.sfx('reject');
     } else this.app.audio.sfx(c.phase === 'ACTIVE' || (c.combo && c.combo.stumbles) ? 'stumble' : 'reject');
     this.afterAction();
@@ -372,7 +372,7 @@ export class BattleScreen {
     if (ev.owners && ev.owners.length === 3) this.remark('tripleRelay', true);
     if (ev.finisher) this.remark('finisher', true);
     if (this.combat.stats.churns >= 6) this.remark('churnSpam', true);
-    const low = this.combat.party.filter((p) => !p.ko && p.hp < p.maxHp * 0.25).length >= 2;
+    const low = this.combat.hp < this.combat.maxHp * 0.25;
     if (low) this.remark('lowHp', true);
   }
 
@@ -422,7 +422,7 @@ export class BattleScreen {
     if (!this.app.settings.hints || meta.tut[key]) return;
     const TXT = {
       start: ['THE RELAY', 'Your three heroes share one hand of six cards. Enemies act in real time — watch their ATB bars and intent bubbles. A <b>red ring</b> under a hero shows who an enemy is about to hit.<br><br>Your attacks hit the enemy in <b>gold brackets</b> (TARGET). <b>Tap an enemy</b> to choose another.<br><br><b>Tap an OPENER</b> to start a combo.'],
-      opened: ['FLOW IS TICKING', 'Your hand swapped to <b>Converters ⟳</b> and <b>Closers ■</b>. Flow <b>holds for a moment</b> so you can read them, then counts down from 5 seconds.<br><br>Each card must have a <b>higher rank</b>. Same suit (A→A, B→B): any higher rank. Switching suit (A↔B) is a <b>Cross</b>: exactly +1. <b>EX</b> fits anything.<br><br>Bright cards are legal. Each valid card gives back 0.8s of Flow, and Flow also holds while it plays out, so take a moment to choose.<br><br><b>Hold a card</b> to read it in full: the battle pauses while you read.'],
+      opened: ['FLOW IS TICKING', 'Your hand swapped to <b>Converters ⟳</b> and <b>Closers ■</b>. Flow <b>holds for a moment</b> so you can read them, then counts down from 5 seconds.<br><br>Each card must have a <b>higher rank</b>. Same suit (A→A, B→B): any higher rank. Switching suit (A↔B) is a <b>Cross</b>: exactly +1. <b>EX</b> fits anything.<br><br>Bright cards are legal. Each valid card gives back 1s of Flow, and Flow also holds while it plays out, so take a moment to choose.<br><br><b>Hold a card</b> to read it in full: the battle pauses while you read.'],
       closer: ['CLOSE IT', 'A <b>Closer</b> is legal now. Closers end the combo with a payoff based on everything you played before — card count, Relays between heroes, Steps, Crosses.<br><br>A Closer ending is a <b>PERFECT</b>: +2 Momentum and a Churn charge.'],
       afterCombo: ['MORE TOOLS', '<b>Swipe a card DOWN</b> to Churn it (uses a charge, replaces it).<br><b>Swipe UP</b> to stash it in Reserve; Reserve cards can be played later.<br><b>CASH OUT</b> ends a combo of 2+ cards early for a guaranteed payout (bonus if 2.5s+ Flow remains).<br><b>Momentum</b> buys +Flow or +Guard. Guard is shared and slowly fades.'],
       lock: ['CARD LOCKED', 'An enemy <b>Locked</b> a card (chain icon). Locks show their source and expire after their timer runs out — even between combos. Plan around them.'],
@@ -586,8 +586,7 @@ export class BattleScreen {
       const chk = c.check(uid);
       const locked = c.isLocked(uid);
       const scr = c.isScrambled(uid) || c.wild.has(uid);
-      const ko = chk.reason === 'ko';
-      const st = `${chk.ok ? 'legal' : 'illegal'}|${locked}|${scr}|${ko}|${chk.text || ''}|${c.effRank(uid)}${c.effVariant(uid)}`;
+      const st = `${chk.ok ? 'legal' : 'illegal'}|${locked}|${scr}|${chk.text || ''}|${c.effRank(uid)}${c.effVariant(uid)}`;
       if (st !== s.state) {
         s.state = st;
         const el = s.el;
@@ -595,7 +594,6 @@ export class BattleScreen {
         el.classList.toggle('illegal', !chk.ok);
         el.classList.toggle('locked', locked);
         el.classList.toggle('scrambled', scr);
-        el.classList.toggle('ko', ko);
         const def = CARDS[c.cards.get(uid).id];
         if (def.role !== 'junk') {
           s.rankEl.textContent = String(c.effRank(uid));

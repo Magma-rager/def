@@ -43,7 +43,7 @@ const instrument = () => p.evaluate(() => {
   const bs = window.__sb.battle;
   const c = bs.combat;
   if (c.__probe) return;
-  const P = (c.__probe = { states: {}, acts: [], plays: [], combos: [], t0: performance.now(), hpStart: c.party.reduce((a, x) => a + x.hp, 0), dmg: { atk: 0, aoe: 0 }, interference: 0 });
+  const P = (c.__probe = { states: {}, acts: [], plays: [], combos: [], t0: performance.now(), hpStart: c.hp, dmg: { atk: 0, aoe: 0 }, interference: 0 });
   const state = () => (c.hold > 0 ? 'finisher' : c.phase === 'ACTIVE' ? (c.flowHeld() ? 'hold' : 'active') : c.phase === 'PRE' ? 'pre' : c.phase === 'RECOVER' ? 'recover' : c.phase);
   const upd = c.update.bind(c);
   c.update = (dt) => {
@@ -85,7 +85,7 @@ async function enterFight(f) {
     await p.evaluate((x) => {
       const app = window.__sb;
       const r = app.run;
-      r.d.party.forEach((m) => { m.hp = m.maxHp; });
+      r.d.hp = r.d.maxHp;
       const node = r.d.map.nodes.find((n) => n.depth === x.depth && n.type === 'battle') || r.d.map.nodes.find((n) => n.depth === x.depth);
       r.d.pending = { type: 'battle', kind: 'battle', nodeId: node.id, enemies: x.enemies };
       app.route();
@@ -146,7 +146,7 @@ async function playFight(f) {
     const c = window.__sb.battle ? window.__sb.battle.combat : null;
     const P = c && c.__probe;
     if (!P) return null;
-    return { states: P.states, acts: P.acts, combos: P.combos, t: c.t, result: c.result, hpLost: P.hpStart - c.party.reduce((a, x) => a + Math.max(0, x.hp), 0), hpStart: P.hpStart, dmg: P.dmg, interference: P.interference, ko: c.party.filter((x) => x.ko).length };
+    return { states: P.states, acts: P.acts, combos: P.combos, t: c.t, result: c.result, hpLost: P.hpStart - Math.max(0, c.hp), hpStart: P.hpStart, dmg: P.dmg, interference: P.interference, ko: c.party.filter((x) => x.ko).length };
   });
   return { fight: f.name, enemies, ...r };
 }

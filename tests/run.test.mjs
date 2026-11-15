@@ -122,6 +122,7 @@ test('events run without errors and card selections apply', () => {
       }
       if (run.d.pending.result && run.d.pending.result.offer) assert.ok(run.takeOfferCard(0));
       for (const c of run.d.deck) assert.ok(CARDS[c.id], 'valid card ids');
+      assert.ok(Number.isInteger(run.d.hp) && run.d.hp >= 1 && run.d.hp <= run.d.maxHp, `${ev.id} choice ${i}: party HP ${run.d.hp}/${run.d.maxHp}`);
     }
   }
 });
@@ -167,4 +168,56 @@ test('each boss offers its own trophy relic, and trophies never appear in normal
   }
   const run = Run.create({ seed: 6 });
   for (let i = 0; i < 50; i++) for (const id of run.randomRelics(run.rng('p', i), 3)) assert.notEqual(RELICS[id].rarity, 'boss');
+});
+
+// ── Phase 3: shared party HP ──
+test('a version-3 save converts once to the shared pool (a knocked-out hero counts 0)', () => {
+  const v4 = Run.create({ seed: 71 }).serialize();
+  const v3 = { ...v4, version: 3, party: [{ id: 'V', hp: 20, maxHp: 46 }, { id: 'C', hp: 0, maxHp: 34 }, { id: 'S', hp: 38, maxHp: 44 }] };
+  delete v3.hp; delete v3.maxHp;
+  const run = Run.load(JSON.parse(JSON.stringify(v3)));
+  assert.ok(run, 'loads');
+  assert.equal(run.d.version, 4);
+  assert.deepEqual([run.d.hp, run.d.maxHp], [58 + 12, 124 + 12], 'sum of the old pools plus the shared-pool bonus');
+  assert.deepEqual(run.d.party, [{ id: 'V' }, { id: 'C' }, { id: 'S' }]);
+  const again = Run.load(JSON.parse(JSON.stringify(run.serialize())));
+  assert.deepEqual([again.d.hp, again.d.maxHp], [70, 136], 'no second conversion');
+  assert.equal(Run.load({ ...v4, version: 2 }), null, 'unknown versions are still refused');
+});
+
+test('battles start from the pool and write it back; Patch Kit heals the party 12', () => {
+  const run = Run.create({ seed: 72, starterRelic: 'patch_kit' });
+  run.d.pending = null;
+  run.d.hp = 70;
+  run.enterNode(run.availableNodes()[0]);
+  const setup = run.battleSetup();
+  const c = new Combat(setup);
+  assert.deepEqual([c.hp, c.maxHp], [70, 130]);
+  c.hitParty(c.enemies[0], 'C', 20);
+  for (const e of c.enemies) { e.hp = 0; e.alive = false; }
+  c.checkEnd();
+  run.finishBattle(c.outcome());
+  assert.equal(run.d.hp, 70 - 20 + 12);
+});
+
+test('events take HP from and give HP to the pool', () => {
+  const play = (id, idx, hp = 100) => {
+    const run = Run.create({ seed: 73 });
+    run.d.scrap = 200;
+    run.d.hp = hp;
+    run.d.pending = { type: 'event', nodeId: 'x', eventId: id, result: null };
+    return [run, run.eventChoose(idx)];
+  };
+  assert.equal(play('tutorial_kiosk', 1)[0].d.hp, 92, 'Smash it: -8');
+  assert.equal(play('rust_oracle', 0)[0].d.hp, 85, 'Pay in blood: -15');
+  assert.equal(play('cable_garden', 0, 50)[0].d.hp, 80, 'Drink the current: +30');
+  const [belt] = play('discard_belt', 1);
+  assert.equal(belt.d.maxHp, 125, 'Grab the whole stack: party max HP -5');
+  const [plate] = play('grease_monkey', 2);
+  assert.equal(plate.d.maxHp, 136);
+  const [, kick] = play('vending', 0, 6);
+  assert.deepEqual(kick, { error: 'The party is too hurt' });
+  const [core] = play('core_dump', 0);
+  assert.equal(core.d.maxHp, 130 - 13);
+  assert.ok(core.d.hp <= core.d.maxHp);
 });

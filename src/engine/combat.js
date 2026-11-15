@@ -33,6 +33,10 @@ export const RULES = {
   RECOVER: { perfect: 1.0, cashout: 0.8, forced: 1.2 }, // prototype (was 0.45/0.3/0.9): a breather; enemies wait too
   ENEMY_PACE: { 1: 0.7, 2: 0.82, 3: 0.9 }, // prototype: enemy ATB speed by act (was 1 everywhere)
   ENEMY_SPACING: 1.2, // prototype: at least this many seconds between two enemy actions
+  // shared party HP and individual Defense (docs/COMBAT_SPEC.md §4, §15)
+  DEFENSE: { V: 0.3, S: 0.15, C: 0 }, // prototype: share of each enemy hit the hero shrugs off
+  COVER_SECONDS: 4, // prototype: Hessa's Guard cards make her take single-target hits aimed at the others
+  SWITCH_THRESHOLD: 0.25, // Dead Man's Switch fires the first time party HP falls below this share
   GUARD_DECAY_DELAY: 2.0,
   GUARD_DECAY_RATE: 1.0,
   GUARD_CAP: 80,
@@ -101,11 +105,13 @@ export class Combat {
     this.reserveLatchUntil = 0;
     this.churnJamUntil = 0;
 
-    // ── party ──
-    this.party = opts.party.map((p) => ({
-      id: p.id, name: PARTY_DEFS[p.id].name, hp: p.hp, maxHp: p.maxHp, ko: p.hp <= 0, st: {},
-    }));
-    for (const p of this.party) if (p.ko) p.hp = 0;
+    // ── party: three heroes, one HP pool (heroes never fall; defeat is the pool reaching 0) ──
+    this.party = opts.party.map((p) => ({ id: p.id, name: PARTY_DEFS[p.id].name, def: RULES.DEFENSE[p.id] || 0, st: {} }));
+    // callers that still pass per-hero HP (older tests and tools) get the sum
+    this.maxHp = opts.maxHp !== undefined ? opts.maxHp : opts.party.reduce((a, p) => a + (p.maxHp || 0), 0);
+    this.hp = Math.min(this.maxHp, opts.hp !== undefined ? opts.hp : opts.party.reduce((a, p) => a + Math.max(0, p.hp || 0), 0));
+    this.coverUntil = 0;
+    this.switchUsed = false;
     this.guard = 0;
     this.lastGuardT = -10;
     this.guardHoldUntil = 0;
@@ -177,24 +183,6 @@ export class Combat {
   roleOf(uid) {
     const d = this.def(uid);
     return d ? d.role : null;
-  }
-  ownerKO(owner) {
-    const p = this.party.find((x) => x.id === owner);
-    return p ? p.ko : false;
-  }
-  // True when a standing ally owns at least one live card of this role. When none does,
-  // knocked-out heroes' cards become playable by a stand-in so the party can always act.
-  aliveRoleExists(role) {
-    for (const [uid, inst] of this.cards) {
-      const d = CARDS[inst.id];
-      if (d.role === role && !this.ownerKO(d.owner) && !this.exhaust.includes(uid)) return true;
-    }
-    return false;
-  }
-  actorFor(owner) {
-    if (!this.ownerKO(owner)) return owner;
-    const p = this.party.find((x) => !x.ko);
-    return p ? p.id : owner;
   }
   member(id) {
     return this.party.find((p) => p.id === id);
@@ -326,7 +314,6 @@ export class Combat {
     if (d.role === 'junk') return { ok: false, reason: 'junk', text: 'Glitch: swipe down' };
     if (zone === 'reserve' && this.reserveLatchUntil > this.t) return { ok: false, reason: 'latched', text: 'Reserve sealed' };
     if (this.isLocked(uid)) return { ok: false, reason: 'locked', text: { k: 'Locked {s}s', p: { s: { n: this.lockLeft(uid), d: 1 } } } };
-    if (this.ownerKO(d.owner) && this.aliveRoleExists(d.role)) return { ok: false, reason: 'ko', text: { k: '{hero} is down', p: { hero: { hero: d.owner } } } };
     if (this.phase === 'RECOVER') return { ok: false, reason: 'recover', text: 'Recovering' };
     if (this.phase === 'PRE') {
       if (d.role !== 'open') return { ok: false, reason: 'role', text: 'Needs an Opener' };
@@ -353,7 +340,7 @@ export class Combat {
     const d = this.def(uid);
     if (!d) return false;
     if (d.role === 'junk') return true;
-    return roles.includes(d.role) && (!this.ownerKO(d.owner) || !this.aliveRoleExists(d.role));
+    return roles.includes(d.role);
   }
   drawMatching(roles, exclude) {
     let idx = this.draw.findIndex((u) => u !== exclude && this.matchesRoles(u, roles));
@@ -519,7 +506,7 @@ export class Combat {
     const isOpen = this.phase === 'PRE';
     if (isOpen) this.startCombo();
     const c = this.combo;
-    const owner = this.actorFor(d.owner);
+    const owner = d.owner;
     const relay = c.owner !== null && c.owner !== owner;
     const kind = isOpen ? 'open' : chk.kind;
     const entry = {
@@ -586,6 +573,11 @@ export class Combat {
 
     const api = this.makeApi(entry, inst, d, { mult, bonus, echoing: false, disruptedAtPlay, ctx: c });
     d.fx(api);
+    // Hessa's Guard cards: she covers the party, taking single-target hits aimed at the others
+    if (d.owner === 'V' && (d.tags || []).includes('guard')) {
+      this.coverUntil = this.t + RULES.COVER_SECONDS;
+      this.emit({ type: 'cover', until: this.coverUntil });
+    }
 
     // grafts
     if (inst.graft === 'spark') this.gainMomentum(1, 'Spark');
@@ -926,7 +918,7 @@ export class Combat {
       this.gainMomentum(m, 'Perfect');
       if (this.mutations.has('perfect_pitch')) this.addGuard(6);
       this.gainChurn(1);
-      if (this.relics.has('tuning_fork')) this.healParty(2, 'lowest');
+      if (this.relics.has('tuning_fork')) this.healParty(3);
       finisher = c.cards.length >= 5 || c.cards[c.cards.length - 1].rank >= 9;
       if (finisher) { this.stats.finishers++; this.hold = RULES.FINISHER_HOLD; }
     } else if (type === 'cashout') {
@@ -1067,15 +1059,11 @@ export class Combat {
     this.emit({ type: 'status', uid: e.uid, kind, n });
   }
 
+  // Healing restores the shared pool. `who` only picks which hero the effect is shown on.
   healParty(n, who = 'all') {
-    let targets = this.party.filter((p) => !p.ko);
-    if (who === 'lowest') targets = targets.sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp).slice(0, 1);
-    else if (who !== 'all') targets = targets.filter((p) => p.id === who);
-    for (const p of targets) {
-      const before = p.hp;
-      p.hp = Math.min(p.maxHp, p.hp + n);
-      if (p.hp > before) this.emit({ type: 'heal', who: p.id, amount: p.hp - before });
-    }
+    const before = this.hp;
+    this.hp = Math.min(this.maxHp, this.hp + Math.max(0, Math.round(n)));
+    if (this.hp > before) this.emit({ type: 'heal', who: who === 'all' || who === 'lowest' ? 'party' : who, amount: this.hp - before });
   }
 
   killEnemy(e) {
@@ -1109,68 +1097,100 @@ export class Combat {
   }
 
   // ───────────────────────── party damage ─────────────────────────
-  hitParty(e, pid, amount, o = {}) {
-    let p = this.member(pid);
-    if (!p || p.ko) p = this.pickTargetMember(e);
-    if (!p) return 0;
-    let a = amount;
+  defenseOf(p) {
+    return p ? Math.min(0.6, p.def + (p.st.braced > this.t ? 0.2 : 0)) : 0;
+  }
+  coverActive() {
+    return this.coverUntil > this.t;
+  }
+  // The hero a single-target hit lands on: the intended one, or Hessa while she covers the party.
+  hitTarget(pid) {
+    const p = this.member(pid);
+    if (p && p.id !== 'V' && this.coverActive()) return this.member('V');
+    return p;
+  }
+  // Defense first (minimum 1 per hit), then shared Guard once, then the HP pool.
+  mitigate(e, raw, p, o) {
+    let a = raw;
     if (!o.reflect && e && (e.st.weak || 0) > 0) a *= 0.75;
     a = Math.max(0, Math.round(a));
-    let blocked = 0;
-    if (!o.pierce && this.guard >= 1) {
-      let usable = Math.floor(this.guard);
-      if (e && e.tier === 'boss' && this.adaptOn('guard_pierce')) usable = Math.floor(usable / 2);
-      blocked = Math.min(usable, a);
-      this.guard -= blocked;
-      a -= blocked;
-      this.stats.guardAbsorbed += blocked;
+    if (a > 0 && !o.reflect && !o.self) a = Math.max(1, Math.round(a * (1 - this.defenseOf(p))));
+    return a;
+  }
+  absorb(e, a, o) {
+    if (o.pierce || o.reflect || o.self || this.guard < 1 || a <= 0) return 0;
+    let usable = Math.floor(this.guard);
+    if (e && e.tier === 'boss' && this.adaptOn('guard_pierce')) usable = Math.floor(usable / 2);
+    const blocked = Math.min(usable, a);
+    this.guard -= blocked;
+    this.stats.guardAbsorbed += blocked;
+    return blocked;
+  }
+  loseHp(n) {
+    if (n <= 0) return;
+    this.hp -= n;
+    this.stats.damageTaken += n;
+    if (!this.switchUsed && this.relics.has('dead_mans_switch') && this.hp > 0 && this.hp < this.maxHp * RULES.SWITCH_THRESHOLD) {
+      this.switchUsed = true;
+      this.emit({ type: 'banner', text: 'SWITCH TRIPPED', sub: { k: '{r}', p: { r: { relic: 'dead_mans_switch' } } }, tone: 'gold' });
+      for (const x of this.aliveEnemies()) this.dealDamage(x, 15, { src: null, pierce: true, tag: 'switch' });
+      this.gainMomentum(5, "Dead Man's Switch");
     }
-    p.hp -= a;
-    this.stats.damageTaken += a;
+  }
+  // hooks that fire once per enemy attack (not per hero for area attacks)
+  onHitHooks(e, blocked, a, o) {
+    if (!e || !e.alive || o.reflect) return;
+    if (blocked > 0 && a === 0 && this.relics.has('heat_shield')) this.applyStatus(e, 'scorch', 2);
+    if (blocked > 0 && this.mutations.has('bastion_protocol')) this.dealDamage(e, Math.round(blocked * 0.5), { src: 'V', counter: true, pierce: true, tag: 'bastion' });
+    if (this.counter > 0 && e.alive) {
+      const cd = this.counter * (this.relics.has('counter_spring') ? 2 : 1);
+      this.counter = 0;
+      this.emit({ type: 'act', who: 'V', anim: 'counter', card: 'Counter', role: 'counter', big: false, target: e.uid });
+      this.dealDamage(e, cd, { src: 'V', counter: true, pierce: true, tag: 'counter' });
+    }
+  }
+
+  hitParty(e, pid, amount, o = {}) {
+    const intended = this.member(pid) || this.pickTargetMember(e);
+    if (!intended) return 0;
+    const p = o.reflect || o.self ? intended : this.hitTarget(intended.id);
+    if (p !== intended) this.emit({ type: 'covered', who: p.id, from: intended.id });
+    const afterDef = this.mitigate(e, amount, p, o);
+    const blocked = this.absorb(e, afterDef, o);
+    const a = afterDef - blocked;
+    this.loseHp(a);
     this.emit({ type: 'partyHit', who: p.id, amount: a, blocked, src: e ? e.uid : null, reflect: !!o.reflect });
-    if (e && e.alive && !o.reflect) {
-      if (blocked > 0 && a === 0 && this.relics.has('heat_shield')) this.applyStatus(e, 'scorch', 2);
-      if (blocked > 0 && this.mutations.has('bastion_protocol')) this.dealDamage(e, Math.round(blocked * 0.5), { src: 'V', counter: true, pierce: true, tag: 'bastion' });
-      if (this.counter > 0 && e.alive) {
-        const cd = this.counter * (this.relics.has('counter_spring') ? 2 : 1);
-        this.counter = 0;
-        this.emit({ type: 'act', who: 'V', anim: 'counter', card: 'Counter', role: 'counter', big: false, target: e.uid });
-        this.dealDamage(e, cd, { src: 'V', counter: true, pierce: true, tag: 'counter' });
-      }
-    }
-    if (p.hp <= 0) this.koMember(p);
+    this.onHitHooks(e, blocked, a, o);
+    this.checkEnd();
     return a;
   }
 
+  // Area attack: each hero's Defense applies to its share; Guard is applied once to the total.
   hitAll(e, amount, o = {}) {
     this.emit({ type: 'enemyAoe', src: e ? e.uid : null });
-    for (const p of this.party) if (!p.ko) this.hitParty(e, p.id, amount, o);
-  }
-
-  koMember(p) {
-    if (p.ko) return;
-    p.ko = true;
-    p.hp = 0;
-    this.emit({ type: 'partyKO', who: p.id });
-    if (this.relics.has('dead_mans_switch')) {
-      for (const e of this.aliveEnemies()) this.dealDamage(e, 15, { src: null, pierce: true, tag: 'switch' });
-      this.gainMomentum(5, "Dead Man's Switch");
+    const parts = this.party.map((p) => [p, this.mitigate(e, amount, p, o)]);
+    const total = parts.reduce((x, [, v]) => x + v, 0);
+    let blocked = this.absorb(e, total, o);
+    const blockedTotal = blocked;
+    let lost = 0;
+    for (const [p, v] of parts) {
+      const b = Math.min(v, blocked);
+      blocked -= b;
+      lost += v - b;
+      this.emit({ type: 'partyHit', who: p.id, amount: v - b, blocked: b, src: e ? e.uid : null, reflect: !!o.reflect, all: true });
     }
-    for (let i = 0; i < RULES.HAND; i++) {
-      const u = this.hand[i];
-      if (u && this.def(u).owner === p.id) this.tuck(i);
-    }
-    this.refill();
+    this.loseHp(lost);
+    this.onHitHooks(e, blockedTotal, lost, o);
     this.checkEnd();
+    return lost;
   }
 
   pickTargetMember(e) {
-    const alive = this.party.filter((p) => !p.ko);
-    if (!alive.length) return null;
     const def = e ? ENEMIES[e.id] : null;
-    if (def && def.targetMode === 'lowest') return alive.slice().sort((a, b) => a.hp - b.hp)[0];
+    // enemies that used to pick the most hurt hero now go for the weakest armour
+    if (def && def.targetMode === 'lowest') return this.party.slice().sort((a, b) => a.def - b.def)[0];
     // Vanguard draws aggro
-    return this.rng.weighted(alive.map((p) => [p, p.id === 'V' ? 2 : 1]));
+    return this.rng.weighted(this.party.map((p) => [p, p.id === 'V' ? 2 : 1]));
   }
 
   // ───────────────────────── enemy API ─────────────────────────
@@ -1239,7 +1259,7 @@ export class Combat {
   }
 
   weakenParty(e, pid, dur) {
-    const targets = pid === 'all' ? this.party.filter((p) => !p.ko) : [this.member(pid) || this.pickTargetMember(e)].filter(Boolean);
+    const targets = pid === 'all' ? this.party : [this.member(pid) || this.pickTargetMember(e)].filter(Boolean);
     for (const p of targets) {
       p.st.weak = Math.max(p.st.weak || 0, this.t + dur);
       this.emit({ type: 'partyStatus', who: p.id, kind: 'weak', dur });
@@ -1517,7 +1537,7 @@ export class Combat {
 
   checkEnd() {
     if (this.phase === 'END') return;
-    if (this.party.every((p) => p.ko)) {
+    if (this.hp <= 0) {
       this.phase = 'END';
       this.combo = null;
       this.result = { victory: false };
@@ -1534,7 +1554,8 @@ export class Combat {
   outcome() {
     return {
       victory: !!(this.result && this.result.victory),
-      party: this.party.map((p) => ({ id: p.id, hp: Math.max(0, Math.round(p.hp)), ko: p.ko })),
+      hp: Math.max(0, Math.round(this.hp)),
+      maxHp: this.maxHp,
       stats: this.stats,
       scrapBonus: this.scrapEarned,
       enemies: this.enemies.map((e) => e.id),

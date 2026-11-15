@@ -108,10 +108,10 @@ test('Boss preparation: Volatile applies its fixed outcome and logs the decision
 
 test('Rest, surgery and cache nodes change persistent run state', () => {
   const run = Run.create({ seed: 41 });
-  run.d.party.forEach((m) => (m.hp = 10));
+  run.d.hp = 10;
   run.d.pending = { type: 'rest', nodeId: 'x', done: false };
   run.restChoose('recover');
-  assert.ok(run.d.party.every((m) => m.hp > 10));
+  assert.equal(run.d.hp, 10 + Math.round(run.d.maxHp * 0.3));
   run.d.pending = { type: 'rest', nodeId: 'y', done: false };
   run.restChoose('fortify');
   assert.deepEqual(run.d.prepToken, { startGuard: 12, startMomentum: 2 });

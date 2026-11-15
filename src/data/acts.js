@@ -10,7 +10,7 @@ export const PREPARED_PLANS = [
 
 export const VOLATILE_OUTCOMES = [
   { id: 'overcharged', name: 'Overcharged', text: 'Your damage +25%, but the boss has +20% HP.', prep: { dmgMult: 1.25, bossHpMult: 1.2 } },
-  { id: 'redline', name: 'Redline', text: 'Start with 8 Momentum, but every ally takes 10% max HP damage now.', prep: { startMomentum: 8 }, partyDamagePct: 0.1 },
+  { id: 'redline', name: 'Redline', text: 'Start with 8 Momentum, but the party loses 10% of max HP now.', prep: { startMomentum: 8 }, partyDamagePct: 0.1 },
   { id: 'wildcard', name: 'Wildcard', text: 'Gain a random rare card permanently, but the boss starts with 30 Guard.', prep: { bossGuard: 30 }, rareCard: true },
   { id: 'scramble', name: 'Signal Scramble', text: 'Boss adaptation is removed, but the boss acts 15% faster.', prep: { noAdapt: true, bossHaste: 1.15 } },
 ];

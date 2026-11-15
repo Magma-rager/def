@@ -11,8 +11,27 @@ import { TRAIT_IDS } from '../data/traits.js';
 import { PREPARED_PLANS, VOLATILE_OUTCOMES } from '../data/acts.js';
 
 export const PARTY_BASE = { V: 46, C: 34, S: 38 };
+// The party shares one HP pool (save version 4, docs/COMBAT_SPEC.md §4.1): the three old pools added up, plus a bonus (prototype) that stands in
+// for what the old per-hero rules forgave: damage past a falling hero's last HP was lost, and area
+// attacks skipped fallen heroes. Measured with tools/pacing.mjs --act1 (docs/AUDIT.md, Phase 3).
+export const PARTY_HP_BONUS = 12;
+export const PARTY_MAX_HP = PARTY_BASE.V + PARTY_BASE.C + PARTY_BASE.S + PARTY_HP_BONUS;
 export const MAP_DEPTHS = 8; // depths 0..7, boss at depth 8
-const SAVE_VERSION = 3;
+const SAVE_VERSION = 4;
+
+// Older saves are converted once when loaded. v3 → v4: per-hero HP becomes the shared pool
+// (a knocked-out hero counts 0), and gets the same bonus a new run has.
+function migrate(obj) {
+  if (obj.version === 3) {
+    const party = obj.party || [];
+    const sumMax = party.reduce((a, m) => a + (m.maxHp || 0), 0);
+    obj.maxHp = sumMax ? sumMax + PARTY_HP_BONUS : PARTY_MAX_HP;
+    obj.hp = Math.max(1, Math.min(obj.maxHp, party.reduce((a, m) => a + Math.max(0, m.hp || 0), 0) + PARTY_HP_BONUS));
+    obj.party = party.map((m) => ({ id: m.id }));
+    obj.version = 4;
+  }
+  return obj;
+}
 
 const RARITY_PRICE = { common: 50, uncommon: 78, rare: 130 };
 const RELIC_PRICE = { common: 135, uncommon: 175, rare: 225 };
@@ -37,7 +56,9 @@ export class Run {
       version: SAVE_VERSION,
       seed: s,
       act: 1,
-      party: Object.entries(PARTY_BASE).map(([id, hp]) => ({ id, hp, maxHp: hp })),
+      party: Object.keys(PARTY_BASE).map((id) => ({ id })),
+      hp: PARTY_MAX_HP,
+      maxHp: PARTY_MAX_HP,
       deck: [],
       nextUid: 1,
       relics: [starterRelic],
@@ -75,7 +96,9 @@ export class Run {
   }
 
   static load(obj) {
-    if (!obj || obj.version !== SAVE_VERSION) return null;
+    if (!obj) return null;
+    migrate(obj);
+    if (obj.version !== SAVE_VERSION) return null;
     return new Run(obj);
   }
 
@@ -92,6 +115,14 @@ export class Run {
   get scrap() { return this.d.scrap; }
   hasRelic(id) { return this.d.relics.includes(id); }
   member(id) { return this.d.party.find((p) => p.id === id); }
+  // shared HP pool
+  get hp() { return this.d.hp; }
+  setHp(v) { this.d.hp = Math.max(1, Math.min(this.d.maxHp, Math.round(v))); }
+  hurt(n) { this.setHp(this.d.hp - n); }
+  changeMaxHp(delta) {
+    this.d.maxHp = Math.max(30, Math.round(this.d.maxHp + delta));
+    this.d.hp = Math.min(this.d.hp, this.d.maxHp);
+  }
 
   addCard({ id, up = false, graft = null, variant = null, rankMod = 0 }) {
     const inst = { uid: `c${this.d.nextUid++}`, id, up, graft, rankMod, variant };
@@ -335,6 +366,8 @@ export class Run {
     return {
       deck: this.d.deck.map((c) => ({ ...c })),
       party: this.d.party.map((x) => ({ ...x })),
+      hp: this.d.hp,
+      maxHp: this.d.maxHp,
       enemies,
       seed: seedFrom(this.d.seed, 'battle', p.nodeId, this.d.battleCount),
       relics: this.d.relics.slice(),
@@ -359,11 +392,8 @@ export class Run {
     this.d.battleCount++;
     this.d.nextBattleMod = null;
     if ((p.kind === 'elite' || isBoss) && this.d.prepToken) this.d.prepToken = null;
-    // party
-    for (const r of outcome.party) {
-      const m = this.member(r.id);
-      m.hp = r.ko ? Math.max(1, Math.round(m.maxHp * 0.1)) : Math.max(1, Math.min(m.maxHp, r.hp));
-    }
+    // party: the pool carries over (a won battle always leaves at least 1)
+    this.setHp(outcome.hp);
     // stats
     const S = this.d.stats, B = outcome.stats;
     S.battles++;
@@ -381,7 +411,7 @@ export class Run {
       this.d.tutorial = false;
       this.d.flags.tutorialDone = true;
     }
-    if (this.hasRelic('patch_kit')) this.healFlat(4);
+    if (this.hasRelic('patch_kit')) this.healFlat(12);
     if (node.trait === 'QUIET_CHANNEL') this.healFlat(6);
     if (isBoss) {
       const bossId = this.d.bosses[this.d.act];
@@ -503,7 +533,7 @@ export class Run {
     const p = this.d.pending;
     if (!p || p.type !== 'mutation' || !p.options.includes(id)) return false;
     this.d.mutations.push(id);
-    if (id === 'glass_cannon') for (const m of this.d.party) { m.maxHp = Math.round(m.maxHp * 0.85); m.hp = Math.min(m.hp, m.maxHp); }
+    if (id === 'glass_cannon') this.changeMaxHp(-this.d.maxHp * 0.15);
     p.taken = id;
     const dec = this.d.bossDecisions[this.d.bossDecisions.length - 1];
     if (dec) dec.mutation = id;
@@ -513,7 +543,7 @@ export class Run {
 
   advanceAct() {
     this.d.act++;
-    for (const m of this.d.party) m.hp = Math.min(m.maxHp, m.hp + Math.round((m.maxHp - m.hp) * 0.75));
+    this.setHp(this.d.hp + (this.d.maxHp - this.d.hp) * 0.75);
     this.generateMap(this.d.act);
     this.d.pending = { type: 'story', scene: `act${this.d.act}_intro`, next: 'map' };
   }
@@ -567,7 +597,7 @@ export class Run {
     } else {
       const v = VOLATILE_OUTCOMES.find((x) => x.id === p.volatileId);
       prep = { ...v.prep };
-      if (v.partyDamagePct) for (const m of this.d.party) m.hp = Math.max(1, m.hp - Math.round(m.maxHp * v.partyDamagePct));
+      if (v.partyDamagePct) this.hurt(this.d.maxHp * v.partyDamagePct);
       if (v.rareCard) {
         const pick = this.rng('volcard', this.d.act).pick(rewardPool().filter((c) => c.rarity === 'rare'));
         this.addCard({ id: pick.id });
@@ -684,14 +714,14 @@ export class Run {
       get scrap() { return run.d.scrap; },
       gain: (n) => { run.d.scrap += n; },
       spend: (n) => { run.d.scrap = Math.max(0, run.d.scrap - n); },
-      hp: (id) => run.member(id).hp,
-      hurt: (id, n) => { const m = run.member(id); m.hp = Math.max(1, m.hp - n); },
-      hurtAll: (n) => run.d.party.forEach((m) => (m.hp = Math.max(1, m.hp - n))),
+      // event effects on the shared pool (docs/COMBAT_SPEC.md §18.6)
+      hp: () => run.d.hp,
+      hurt: (n) => run.hurt(n),
       healPct: (p) => run.healPct(p),
       healFlat: (n) => run.healFlat(n),
-      gainMaxHp: (id, n) => { const m = run.member(id); m.maxHp += n; m.hp += n; },
-      loseMaxHpRandom: (n) => { const m = rng.pick(run.d.party); m.maxHp = Math.max(10, m.maxHp - n); m.hp = Math.min(m.hp, m.maxHp); return m.id; },
-      loseMaxHpPctAll: (p) => run.d.party.forEach((m) => { m.maxHp = Math.max(10, Math.round(m.maxHp * (1 - p))); m.hp = Math.min(m.hp, m.maxHp); }),
+      gainMaxHp: (n) => { run.d.maxHp += n; run.d.hp += n; },
+      loseMaxHp: (n) => run.changeMaxHp(-n),
+      loseMaxHpPct: (p) => run.changeMaxHp(-run.d.maxHp * p),
       upgradeRandom: (n) => {
         const c = rng.sample(run.d.deck.filter((x) => !x.up), n);
         c.forEach((x) => (x.up = true));
@@ -736,10 +766,10 @@ export class Run {
   }
 
   healPct(p) {
-    for (const m of this.d.party) m.hp = Math.min(m.maxHp, m.hp + Math.round(m.maxHp * p));
+    this.d.hp = Math.min(this.d.maxHp, this.d.hp + Math.round(this.d.maxHp * p));
   }
   healFlat(n) {
-    for (const m of this.d.party) m.hp = Math.min(m.maxHp, m.hp + n);
+    this.d.hp = Math.min(this.d.maxHp, this.d.hp + Math.round(n));
   }
 
   // ───────────────────────── shop ─────────────────────────
@@ -818,9 +848,9 @@ export class Run {
     if (option === 'fortify') { this.d.prepToken = { startGuard: 12, startMomentum: 2 }; p.done = 'fortify'; return { text: 'Battle plan drafted. Your next Elite or Boss fight starts with 12 Guard and 2 Momentum.' }; }
     if (option === 'overdrive') {
       const up = this.api(this.rng('od', p.nodeId)).upgradeRandom(2);
-      for (const m of this.d.party) m.hp = Math.max(1, m.hp - Math.round(m.hp * 0.15));
+      this.hurt(this.d.hp * 0.15);
       p.done = 'overdrive';
-      return { text: { k: 'Overdrive! {cards} upgraded. Everyone pays for it in HP.', p: { cards: { cards: up } } } };
+      return { text: { k: 'Overdrive! {cards} upgraded. The party pays for it in HP.', p: { cards: { cards: up } } } };
     }
     if (option === 'tune') { p.select = { title: 'Upgrade a card', filter: 'upgradable', action: 'upgrade', then: 'tune' }; return { select: true }; }
     return null;

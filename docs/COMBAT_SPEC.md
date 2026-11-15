@@ -44,7 +44,7 @@ These are acceptance conditions for every later phase. They describe outcomes; t
 ## 4. Party and shared resources
 
 ### 4.1 Party HP (Phase 3)
-- One pool. Run start: `maxHp = 46 + 34 + 38 = 118` (the old three pools added up). Everything that changed one hero's HP or max HP now changes the pool (conversion rules in §18.6).
+- One pool. Run start: `maxHp = 46 + 34 + 38 + 12 = 130`: the old three pools added up, plus a bonus of 12 *(prototype, set in Phase 3 from measurements)* that stands in for what the per-hero rules forgave without saying so (damage past a falling hero's last HP was lost; area attacks skipped fallen heroes). Without it the slow simulated player's Act I boss wins fell from 83%/57% to 57%/57% (Scrap Tyrant / Clockwork Regent); with it they are 77%/90% (`tools/pacing.mjs 30 --act1`). Everything that changed one hero's HP or max HP now changes the pool (conversion rules in §18.6).
 - Heroes never fall. The old knockout, "DOWN" card state and stand-in rule (a standing ally playing a fallen hero's Openers) are removed.
 - Defeat: party HP reaches 0. Victory: all enemies defeated.
 - Between battles the pool persists; a battle that ends in victory leaves at least 1 HP.
@@ -62,7 +62,7 @@ These are acceptance conditions for every later phase. They describe outcomes; t
 - Shared, cap 10 (+ relics/mutations as today). No second resource is added. Economy in §11.
 
 ### 4.5 Protection (Phase 3)
-- **Cover** *(prototype 4s)*: when Hessa resolves a card tagged `guard` (or, from Phase 4, a support card with the Cover effect), she covers the party: single-target enemy hits aimed at Corvin or Pin are redirected to Hessa and use her Defense. Area attacks are not redirected. Shown as a shield badge with a countdown over Hessa; a redirected hit shows "COVER".
+- **Cover** *(prototype 4s)*: when Hessa resolves a card tagged `guard` (or, from Phase 4, a support card with the Cover effect), she covers the party: single-target enemy hits aimed at Corvin or Pin are redirected to Hessa and use her Defense. Area attacks are not redirected. Shown as a shield badge with a countdown over Hessa; a redirected hit shows "COVER". These cards end their text with **Cover.**, and holding one explains it.
 - **Braced** (Phase 4 support): +20 Defense points on one hero for a few seconds.
 - The Momentum shortcut **+GUARD** (3 Momentum → +8 Guard) stays as a party action.
 
@@ -352,7 +352,7 @@ Intents, damage and timing are unchanged by Phases 3–5 except the `lowest` tar
 | Version | Phase | Migration |
 |---|---|---|
 | 3 | today | per-hero `party[{id,hp,maxHp}]` |
-| **4** | Phase 3 | `hp = Σ hp` (a knocked-out hero counts 0), `maxHp = Σ maxHp`, `party = [{id}]`; older version-3 saves load and convert once |
+| **4** | Phase 3 | `hp = Σ hp + 12` (a knocked-out hero counts 0), `maxHp = Σ maxHp + 12` (the same bonus as a new run), `party = [{id}]`; older version-3 saves load and convert once |
 | 5 | Phase 4 | deck card ids mapped by the §18.1 table (`MIGRATE_CARDS`); unknown ids become a Medium basic attack; grafts and upgrades carried over |
 | 6 | Phase 7 | Museum gains `combos` (journal); absent field = empty |
 Battles are never saved mid-fight (a Continue restarts the encounter), so combat state needs no migration. Museum records keep their fields; new fields default safely.
@@ -361,7 +361,7 @@ Battles are never saved mid-fight (a Continue restarts the encounter), so combat
 
 | Element | Phase | Behaviour |
 |---|---|---|
-| Party HP bar | 3 | one bar under the party with Guard shown as an overlay; same bar in the run header instead of three |
+| Party HP bar | 3 | one bar at the top left of the battlefield (above the party, under the act label) with Guard after the HP and the damage enemies are winding up (after Defense, minus Guard) shown pulsing at its end; same bar in the run header instead of three |
 | Hero plate | 3 | name, Defense % shield, statuses (Weak, Cover, Braced) |
 | Incoming ring | 3 | red ring on the targeted hero; "▼ n" = damage after Defense; moves to Hessa under Cover |
 | Hand | 4 | six persistent slots, placeholder while a card is queued, next-card preview |
@@ -377,7 +377,7 @@ All new text in English and Russian; layout checked at the seven sizes of `tools
 
 | Key | Value | Phase |
 |---|---|---|
-| `PARTY_MAX_HP` | 118 (46 + 34 + 38) | 3 |
+| `PARTY_MAX_HP` | 130 (46 + 34 + 38 + `PARTY_HP_BONUS` 12) | 3 |
 | `DEFENSE` | V 0.30, S 0.15, C 0.00 | 3 |
 | `BRACED_BONUS`, `DEFENSE_CAP` | +0.20, 0.60 | 4 |
 | `COVER_SECONDS` | 4 | 3 |

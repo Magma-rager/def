@@ -73,6 +73,7 @@ export class BattleView {
     this.flashScreen = 0;
     this.flashColor = '#ffffff';
     this.dim = 0;
+    this.partyFlash = 0;
     this.combat = null;
     this.bg = null;
     this.w = 1;
@@ -96,8 +97,6 @@ export class BattleView {
     this.victoryPlayed = false;
     for (const id of ['V', 'C', 'S']) {
       const a = new Actor(id);
-      const p = combat.party.find((x) => x.id === id);
-      if (p && p.ko) { a.play('ko'); a.ct = 1; }
       this.actors[id] = a;
     }
     this.assignSlots();
@@ -211,7 +210,6 @@ export class BattleView {
           this.schedule(delay, () => this.onEnemyDie(ev));
           break;
         }
-        case 'partyKO': this.schedule(enemyImpact + 0.05, () => { this.actors[ev.who].play('ko'); this.sfx('ko'); }); break;
         case 'guard': this.onGuard(ev); break;
         case 'heal': this.onHeal(ev); break;
         case 'status': this.onStatus(ev); break;
@@ -222,7 +220,9 @@ export class BattleView {
         case 'phase': this.onPhase(ev); break;
         case 'summon': this.assignSlots(); this.onSummon(ev); break;
         case 'victory': this.schedule(0.7, () => this.onVictory()); break;
-        case 'defeat': this.schedule(0.4, () => { this.dim = 1; }); break;
+        case 'defeat': this.schedule(0.3, () => { for (const id of ['V', 'C', 'S']) this.actors[id].play('ko'); this.sfx('ko'); }); this.schedule(0.6, () => { this.dim = 1; }); break;
+        case 'cover': this.floatAt('V', tr('COVER'), '#9ec4d8', 13); break;
+        case 'covered': this.schedule(enemyImpact || 0.2, () => this.floatAt('V', tr('COVER'), '#9ec4d8', 13)); break;
         case 'momentum': if (ev.delta > 0 && ev.why === 'Perfect') this.sfx('momentum'); break;
         case 'counter': this.floatAt('V', tr('COUNTER {n}', { n: ev.amount }), '#e6c779', 11); break;
         case 'partyStatus': this.schedule(enemyImpact || 0.2, () => this.floatAt(ev.who, tr('WEAK'), '#9ec4d8', 13)); break;
@@ -253,8 +253,7 @@ export class BattleView {
   onAct(ev, impactAt) {
     const who = ev.who;
     const actor = this.actors[who];
-    const member = this.combat.party.find((p) => p.id === who);
-    if (!actor || (member && member.ko)) return;
+    if (!actor) return;
     const tgtUid = ev.target || this.combat.target;
     const [tx, ty] = this.targetX(tgtUid);
     const [hx] = this.partyPos(who);
@@ -378,6 +377,7 @@ export class BattleView {
     const k = this.unit();
     if (ev.amount > 0) {
       actor.flash = 1;
+      this.partyFlash = 1;
       if (!actor.down) actor.play(ev.amount >= 12 ? 'stagger' : 'hurt');
       this.numbers.push({ x: hx + (Math.random() - 0.5) * 20, y: hy - 70 * k, text: String(ev.amount), color: '#ff6a5a', t: 0, dur: 0.9, size: ev.amount >= 12 ? 20 : 16, vy: -36 });
       this.shake = Math.max(this.shake, ev.amount >= 12 ? 8 : 4);
@@ -413,8 +413,14 @@ export class BattleView {
   }
 
   onHeal(ev) {
-    this.sparkleOn(ev.who, '#8ed49a');
-    this.floatAt(ev.who, `+${ev.amount}`, '#8ed49a', 15);
+    if (ev.who === 'party') {
+      for (const id of ['V', 'C', 'S']) this.sparkleOn(id, '#8ed49a');
+      const { x, y, w } = this.partyBarRect();
+      this.numbers.push({ x: x + w * clamp(this.combat.hp / this.combat.maxHp, 0.1, 0.9), y: y + 22, text: `+${ev.amount}`, color: '#8ed49a', t: 0, dur: 1.0, size: 15, vy: -18 });
+    } else {
+      this.sparkleOn(ev.who, '#8ed49a');
+      this.floatAt(ev.who, `+${ev.amount}`, '#8ed49a', 15);
+    }
     this.sfx('heal');
   }
 
@@ -517,6 +523,7 @@ export class BattleView {
   // ───────────────────────── frame ─────────────────────────
   update(dt) {
     this.time += dt;
+    if (this.partyFlash > 0) this.partyFlash = Math.max(0, this.partyFlash - dt * 3);
     for (let i = this.queue.length - 1; i >= 0; i--) {
       if (this.queue[i].at <= this.time) {
         const q = this.queue[i];
@@ -1116,8 +1123,9 @@ export class BattleView {
     ctx.restore();
   }
 
-  // An enemy about to attack: a red ring under each hero it will hit and the damage it shows, so the
-  // enemy's target is never confused with the player's (gold) target.
+  // An enemy about to attack: a red ring under each hero it will hit and the damage it shows (after
+  // that hero's Defense), so the enemy's target is never confused with the player's (gold) target.
+  // Under Cover a single-target hit is shown on Hessa, who will take it.
   drawIncoming(ctx, t) {
     const c = this.combat;
     const k = this.unit();
@@ -1126,10 +1134,11 @@ export class BattleView {
       const it = e.alive && e.intent;
       if (!it || !it.dmg || e.atb < 0.55) continue;
       if (c.trait === 'BLACKOUT' && e.atb < 0.75) continue;
-      const ids = it.kind === 'aoe' ? c.party.filter((p) => !p.ko).map((p) => p.id) : it.target ? [it.target] : [];
+      const ids = it.kind === 'aoe' ? c.party.map((p) => p.id) : it.target ? [c.hitTarget(it.target).id] : [];
       for (const id of ids) {
         const cur = threat[id] || { dmg: 0, atb: 0 };
-        threat[id] = { dmg: cur.dmg + it.dmg, atb: Math.max(cur.atb, e.atb) };
+        const dmg = c.mitigate(e, it.dmg, c.member(id), {});
+        threat[id] = { dmg: cur.dmg + dmg, atb: Math.max(cur.atb, e.atb), covered: cur.covered || (it.kind !== 'aoe' && id !== it.target) };
       }
     }
     for (const [id, th] of Object.entries(threat)) {
@@ -1147,52 +1156,146 @@ export class BattleView {
     return threat;
   }
 
+  // The shared party HP bar (top left, under the act label), with Guard after the HP and the damage
+  // the enemies are winding up shown as the part of the bar it would take.
+  partyBarRect() {
+    const compact = this.h < 300;
+    const w = Math.round(Math.min(this.w * 0.3, compact ? 250 : 340));
+    return { x: Math.max(26, Math.round(this.w * 0.03)), y: compact ? 44 : 58, w, h: compact ? 10 : 13, compact };
+  }
+
+  drawPartyBar(ctx) {
+    const c = this.combat;
+    const { x, y, w, h, compact } = this.partyBarRect();
+    const fs = compact ? 11 : 13;
+    const maxHp = Math.max(1, c.maxHp);
+    const hp = clamp(c.hp / maxHp, 0, 1);
+    const guard = Math.floor(c.guard);
+    const incoming = Object.values(this.incoming || {}).reduce((a, th) => a + th.dmg, 0);
+    const loss = clamp(Math.max(0, incoming - guard) / maxHp, 0, hp);
+    const flash = this.partyFlash > 0;
+    const hpTxt = `${Math.max(0, Math.ceil(c.hp))}/${c.maxHp}`;
+    const gTxt = guard >= 1 ? `▣${guard}` : '';
+    ctx.font = `800 ${fs}px "Barlow Condensed", "Arial Narrow", sans-serif`;
+    const label = tr('PARTY');
+    const lw = ctx.measureText(label).width;
+    const hw = ctx.measureText(hpTxt).width;
+    const gw = gTxt ? ctx.measureText(gTxt).width + 6 : 0;
+    // compact: one line (label, bar, numbers); otherwise label and numbers above the bar
+    let bx = x, bw = w, ty = y - 3;
+    if (compact) { bx = x + lw + 6; bw = w - lw - 6 - hw - gw - 6; ty = y + h - 1; }
+    roundRect(ctx, x - 6, compact ? y - 4 : y - fs - 6, w + 12, compact ? h + 8 : h + fs + 11, 6);
+    ctx.fillStyle = 'rgba(20,8,14,0.72)';
+    ctx.fill();
+    ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#d8c8a8';
+    ctx.fillText(label, x, ty);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = flash || hp < 0.3 ? '#ff8a6a' : '#efe2c6';
+    ctx.fillText(hpTxt, x + w, ty);
+    if (gTxt) { ctx.fillStyle = '#9ec4d8'; ctx.fillText(gTxt, x + w - hw - 6, ty); }
+    roundRect(ctx, bx - 1, y - 1, bw + 2, h + 2, 3);
+    ctx.fillStyle = 'rgba(10,4,8,0.9)';
+    ctx.fill();
+    ctx.fillStyle = lin(ctx, 0, y, 0, y + h, hp < 0.3 ? ['#ff7a5a', '#b8362a'] : ['#8ed49a', '#4f9a5e']);
+    ctx.fillRect(bx, y, bw * (hp - loss), h);
+    if (loss > 0) {
+      const pulse = 0.55 + 0.45 * Math.sin(this.time * 9);
+      ctx.fillStyle = `rgba(255,80,58,${0.55 + 0.4 * pulse})`;
+      ctx.fillRect(bx + bw * (hp - loss), y, bw * loss, h);
+    }
+    if (guard >= 1) {
+      const g = Math.min(guard / maxHp, 1 - hp);
+      ctx.fillStyle = 'rgba(158,196,216,0.85)';
+      ctx.fillRect(bx + bw * hp, y, bw * g, h);
+      if (g < guard / maxHp) { ctx.fillStyle = 'rgba(158,196,216,0.55)'; ctx.fillRect(bx, y, bw * (guard / maxHp - g), h * 0.35); }
+    }
+    if (flash) {
+      ctx.fillStyle = `rgba(255,255,255,${0.5 * this.partyFlash})`;
+      ctx.fillRect(bx, y, bw * hp, h);
+    }
+  }
+
   drawPartyHud(ctx, t) {
     const c = this.combat;
     const compact = this.h < 300;
     const k = this.unit();
+    this.drawPartyBar(ctx);
+    const fs = compact ? 10 : 12;
     for (const p of c.party) {
       const [hx, hy] = this.partyPos(p.id);
-      const bw = compact ? 54 : Math.max(70, 64 * k);
-      const bx = hx - bw / 2, by = hy + (compact ? 5 : 8);
-      const fs = compact ? 9 : 11;
-      roundRect(ctx, bx - 1, by - 1, bw + 2, (compact ? 5 : 7) + 2, 2);
-      ctx.fillStyle = 'rgba(20,8,14,0.85)';
-      ctx.fill();
-      const hp = clamp(p.hp / p.maxHp, 0, 1);
-      ctx.fillStyle = hp < 0.3 ? '#e8644a' : '#7ec48a';
-      ctx.fillRect(bx, by, bw * hp, compact ? 5 : 7);
+      const by = hy + (compact ? 6 : 9);
+      // hero plate: name and Defense
       ctx.font = `700 ${fs}px "Barlow Condensed", sans-serif`;
+      const name = ownerName(p.id);
+      const defTxt = `${Math.round(c.defenseOf(p) * 100)}%`;
+      const nw = ctx.measureText(name).width;
+      const dw = ctx.measureText(defTxt).width;
+      const icon = fs + 1;
+      const pw = nw + 6 + icon + 2 + dw + 12;
+      const px = hx - pw / 2;
+      roundRect(ctx, px, by - 1, pw, fs + 5, 4);
+      ctx.fillStyle = 'rgba(20,8,14,0.78)';
+      ctx.fill();
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillStyle = OWNER_COLORS[p.id];
-      ctx.fillText(p.ko ? `${ownerName(p.id)} · ${tr('KO')}` : ownerName(p.id), bx, by + (compact ? 6 : 9));
-      ctx.textAlign = 'right';
-      ctx.fillStyle = '#efe2c6';
-      ctx.fillText(`${Math.ceil(p.hp)}/${p.maxHp}`, bx + bw, by + (compact ? 6 : 9));
+      ctx.fillText(name, px + 6, by + 1);
+      const braced = p.st.braced > c.t;
+      const dcol = braced ? '#ffd36a' : c.defenseOf(p) > 0 ? '#9ec4d8' : '#8a7f78';
+      drawIcon(ctx, 'shield', px + 6 + nw + 6 + icon / 2, by + 1 + fs / 2, icon, dcol);
+      ctx.fillStyle = dcol;
+      ctx.fillText(defTxt, px + 6 + nw + 6 + icon + 2, by + 1);
       const th = this.incoming && this.incoming[p.id];
-      if (!p.ko && th) {
-        // incoming damage, shown by the hero who takes it
+      if (th) {
+        // incoming damage after Defense, shown by the hero who takes it
         const txt = `▼ ${th.dmg}`;
-        ctx.font = `900 ${fs + 1}px "Big Shoulders Display", Impact, sans-serif`;
+        ctx.font = `900 ${fs + 2}px "Big Shoulders Display", Impact, sans-serif`;
         ctx.textAlign = 'left';
-        ctx.textBaseline = 'bottom';
+        ctx.textBaseline = 'top';
         ctx.lineWidth = 3;
         ctx.strokeStyle = '#1a0a10';
-        ctx.strokeText(txt, bx + bw + 4, by + 8);
+        ctx.strokeText(txt, px + pw + 4, by);
         ctx.fillStyle = '#ff6a4a';
-        ctx.fillText(txt, bx + bw + 4, by + 8);
+        ctx.fillText(txt, px + pw + 4, by);
         ctx.font = `700 ${fs}px "Barlow Condensed", sans-serif`;
-        ctx.textBaseline = 'top';
       }
-      if (!p.ko && p.st.weak && p.st.weak > c.t) {
+      if (p.st.weak && p.st.weak > c.t) {
         const left = p.st.weak - c.t;
-        drawIcon(ctx, 'down', bx - 9, by + 3, 12, '#9ec4d8');
         ctx.textAlign = 'right';
+        ctx.textBaseline = 'top';
         ctx.fillStyle = '#9ec4d8';
-        ctx.fillText(`${tr('WEAK')} ${tr('{n}s', { n: Math.round(left) })}`, bx - 16, by + (compact ? 6 : 9));
+        const wt = `${tr('WEAK')} ${tr('{n}s', { n: Math.round(left) })}`;
+        ctx.fillText(wt, px - 4, by + 1);
+        drawIcon(ctx, 'down', px - 4 - ctx.measureText(wt).width - 7, by + 1 + fs / 2, 11, '#9ec4d8');
       }
     }
-    void t;
+    // Cover: a shield badge with a countdown over Hessa
+    if (c.coverActive()) {
+      const [hx, hy] = this.partyPos('V');
+      const left = c.coverUntil - c.t;
+      const txt = `${tr('COVER')} ${tr('{n}s', { n: Math.ceil(left) })}`;
+      ctx.font = `800 ${fs + 1}px "Barlow Condensed", "Arial Narrow", sans-serif`;
+      const tw = ctx.measureText(txt).width;
+      const bw = tw + fs + 16;
+      const bh = fs + 8;
+      const bx = hx - bw / 2, byy = hy - 122 * k * LOOKS.V.scale - bh;
+      const fade = left < 1 ? 0.5 + 0.5 * Math.sin(t * 14) : 1;
+      ctx.save();
+      ctx.globalAlpha = fade;
+      roundRect(ctx, bx, byy, bw, bh, bh / 2);
+      ctx.fillStyle = 'rgba(24,44,60,0.88)';
+      ctx.fill();
+      ctx.strokeStyle = '#9ec4d8';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      drawIcon(ctx, 'shield', bx + 6 + fs / 2, byy + bh / 2, fs + 1, '#9ec4d8');
+      ctx.fillStyle = '#e4f1f8';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(txt, bx + fs + 10, byy + bh / 2 + 1);
+      ctx.restore();
+    }
   }
 }
