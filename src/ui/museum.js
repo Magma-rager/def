@@ -5,7 +5,7 @@ import { RELICS, RELIC_IDS, STARTER_OPTIONS } from '../data/relics.js';
 import { CARD_LIST } from '../data/cards.js';
 import { drawEnemyStill } from './scene.js';
 import { unlocks } from '../engine/save.js';
-import { t, lang, archName, enemyName, enemyLore, relicName, relicText, starterHint, mutName, cardName, roleName, ownerName, rarityName, tierName } from '../i18n/index.js';
+import { t, lang, archName, enemyName, enemyLore, relicName, relicText, starterHint, mutName, cardName, categoryName, ownerName, rarityName, tierName } from '../i18n/index.js';
 
 export function museumModal(app) {
   const m = app.meta;
@@ -64,9 +64,10 @@ export function museumModal(app) {
     } else {
       const grid = h('div', { class: 'relic-grid' });
       for (const c of CARD_LIST) {
-        if (c.role === 'junk') continue;
+        if (c.category === 'junk' || c.p4 === 'withheld') continue;
         const f = m.cardsSeen.includes(c.id);
-        grid.append(h('div', { class: `relic-cell ${f ? '' : 'unseen'}` }, h('b', {}, f ? `${cardName(c.id)} · ${c.rank}${c.variant}` : '???'), h('span', {}, f ? `${roleName(c.role)} · ${ownerName(c.owner)} · ${rarityName(c.rarity)}` : roleName(c.role))));
+        const head = c.category === 'support' ? cardName(c.id) : `${cardName(c.id)} · ${c.rank}${c.variant}`;
+        grid.append(h('div', { class: `relic-cell ${f ? '' : 'unseen'}` }, h('b', {}, f ? head : '???'), h('span', {}, f ? [categoryName(c.category), c.owner ? ownerName(c.owner) : '', rarityName(c.rarity)].filter(Boolean).join(' · ') : categoryName(c.category))));
       }
       body.append(grid);
     }

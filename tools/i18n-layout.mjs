@@ -238,7 +238,7 @@ for (const [W, H] of VIEWPORTS) {
     c.momentum = 9;
     const u = c.hand.find((x) => x && c.check(x).ok);
     if (u) bs.doPlay(u);
-    const r = c.hand.find((x) => x && !c.check(x).ok && c.roleOf(x) !== 'junk');
+    const r = c.hand.find((x) => x && !c.check(x).ok && c.categoryOf(x) !== 'junk');
     if (r) bs.doStash(r);
   });
   await check('battle-combo', true);

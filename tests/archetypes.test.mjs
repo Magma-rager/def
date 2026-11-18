@@ -45,45 +45,54 @@ test('Suit switching: Crosses grant Momentum and power Crosscut', () => {
   assert.equal(c.combo.variant, 'A');
 });
 
-test('Relay Echo: Echo Splice repeats the previous card on the first Relay', () => {
-  const run = (relics) => {
-    const c = mk(['scrapline', 'rethread', 'scrapfall'], { relics });
+test('Echo: Feedback Loop repeats the previous card (Corvin arte, rank 5)', () => {
+  const run = (echo) => {
+    const c = mk(['scrapline', 'piston_strike', echo ? 'feedback_loop' : 'thermal_lance']);
+    c.momentum = 3;
+    c.selectHero('C');
+    play(c, 'scrapline');
+    play(c, 'piston_strike');
     const h0 = hp(c);
-    play(c, 'scrapline'); // Pin
-    play(c, 'rethread'); // Corvin -> relay
-    return h0 - hp(c);
+    play(c, echo ? 'feedback_loop' : 'thermal_lance');
+    return { dmg: h0 - hp(c), echo: c.drainEvents().some((e) => e.type === 'echo') };
   };
-  assert.ok(run(['echo_splice']) > run([]), 'echo adds damage');
+  const r = run(true);
+  assert.ok(r.echo);
+  assert.ok(r.dmg >= 9, `echoed ${r.dmg}`);
 });
 
-test('Relay Echo: Dead Drop stores an echo released on Cash Out', () => {
-  const run = (useDrop) => {
-    const c = mk(['rivet_jab', useDrop ? 'dead_drop' : 'gear_swap', 'scrapfall']);
-    play(c, 'rivet_jab');
-    play(c, useDrop ? 'dead_drop' : 'gear_swap');
-    const h0 = hp(c);
-    c.cashOut();
-    return h0 - hp(c);
-  };
-  assert.ok(run(true) > run(false) - 4, 'stored echo released');
+test('Dead Drop stores an echo released when the combo ends in a Perfect', () => {
+  const c = mk(['piston_strike', 'dead_drop', 'scrapline']);
+  c.selectHero('V');
+  play(c, 'piston_strike'); // +2
+  play(c, 'dead_drop'); // the last arte: the combo ends as a Perfect and the echo fires
+  assert.equal(c.history[0].type, 'perfect');
+  const ev = c.drainEvents();
+  assert.ok(ev.some((e) => e.type === 'echo' && e.id === 'piston_strike'), 'Echo of the strongest card');
+  assert.ok(5000 - hp(c) > 10 + 5, 'Piston Strike and its echo both landed');
 });
 
-test('Momentum Burst: Pressure Valve converts Momentum into damage', () => {
-  const c = mk(['cold_start', 'pressure_valve', 'scrapfall']);
+test('Momentum Burst: Overpressure spends what is left after its cost', () => {
+  const c = mk(['cold_start', 'overpressure', 'scrapfall']);
   c.momentum = 8;
-  play(c, 'cold_start'); // 1A, no gain because Momentum is not 0
+  c.selectHero('C');
+  play(c, 'cold_start'); // Weak +1 → 9 (no Cold Start bonus: Momentum was not 0)
   const h0 = hp(c);
-  play(c, 'pressure_valve'); // 6A climb, spends 8
-  assert.equal(c.momentum, 0);
-  assert.ok(h0 - hp(c) >= 24);
+  play(c, 'overpressure'); // costs 4, spends the other 5: 5 × 5
+  assert.ok(h0 - hp(c) >= 25, `${h0 - hp(c)}`);
+  assert.equal(c.history[0].type, 'perfect');
+  assert.equal(c.momentum, 3, 'emptied, then +1 for the Cross (A → B, paid on resolution) and +2 for the Perfect');
 });
 
 test('Flow Extension: Overclock adds Flow within the combo cap', () => {
-  const c = mk(['hotwire', 'overclock', 'scrapfall']);
+  const c = mk(['hotwire', 'overclock', 'last_word']);
+  c.momentum = 6;
+  c.selectHero('C');
   play(c, 'hotwire');
   const d0 = c.combo.deadline;
-  play(c, 'overclock');
-  assert.ok(c.combo.deadline - d0 > 0.5);
+  play(c, 'overclock'); // Last Word is still affordable: the combo stays open
+  assert.ok(c.combo);
+  assert.ok(c.combo.deadline - d0 > 0.9);
   assert.ok(c.combo.deadline <= c.flowCap() + 1e-9);
 });
 
@@ -112,6 +121,7 @@ test('Reserve Strategy: Hidden Ace triples from Reserve', () => {
 
 test('Guard & Counter: Counter strikes back when an enemy attacks', () => {
   const c = mk(['brace_up', 'rethread', 'scrapfall']);
+  c.momentum = 1; // Brace Up costs 1
   play(c, 'brace_up');
   assert.ok(c.counter > 0);
   const e = c.enemies[0];
@@ -132,27 +142,47 @@ test('Cash Out Specialist: Tally Mark boosts the payout per card', () => {
 });
 
 test('Interference Exploitation: Breach Payload scales with interference endured', () => {
-  const c = mk(['scrapline', 'step_up', 'breach_payload', 'rethread']);
+  const c = mk(['scrapline', 'step_up', 'breach_payload', 'tripwire']);
   const e = c.enemies[0];
   for (let i = 0; i < 4; i++) {
     c.lockCards(e, 1);
     for (const u of Object.keys(c.locks)) c.unlock(u);
   }
   assert.ok(c.stats.interference >= 4);
+  c.momentum = 1;
+  c.selectHero('S');
   play(c, 'scrapline');
   play(c, 'step_up');
   const h0 = hp(c);
   play(c, 'breach_payload');
-  assert.ok(h0 - hp(c) >= 6 + 5 * 4);
+  assert.ok(h0 - hp(c) >= 8 + 5 * 4);
 });
 
-test('Mutations change rules: Relay Resonance echoes every relay', () => {
+test('Mutations change rules: Duality Engine makes Crosses pay more', () => {
   const run = (mut) => {
-    const c = mk(['scrapline', 'rethread', 'scrapfall'], { mutations: mut });
-    const h0 = hp(c);
-    play(c, 'scrapline');
-    play(c, 'rethread');
-    return h0 - hp(c);
+    const c = mk(['scrapline', 'hotwire', 'scrapfall'], { mutations: mut });
+    play(c, 'scrapline'); // A
+    const h0 = hp(c), m0 = c.momentum;
+    play(c, 'hotwire'); // B: a Cross
+    return { dmg: h0 - hp(c), mom: c.momentum - m0 };
   };
-  assert.ok(run(['relay_resonance']) > run([]));
+  const base = run([]), duality = run(['duality_engine']);
+  assert.ok(duality.dmg >= base.dmg + 4);
+  assert.equal(duality.mom, base.mom + 1);
 });
+
+test('Relay content waits for Phase 5: never offered, owned copies stay harmless', async () => {
+  const { rewardPool, graftPool, CARDS } = await import('../src/data/cards.js');
+  const { relicPool } = await import('../src/data/relics.js');
+  const { mutationPool } = await import('../src/data/mutations.js');
+  for (const id of ['echo_splice', 'relay_harness']) assert.ok(!relicPool().includes(id), id);
+  assert.ok(!mutationPool().includes('relay_resonance'));
+  assert.ok(!graftPool().includes('echoing'));
+  for (const c of rewardPool()) assert.ok(!['mirror_wire', 'hand_off', 'relay_baton', 'chorus_break', 'grand_relay', 'pressure_valve'].includes(c.id), c.id);
+  const c = mk(['scrapline', 'hotwire', 'scrapfall'], { relics: ['echo_splice', 'relay_harness'], mutations: ['relay_resonance'] });
+  play(c, 'scrapline');
+  play(c, 'hotwire');
+  assert.ok(!c.drainEvents().some((e) => e.type === 'echo'), 'no Relay, no echo');
+  void CARDS;
+});
+

@@ -6,7 +6,7 @@
 // or typed ids ({ card }, { relic }, { hero }, ...). Translations live in one file per language
 // (src/i18n/ru.js) and are looked up here. Game logic never imports this module, so combat, balance
 // and save data are identical in every language.
-import { CARDS, GRAFTS, ROLE_NAMES, OWNER_NAMES, ARCHETYPES } from '../data/cards.js';
+import { CARDS, GRAFTS, CATEGORY_NAMES, STRENGTH_NAMES, OWNER_NAMES, ARCHETYPES } from '../data/cards.js';
 import { RELICS, STARTER_OPTIONS } from '../data/relics.js';
 import { ENEMIES } from '../data/enemies.js';
 import { EVENT_MAP } from '../data/events.js';
@@ -127,8 +127,10 @@ export function msg(m) {
 // ───────────────────────── content ─────────────────────────
 export const cardName = (id) => (pick('cards', id) || {}).name || CARDS[id].name;
 export const cardTemplate = (id) => (pick('cards', id) || {}).text || CARDS[id].text;
-export const roleName = (role) => pick('roles', role) || ROLE_NAMES[role];
-export const rolePlural = (role) => pick('rolesPlural', role) || `${ROLE_NAMES[role]}s`;
+export const categoryName = (cat) => pick('categories', cat) || CATEGORY_NAMES[cat];
+export const categoryPlural = (cat) => pick('categoriesPlural', cat) || `${CATEGORY_NAMES[cat]}s`;
+// basic attack strength by printed rank: 1 Weak, 2 Medium, 3 Strong
+export const strengthName = (rank) => pick('strengths', rank) || STRENGTH_NAMES[rank] || '';
 export const ownerName = (o) => pick('owners', o) || OWNER_NAMES[o] || '';
 export const ownerInitial = (o) => pick('initials', o) || o;
 export const heroRole = (o) => pick('heroRoles', o) || { V: 'Vanguard', C: 'Channeler', S: 'Striker' }[o];

@@ -1,11 +1,13 @@
 // Combat pacing measurements for the opening Act I encounters, through the real engine.
-// Two simulated players: a "learner" (reads a new hand for ~2s, ~1.3s per card, occasionally taps an
-// illegal card, never uses Momentum or Churn tricks) and the faster heuristic "regular" bot.
+// Two simulated players, both driven by tools/lib/bot.mjs: a "learner" (reads a new hand for ~2s,
+// ~1.3s per card, occasionally taps an illegal card, never uses the Momentum shortcuts, Churns only
+// Glitch, picks the first hero showing a ★) and the faster "regular" player who uses every tool.
 // Reports enemy action frequency, incoming damage, Flow timeouts, combo length and survival.
 // Usage: node tools/pacing.mjs [battles per encounter = 40] [--json]
 import { Run } from '../src/engine/run.js';
 import { Combat } from '../src/engine/combat.js';
 import { RNG } from '../src/core/rng.js';
+import { decide, perform } from './lib/bot.mjs';
 
 const N = +(process.argv[2] || 40);
 const JSON_OUT = process.argv.includes('--json');
@@ -34,11 +36,11 @@ if (process.argv.includes('--act1')) {
 }
 
 const PLAYERS = {
-  learner: { read: 2.0, card: 1.3, misTap: 0.08, tools: false },
-  regular: { read: 0.55, card: 0.55, misTap: 0, tools: true },
+  learner: { read: 2.0, card: 1.3, misTap: 0.08, profile: 'learner' },
+  regular: { read: 0.55, card: 0.55, misTap: 0, profile: 'regular' },
 };
 // --pace=2.5 adds a slower reader (seconds per card) to study where combos stop being buildable
-for (const a of process.argv) if (a.startsWith('--pace=')) for (const v of a.slice(7).split(',')) PLAYERS[`slow${v}`] = { read: 2.5, card: +v, misTap: 0.08, tools: false };
+for (const a of process.argv) if (a.startsWith('--pace=')) for (const v of a.slice(7).split(',')) PLAYERS[`slow${v}`] = { read: 2.5, card: +v, misTap: 0.08, profile: 'learner' };
 if (process.argv.includes('--only-slow')) { delete PLAYERS.learner; delete PLAYERS.regular; }
 
 function setupFor(enc, seed) {
@@ -95,40 +97,16 @@ function play(enc, player, seed) {
     think -= dt;
     if (think > 0) continue;
     think = P.card * (0.75 + rng.next() * 0.5);
-    const legal = [...c.hand, ...c.reserve].filter((u) => u && c.check(u).ok);
     if (P.misTap && c.phase === 'ACTIVE' && rng.chance(P.misTap)) {
-      const bad = c.hand.find((u) => u && !c.check(u).ok && c.roleOf(u) !== 'junk');
+      const bad = c.hand.find((u) => u && !c.check(u).ok && c.categoryOf(u) !== 'junk');
       if (bad) { c.playCard(bad); continue; }
     }
-    if (P.tools) {
-      const danger = c.aliveEnemies().some((e) => e.atb > 0.8 && e.intent && (e.intent.kind === 'atk' || e.intent.kind === 'aoe'));
-      if (danger && c.guard < 6 && c.momentum >= 3 && rng.chance(0.7)) { c.spendMomentumGuard(); continue; }
-    }
-    if (c.phase === 'PRE') {
-      if (!legal.length) {
-        const junk = c.hand.find((u) => u && c.roleOf(u) === 'junk');
-        if (junk) c.churnCard(junk);
-        continue;
-      }
-      legal.sort((a, b) => c.effRank(a) - c.effRank(b));
-      c.playCard(legal[0]);
-      m.cards++;
-    } else if (c.phase === 'ACTIVE') {
-      const closers = legal.filter((u) => c.roleOf(u) === 'close');
-      const convs = legal.filter((u) => c.roleOf(u) === 'conv');
-      const len = c.combo.cards.length;
-      if (convs.length && (len < 4 || !closers.length)) {
-        convs.sort((a, b) => c.effRank(a) - c.effRank(b));
-        c.playCard(convs[0]); m.cards++;
-      } else if (closers.length) {
-        closers.sort((a, b) => c.effRank(b) - c.effRank(a));
-        c.playCard(closers[0]); m.cards++;
-      } else if (c.canCashOut()) c.cashOut();
-      else if (P.tools) {
-        const bad = c.hand.find((u) => u && !c.check(u).ok && !c.isLocked(u));
-        if (bad && c.churn.charges > 0) c.churnCard(bad);
-      }
-    }
+    const a = decide(c, { profile: P.profile, rng: () => rng.next() });
+    // the selector and Finish/Cash Out are quick taps; reading a card is what takes time
+    if (a.type === 'select' || a.type === 'finish') think = Math.min(think, 0.35);
+    const res = perform(c, a);
+    if (a.type === 'play' && res && res.ok) m.cards++;
+    if (a.type === 'wait') think = 0.15;
   }
   const hp1 = Math.max(0, c.hp);
   const gaps = [];

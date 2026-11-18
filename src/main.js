@@ -5,7 +5,7 @@ import { AudioEngine } from './audio/audio.js';
 import { CARDS } from './data/cards.js';
 import { RELICS } from './data/relics.js';
 import {
-  t, msg, LANGS, lang, setLang, detectLang, block, line, sceneLines as sceneText, cardName, rolePlural, relicName, relicText,
+  t, msg, LANGS, lang, setLang, detectLang, block, line, sceneLines as sceneText, cardName, categoryPlural, relicName, relicText,
   rarityName, graftName, graftText, heroRole, ownerName,
 } from './i18n/index.js';
 import { ICON_PATHS } from './render/icons.js';
@@ -20,6 +20,13 @@ const RELIC_ICON = {
   dial: 'eye', prism: 'prism', box: 'chest', gear: 'summon', flare: 'star', flame: 'flame', fork: 'wave', star: 'star', cross: 'heal',
   spring: 'wave', hook: 'hook', magnet: 'coin', skull: 'skull', jar: 'glitch', drum: 'burst',
 };
+
+// Deck order: basic attacks, artes (by hero), support, Glitch; then rank.
+const CAT_ORDER = { basic: 0, arte: 1, support: 2, junk: 3 };
+function sortDeck(run) {
+  return run.d.deck.slice().sort((a, b) => CAT_ORDER[CARDS[a.id].category] - CAT_ORDER[CARDS[b.id].category]
+    || String(CARDS[a.id].owner || '').localeCompare(String(CARDS[b.id].owner || '')) || run.effRank(a) - run.effRank(b));
+}
 
 class App {
   constructor(root) {
@@ -178,8 +185,9 @@ class App {
     } else S.newRunDialog(this);
   }
 
-  startRun(starterRelic) {
-    const seed = (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0;
+  // `seedOverride` is for repeatable test runs (tools/accept4.mjs); the game always picks a random seed
+  startRun(starterRelic, seedOverride) {
+    const seed = seedOverride !== undefined ? seedOverride >>> 0 : (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0;
     this.run = Run.create({ seed, starterRelic, tutorial: !this.meta.tutorialDone });
     if (this.meta.totalRuns > 0 && this.meta.tutorialDone) this.run.d.pending = { type: 'story', scene: 'intro_return', next: 'map' };
     this.save();
@@ -407,15 +415,14 @@ class App {
   viewDeck() {
     const run = this.run;
     if (!run) return;
-    const order = { open: 0, conv: 1, close: 2 };
     const grid = h('div', { class: 'deck-grid' });
-    const cards = run.d.deck.slice().sort((a, b) => order[CARDS[a.id].role] - order[CARDS[b.id].role] || run.effRank(a) - run.effRank(b));
+    const cards = sortDeck(run);
     for (const c of cards) {
       const el = cardEl(c, { static: true });
       el.addEventListener('click', () => this.cardDetail(c));
       grid.append(el);
     }
-    const counts = ['open', 'conv', 'close'].map((r) => `${rolePlural(r)} ${run.roleCount(r)}`).join(' · ');
+    const counts = ['basic', 'arte', 'support'].map((k) => `${categoryPlural(k)} ${run.categoryCount(k)}`).join(' · ');
     const close = this.modal(h('div', { class: 'panel wide' }, h('h2', {}, t('Deck ({n})', { n: run.d.deck.length })), h('p', { class: 'dim' }, counts), grid, h('div', { class: 'row-btns end' }, btn(t('Close'), () => close(), 'primary'))), { dismiss: true });
   }
 
@@ -428,8 +435,7 @@ class App {
       const ok = btn(confirm, () => { done = true; close(); resolve(sel); }, 'primary');
       ok.disabled = true;
       let done = false;
-      const order = { open: 0, conv: 1, close: 2 };
-      const cards = run.d.deck.slice().sort((a, b) => order[CARDS[a.id].role] - order[CARDS[b.id].role] || run.effRank(a) - run.effRank(b));
+      const cards = sortDeck(run);
       for (const c of cards) {
         const can = filter(c);
         const el = cardEl(c, { static: true });
@@ -515,17 +521,17 @@ class App {
     const sec = (key, title, body) => { const [tl, bd] = block('howto', key, [title, body]); return h('div', { class: 'htp-sec' }, h('h3', {}, tl), h('div', { html: bd })); };
     const close = this.modal(h('div', { class: 'panel wide htp' },
       h('h2', {}, t('How to Relay')),
-      sec('hand', 'The hand', 'Your three heroes — <b>Hessa</b> (Vanguard), <b>Corvin</b> (Channeler) and <b>Pin</b> (Striker) — share one deck and one hand of <b>six cards</b>. Enemies act in real time: their ATB bar fills and they execute the intent shown in their bubble. Two enemies never act in the same moment.'),
+      sec('hand', 'The hand', 'Your three heroes — <b>Hessa</b> (Vanguard), <b>Corvin</b> (Channeler) and <b>Pin</b> (Striker) — share one deck and one hand of <b>six cards</b>. The hand stays as it is: only the card you play (or Churn) is replaced, from the top of the deck. <b>NEXT CARD</b>, beside the hand, is the card you will draw next. Enemies act in real time: their ATB bar fills and they execute the intent shown in their bubble. Two enemies never act in the same moment.'),
       sec('target', 'Targets', 'Your attacks hit the enemy in <b>gold brackets</b>, labeled TARGET; its name is also on the ⌖ button above your hand. <b>Tap an enemy</b> (or that button) to switch. If your target falls, the next enemy is chosen and labeled NEW TARGET. A <b>red ring</b> under a hero, with ▼ and a number by their name, shows who an enemy is about to hit and for how much.'),
       sec('party', 'Party HP, Defense, Cover', 'The three heroes share <b>one HP bar</b> (top left); the battle is lost only when it reaches 0, and no hero is ever knocked out. Each hero has a <b>Defense</b> % (the shield on their name plate) that reduces hits aimed at them: <b>Hessa 30%</b>, <b>Pin 15%</b>, <b>Corvin 0%</b>. Shared <b>Guard</b> absorbs what is left. An attack on every hero is reduced by each one\'s own Defense, and Guard absorbs it once. When Hessa plays a <b>Guard</b> card she <b>covers</b> the party for 4s: hits aimed at Corvin or Pin land on her instead (the COVER badge over her shows the time left).'),
-      sec('sequence', 'Opener → Converter → Closer', 'Tap an <b>Opener ▶</b> to start a combo. The hand switches to <b>Converters ⟳</b> and <b>Closers ■</b>. A Closer needs at least one Converter before it, and ends the combo with a payoff based on everything played.'),
-      sec('ranks', 'Ranks & suits', 'Every card must have a <b>higher rank</b> than the last. Same suit (A→A, B→B): any higher rank (exactly +1 is a <b>Step</b>). Switching suit A↔B is a <b>Cross</b>: exactly +1, and it grants Momentum. <b>EX</b> cards fit with anything. Converters can <b>Rewind</b> the rank or change the suit.'),
-      sec('flow', 'Flow', 'The Opener starts <b>5s of Flow</b>, which <b>holds for a moment</b> while you read your new hand. Each valid card refunds 1s (up to 5s per combo), and Flow holds again while that card plays out, so there is time to look before each card. A combo lasts at most 14s, not counting the holds. If Flow runs out the combo is <b>Dropped</b> (−2 Momentum). Wrong cards cause a <b>Stumble</b> (−0.4s, −1 Momentum; three stumbles drop the combo). After every combo comes a short <b>breather</b>: enemies wait while your hand refills.'),
-      sec('relay', 'Relay & Echo', 'Playing a card owned by a different hero is a <b>Relay</b>: that hero takes over the action (+1 Momentum). Echo effects repeat earlier cards\' damage, Guard, healing and statuses at reduced power (never Flow, Momentum, rank changes or other Echoes).'),
-      sec('momentum', 'Momentum, Guard, Cash Out', '<b>Momentum</b> comes from Relays, Crosses, Perfect combos and cards. Spend 3 for <b>+1.5s Flow</b> (within the combo cap) or <b>+8 Guard</b>. Guard is shared by the party and fades slowly. <b>CASH OUT</b> ends a combo of 2+ cards immediately for a payout (+25% if 2.5s+ Flow is left) — but gives up the Perfect bonus.'),
-      sec('churn', 'Churn & Reserve', '<b>Swipe a card down</b> to Churn it (uses a charge; charges refill over time; outside a combo it also nudges every enemy\'s ATB forward, and their bars flash). <b>Swipe up</b> to stash it in Reserve (2 slots); Reserve cards stay through combo phases and can be played when legal. <b>Hold</b> a card to read it in full; the battle pauses while you read.'),
+      sec('sequence', 'Basic attacks, artes, support', '<b>Basic attacks ◆</b> (Weak 1, Medium 2, Strong 3) belong to no one: the hero you select with the buttons above the hand (or by tapping a hero) performs them. A combo starts with a basic attack. <b>Artes ★</b> (ranks 4–6) belong to one hero: only that hero can use them, after at least one basic attack in the same combo, and they cost Momentum (the number in the card\'s corner). <b>Support ✚</b> cards (healing, Guard, utility) have no rank and can be played any time, in or out of a combo. A ★ on a hero button means that hero has an arte in hand.'),
+      sec('ranks', 'Ranks & suits', 'Within a combo every attack needs a <b>higher rank</b> than the last; skipping ranks is fine (Weak 1 → Strong 3 → arte 5). Suits never block a card. Exactly +1 rank is a <b>Step</b>; a different suit from the last card is a <b>Cross</b> (+1 Momentum); one card can be both. <b>EX</b> differs from A and B.'),
+      sec('flow', 'Flow', 'The first attack starts <b>5s of Flow</b>, which <b>holds for a moment</b> while you choose the next card. Each valid card refunds 1s (up to 5s per combo), and Flow holds again while that card plays out. A combo lasts at most 14s, not counting the holds. If Flow runs out after a basic attack the combo is <b>Dropped</b> (−2 Momentum); after an arte it counts as a Perfect. Wrong cards cause a <b>Stumble</b> (−0.4s, −1 Momentum; three stumbles end the combo). After every combo comes a short <b>breather</b>: enemies wait.'),
+      sec('relay', 'Heroes & Echo', 'One hero performs a whole combo; select another hero for the next one. Echo effects repeat earlier cards\' damage, Guard, healing and statuses at reduced power (never Flow, Momentum, rank changes or other Echoes).'),
+      sec('momentum', 'Momentum, Guard, Finish, Cash Out', '<b>Momentum</b> comes from basic attacks (Weak and Medium +1, Strong +2), Crosses, Perfect combos and cards. It pays for artes and some support, or buys <b>+1.5s Flow</b> or <b>+8 Guard</b> (3 each). Guard is shared by the party and fades slowly. Ending a combo with an arte is a <b>PERFECT</b> (+2 Momentum, +1 Churn charge): after an arte the button reads <b>FINISH</b>, and the combo also finishes by itself when no higher arte is playable. <b>CASH OUT</b> ends a combo of 2+ cards that ends with a basic attack for a payout (+25% if 2.5s+ Flow is left).'),
+      sec('churn', 'Churn & Reserve', '<b>Swipe a card down</b> to Churn it (uses a charge; charges refill over time; outside a combo it also nudges every enemy\'s ATB forward, and their bars flash). <b>Swipe up</b> to stash it in Reserve (2 slots); Reserve cards can be played whenever they are legal. If nothing in your hand can be played before a combo, Churn is <b>free</b>. <b>Hold</b> a card to read it in full; the battle pauses while you read.'),
       sec('interference', 'Interference', 'Enemies Lock cards (3s), Scramble ranks/suits, jam slots, snare Churn, latch your Reserve and steal Flow. Every effect shows its source and timer and always expires.'),
-      sec('keyboard', 'Keyboard', '<b>1–6</b> play · <b>Shift+1–6</b> Churn · <b>Alt+1–6</b> Reserve · <b>7/8</b> play Reserve · <b>Space</b> Cash Out · <b>F</b> +Flow · <b>G</b> +Guard · <b>Tab</b> cycle target · <b>Esc</b> pause'),
+      sec('keyboard', 'Keyboard', '<b>Q / W / E</b> select Hessa / Corvin / Pin · <b>1–6</b> play · <b>Shift+1–6</b> Churn · <b>Alt+1–6</b> Reserve · <b>7/8</b> play Reserve · <b>Space</b> Finish / Cash Out · <b>F</b> +Flow · <b>G</b> +Guard · <b>Tab</b> cycle target · <b>Esc</b> pause'),
       h('div', { class: 'row-btns end' }, btn(t('Close'), () => close(), 'primary'))), { dismiss: true });
   }
 }

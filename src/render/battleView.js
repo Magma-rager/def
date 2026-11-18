@@ -176,6 +176,20 @@ export class BattleView {
     return best;
   }
 
+  // A hero under the pointer (tap a hero to select who attacks next).
+  heroHitTest(x, y) {
+    const k = this.unit();
+    let best = null, bestD = Infinity;
+    for (const id of ['V', 'C', 'S']) {
+      const [hx, hy] = this.partyPos(id);
+      const s = k * LOOKS[id].scale;
+      if (x < hx - 34 * s - 8 || x > hx + 34 * s + 8 || y < hy - 115 * s || y > hy + 24) continue;
+      const d = Math.abs(x - hx);
+      if (d < bestD) { bestD = d; best = id; }
+    }
+    return best;
+  }
+
   schedule(delay, fn) {
     this.queue.push({ at: this.time + Math.max(0, delay), fn });
   }
@@ -225,7 +239,11 @@ export class BattleView {
         case 'covered': this.schedule(enemyImpact || 0.2, () => this.floatAt('V', tr('COVER'), '#9ec4d8', 13)); break;
         case 'momentum': if (ev.delta > 0 && ev.why === 'Perfect') this.sfx('momentum'); break;
         case 'counter': this.floatAt('V', tr('COUNTER {n}', { n: ev.amount }), '#e6c779', 11); break;
-        case 'partyStatus': this.schedule(enemyImpact || 0.2, () => this.floatAt(ev.who, tr('WEAK'), '#9ec4d8', 13)); break;
+        case 'partyStatus':
+          if (ev.kind === 'braced') { this.floatAt(ev.who, tr('BRACED +20%'), '#ffd36a', 13); this.sparkleOn(ev.who, '#ffd36a'); }
+          else this.schedule(enemyImpact || 0.2, () => this.floatAt(ev.who, tr('WEAK'), '#9ec4d8', 13));
+          break;
+        case 'heroSelect': this.sparkleOn(ev.who, '#ffd36a'); break;
         case 'enemyGuard': { const a = this.enemyActors.get(ev.uid); if (a) this.enemyNumber(a, `+${ev.amount}`, '#9ec4d8', 12, 'shield'); this.sfx('enemyGuard'); break; }
         case 'enemyHeal': { const a = this.enemyActors.get(ev.uid); if (a) this.enemyNumber(a, `+${ev.amount}`, '#8ed49a', 13); break; }
         case 'banner': this.hooks.banner && this.hooks.banner(msg(ev.text), msg(ev.sub), ev.tone); break;
@@ -1238,6 +1256,17 @@ export class BattleView {
       roundRect(ctx, px, by - 1, pw, fs + 5, 4);
       ctx.fillStyle = 'rgba(20,8,14,0.78)';
       ctx.fill();
+      // the hero who performs basic attacks and starts the next combo (or is attacking now)
+      if (c.performer() === p.id && c.phase !== 'END') {
+        ctx.save();
+        ctx.strokeStyle = OWNER_COLORS[p.id];
+        ctx.lineWidth = 2;
+        ctx.shadowColor = OWNER_COLORS[p.id];
+        ctx.shadowBlur = 6 + 3 * Math.sin(t * 4);
+        roundRect(ctx, px - 1, by - 2, pw + 2, fs + 7, 5);
+        ctx.stroke();
+        ctx.restore();
+      }
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillStyle = OWNER_COLORS[p.id];
@@ -1261,14 +1290,23 @@ export class BattleView {
         ctx.fillText(txt, px + pw + 4, by);
         ctx.font = `700 ${fs}px "Barlow Condensed", sans-serif`;
       }
+      // statuses, left of the plate: Weak (blue), Braced (gold)
+      let sy = by + 1;
       if (p.st.weak && p.st.weak > c.t) {
         const left = p.st.weak - c.t;
         ctx.textAlign = 'right';
         ctx.textBaseline = 'top';
         ctx.fillStyle = '#9ec4d8';
         const wt = `${tr('WEAK')} ${tr('{n}s', { n: Math.round(left) })}`;
-        ctx.fillText(wt, px - 4, by + 1);
-        drawIcon(ctx, 'down', px - 4 - ctx.measureText(wt).width - 7, by + 1 + fs / 2, 11, '#9ec4d8');
+        ctx.fillText(wt, px - 4, sy);
+        drawIcon(ctx, 'down', px - 4 - ctx.measureText(wt).width - 7, sy + fs / 2, 11, '#9ec4d8');
+        sy -= fs + 2;
+      }
+      if (p.st.braced && p.st.braced > c.t) {
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = '#ffd36a';
+        ctx.fillText(`${tr('BRACED')} ${tr('{n}s', { n: Math.ceil(p.st.braced - c.t) })}`, px - 4, sy);
       }
     }
     // Cover: a shield badge with a countdown over Hessa

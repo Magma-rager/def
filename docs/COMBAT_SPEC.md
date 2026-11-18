@@ -1,6 +1,6 @@
 # SIGNAL//BREAK — Combat Architecture Specification (Roadmap Phase 2)
 
-Status: specification for Phases 3–8. Written 2026-11-15 against the reference build **0.2.2** (commit `46d01a5`; `git checkout 46d01a5` restores it).
+Status: specification for Phases 3–8. Written 2026-11-15 against the reference build **0.2.2** (commit `46d01a5`; `git checkout 46d01a5` restores it). Phase 3 shipped in 0.2.3 (`338184c`), Phase 4 in 0.2.4 (§25 lists its interim bridges).
 Numbers marked *(prototype)* are starting values kept in one configuration table (`RULES` in `src/engine/combat.js`), not approved balance.
 
 Contents: 1 Goals · 2 Regression requirements · 3 Entities · 4 Party and shared resources · 5 Cards · 6 Hand and zones · 7 Hero states and scheduling · 8 Offensive sequences · 9 Relay · 10 Support · 11 Momentum · 12 Chain endings · 13 Timing · 14 Targeting · 15 Damage and mitigation · 16 Cancellation and interruption · 17 Enemy interference · 18 Content migration · 19 Saves · 20 Interface · 21 Prototype values · 22 Dependencies and phase plan · 23 Regression risks · 24 Decisions taken here
@@ -444,3 +444,31 @@ Each is reversible; listed so they can be challenged.
 7. **Momentum is reserved at commit, spent at execution, gained at resolution.**
 8. **The decision window holds while commands execute**, replacing the fixed 0.7s per-card hold.
 9. **Cover** is Hessa's protective identity from Phase 3, triggered by her Guard cards.
+
+## 25. Phase 4 as built (0.2.4) — interim bridges and open questions
+
+Phase 4 implements §5, §6, §8.2, §10 (effects), §11 and §12 and the save migration of §19. Phase 5 has not started, so a few rules run through deliberate, replaceable bridges. Each is listed here so Phase 5 can remove it without touching card effects.
+
+**Bridges (to be replaced in Phase 5)**
+- *Commands run back to back.* `playCard` = `commit` (validate, move the card to the queue zone, reserve its cost) then `execute` at once (spend, resolve, gain, discard, refill). `cancel` exists and is tested, but no player-facing queue does. The hand slot is held while a command waits (`heldSlots`), so Phase 5 can show the placeholder of §6.
+- *Hero selector instead of hero states.* Three buttons above the hand (and a tap on the hero, keys Q/W/E) choose who performs basic attacks and starts the next combo; a combo keeps its hero until it ends. There are no Ready/Committed/Acting/Recovering states, and switching heroes mid-combo is refused rather than becoming a Relay. The selection stays on the hero who last started a combo (§8.1's default).
+- *Support executes immediately and costs no Recovery.* It may be played before, during or outside a combo; it never starts, extends, ends or pauses one and changes no combo state. Its performer is its owner, or the selected (or attacking) hero when it is neutral. Phase 5 adds the performer's 2.0s Recovery. Until then support costs are the only opportunity cost, which is why the Phase 4 costs are higher than the §10 minimum (below).
+- *Braced picks its hero automatically*: the hero the most imminent single-target enemy attack will land on (after Cover), else the hero hit last, else the performer. Phase 5 may add the tap-to-choose of §10.
+- *Endings.* After an arte the combo ends as a Perfect by itself when the hero has no playable higher card; otherwise the end button reads FINISH (a Perfect) and the clock or a higher arte decide. CASH OUT is offered only when the last card is a basic attack (§12.2). A timeout or third Stumble after an arte counts as a Perfect (§12.3).
+
+**Content conversion (§18)**
+- Every card has a `category`. Of the 78 earlier cards (Glitch aside, unchanged), 68 are converted (`p4: 'converted'`) and 3 new ones were added (Piston Strike, the Strong basic attack; Hold the Line, the Braced support; Spare Parts, a Churn utility). Playable now: 24 basic attacks, 38 artes, 13 support cards; rewards, shops and events draw from 64 of them (starter cards excluded as before).
+- Four Rewind cards (Rethread, Prism Cut, Downshift, Cache Hook) run as interim artes or basic attacks for decks that already hold them (`p4: 'compat'`) but are not offered until their "technique" conversion in Phase 8.
+- Six cards that only work with Relays (Mirror Wire, Hand Off, Relay Baton, Chorus Break, Grand Relay, Pressure Valve) are withheld (`p4: 'withheld'`). Save version 5 replaces them with a converted card of the same hero and rarity.
+- Relay content is kept but not offered until the Relay command exists: the relics Echo Splice and Relay Harness, the mutation Relay Resonance and the graft Echoing. Owned copies do nothing yet. Echo Splice was a starting relic unlocked by winning a run; that unlock now gives Spare Pockets.
+- Relic conversions applied: Iron Filings (each basic attack +1 Guard), Kettle Drum (artes in 5+ card combos +25%), Wild Hinge (a Cross also counts as a Step). Quick graft: +0.5s.
+
+**Prototype values set in Phase 4** (card data, not `RULES`): basic attacks Weak 5–7, Medium 7–9, Strong 10–13 damage (base/upgraded). Support costs: Salvage 0, Brace Up 1, Riposte Frame 1, Vault Guard 1, Ward Weave 1, Hold the Line 1, Signal Boost 1, Mend Circuit 2, Iron Oath 2, Counterweight 2; Low Gear, Spare Parts and Shuffle Step free. Braced lasts 6s (9s upgraded). The first measured Phase 4 build had Mend Circuit at 1 Momentum and Iron Oath and Brace Up cheaper: the simulated regular player then lost 0.1 HP per battle (`docs/AUDIT.md`, Phase 4), so those costs were raised.
+
+**Two rules added in Phase 4 against stranded hands (R5), prototype.** A persistent mixed hand can fill with cards that cannot start a combo. In the first full UI playthrough the deck grew to 33 cards with many artes, the hand held six artes and no basic attack, the Churn charges ran out, and the party lost the final boss with the boss at 38 HP.
+- *Free Churn while stranded:* before a combo, when no card in the hand or Reserve is playable, Churn costs no charge (the strip reads "NOTHING PLAYABLE · CHURN IS FREE" and the Churn panel shows FREE).
+- *Basic attacks in rewards:* when fewer than 40% of the deck are basic attacks, the first card a reward offers is a basic attack. Shops and events are unchanged.
+
+**Open questions for the Phase 5 design review** (the provisional §9/§14 decisions stand until then)
+1. Whether a standard Relay requires an arte in the outgoing segment, or may follow any qualifying segment (§9 currently: any segment with at least one card).
+2. Whether a queued attack locks its target when committed or uses the target selected when it executes (§14 currently: at execution).

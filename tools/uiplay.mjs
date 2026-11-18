@@ -2,6 +2,7 @@
 // from the title screen until the run ends or the time budget runs out.
 // Usage: node tools/uiplay.mjs [width] [height] [minutes] [targetAct]
 import { createRequire } from 'node:module';
+import { uiDecision, uiPerform } from './lib/uibot.mjs';
 const { chromium } = createRequire(import.meta.url)('playwright');
 const [w = 1194, h = 834, minutes = 6, targetAct = 4] = process.argv.slice(2).map(Number);
 const OUT = '/tmp/claude-0/shots';
@@ -30,28 +31,9 @@ async function battleTick() {
   });
   if (!state || state.phase === 'END') return;
   const slots = await p.$$('.slot');
-  const find = async (cls) => {
-    for (const s of slots) { if (await s.$(`.card.legal${cls}:not(.leaving)`)) return s; }
-    return null;
-  };
-  if (state.danger && state.guard < 6 && state.mom >= 3) { await click('.ctl.mom:nth-child(2)'); return; }
-  let target = null;
-  if (state.phase === 'PRE') target = await find('.role-open');
-  else if (state.phase === 'ACTIVE') {
-    const close = await find('.role-close');
-    const conv = await find('.role-conv');
-    target = close && (state.len >= 3 || !conv || state.left < 1.1) ? close : conv || null;
-    if (!target) {
-      const res = await p.$('.res-card.legal');
-      if (res) { await res.click().catch(() => {}); return; }
-      if (state.len >= 2) { await click('.ctl.cash'); return; }
-    }
-  }
-  if (target) {
-    const bb = await target.boundingBox();
-    if (bb) await p.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2);
-    return;
-  }
+  // the Phase 4 player policy (tools/lib/bot.mjs), performed with real clicks and swipes
+  const a = await uiDecision(p, 'regular');
+  if (a && a.type !== 'wait') { await uiPerform(p, a); return; }
   // swipe-test once: churn the first card by dragging down, verify exactly one churn
   if (!swipesTested && state.phase === 'ACTIVE' && slots.length) {
     const bb = await slots[0].boundingBox();

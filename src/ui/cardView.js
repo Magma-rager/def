@@ -1,6 +1,6 @@
 // Card DOM rendering (hand cards, reward cards, deck grids, reserve minis).
-import { CARDS, cardValue } from '../data/cards.js';
-import { t, num, cardName, cardTemplate, roleName, ownerName, ownerInitial, graftName, graftText, rarityName, tagName } from '../i18n/index.js';
+import { CARDS, cardValue, isOffensive } from '../data/cards.js';
+import { t, num, cardName, cardTemplate, categoryName, strengthName, ownerName, ownerInitial, graftName, graftText, rarityName, tagName } from '../i18n/index.js';
 import { ICON_PATHS } from '../render/icons.js';
 import { LOOKS, POSES, drawCharacter } from '../render/rig.js';
 import { h, esc } from './dom.js';
@@ -30,7 +30,8 @@ function vignette(owner, anim) {
   return vignettes[key];
 }
 const GLYPH_MAP = { gear: 'summon', bolt: 'bolt', arrow: 'sword', shield: 'shield', hammer: 'sword', flame: 'flame', spiral: 'scramble', box: 'chest', star: 'star', eye: 'eye', coin: 'coin', ladder: 'up', wave: 'wave', prism: 'prism', hook: 'hook', clock: 'hourglass', chain: 'lock', glitch: 'glitch' };
-const ROLE_GLYPH = { open: '▶', conv: '⟳', close: '■', junk: '✕' };
+// category symbols, also used by the strip, the Reserve and How to Play
+export const CAT_GLYPH = { basic: '◆', arte: '★', support: '✚', junk: '✕' };
 
 // Hessa's Guard cards also start Cover (engine/combat.js): the card says so.
 export const coversParty = (def) => def.owner === 'V' && (def.tags || []).includes('guard');
@@ -54,27 +55,39 @@ function artSvg(def) {
 }
 
 // inst: run card instance {uid,id,up,graft,rankMod,variant}. opts: {rank, variant} effective overrides
+// A card's corner badge: what it costs (artes, support) or the Momentum it generates (basic attacks).
+function costBadge(def) {
+  if (def.category === 'basic') return `<span class="gain" title="${esc(t('Generates {n} Momentum', { n: def.gain }))}">+${def.gain}<i></i></span>`;
+  if ((def.category === 'arte' || def.category === 'support') && def.cost > 0) return `<span class="cost" title="${esc(t('Costs {n} Momentum', { n: def.cost }))}">${def.cost}<i></i></span>`;
+  return '';
+}
+
+// inst: run card instance {uid,id,up,graft,rankMod,variant}. opts: {rank, variant} effective overrides
 export function cardEl(inst, opts = {}) {
   const def = CARDS[inst.id];
+  const off = isOffensive(def);
   const rank = opts.rank !== undefined ? opts.rank : Math.max(1, Math.min(9, def.rank + (inst.rankMod || 0)));
   const variant = opts.variant || inst.variant || def.variant;
-  const owner = def.owner || 'X';
+  // neutral cards (basic attacks, some support): any hero (three colour dots); Glitch: '!'
+  const owner = def.owner || (def.category === 'junk' ? 'X' : 'N');
+  const chip = owner === 'N' ? '<i class="o-V"></i><i class="o-C"></i><i class="o-S"></i>' : owner === 'X' ? '!' : ownerInitial(owner);
   const el = h('div', {
-    class: `card owner-${owner} role-${def.role} v-${variant}${inst.up ? ' upgraded' : ''}${opts.mini ? ' mini' : ''}${opts.static ? ' static' : ''}`,
+    class: `card owner-${owner} cat-${def.category} v-${variant}${inst.up ? ' upgraded' : ''}${opts.mini ? ' mini' : ''}${opts.static ? ' static' : ''}`,
     'data-uid': inst.uid,
   });
   const mods = [];
-  if (inst.rankMod) mods.push(`<span class="mod">${t('{n}R', { n: `${inst.rankMod > 0 ? '+' : ''}${inst.rankMod}` })}</span>`);
-  if (inst.variant && inst.variant !== def.variant) mods.push(`<span class="mod">${t('RECUT')}</span>`);
+  if (inst.rankMod && off) mods.push(`<span class="mod">${t('{n}R', { n: `${inst.rankMod > 0 ? '+' : ''}${inst.rankMod}` })}</span>`);
+  if (inst.recut && off) mods.push(`<span class="mod">${t('RECUT')}</span>`);
+  const catWord = def.category === 'basic' ? strengthName(def.rank) : categoryName(def.category);
   el.innerHTML = `
     <div class="card-frame">
       <div class="card-top">
-        <span class="rank">${def.role === 'junk' ? '–' : rank}</span>
-        <span class="var">${variant}</span>
-        <span class="role-tag" title="${esc(roleName(def.role))}"><i>${ROLE_GLYPH[def.role]}</i><span class="rt-word">${esc(roleName(def.role))}</span></span>
+        <span class="rank">${off ? rank : def.category === 'support' ? '✚' : '–'}</span>
+        ${off ? `<span class="var">${variant}</span>` : ''}
+        <span class="role-tag" title="${esc(categoryName(def.category))}"><i>${CAT_GLYPH[def.category]}</i><span class="rt-word">${esc(catWord)}</span></span>
       </div>
-      <div class="card-art"${def.owner && vignette(def.owner, def.anim) ? ` style="--vig:url(${vignette(def.owner, def.anim)})"` : ''}>${artSvg(def)}<span class="owner-chip">${owner === 'X' ? '!' : ownerInitial(owner)}</span>${def.rarity === 'rare' ? '<span class="rare-gem"></span>' : ''}</div>
-      <div class="card-name"><span class="name-owner">${owner === 'X' ? '!' : ownerInitial(owner)}</span>${esc(cardName(def.id))}${inst.up ? '<sup>+</sup>' : ''}</div>
+      <div class="card-art"${def.owner && vignette(def.owner, def.anim) ? ` style="--vig:url(${vignette(def.owner, def.anim)})"` : ''}>${artSvg(def)}<span class="owner-chip${owner === 'N' ? ' any' : ''}">${chip}</span>${costBadge(def)}${def.rarity === 'rare' ? '<span class="rare-gem"></span>' : ''}</div>
+      <div class="card-name"><span class="name-owner">${owner === 'N' ? '◇' : owner === 'X' ? '!' : ownerInitial(owner)}</span>${esc(cardName(def.id))}${inst.up ? '<sup>+</sup>' : ''}</div>
       <div class="card-text">${cardText(def, inst.up)}</div>
       <div class="card-foot">${inst.graft ? `<span class="graft">${esc(graftName(inst.graft))}</span>` : ''}${mods.join('')}<span class="reason"></span></div>
     </div>
@@ -151,7 +164,12 @@ export function fitCard(el) {
 
 export function cardTooltip(inst) {
   const def = CARDS[inst.id];
-  const lines = [`<b>${esc(cardName(def.id))}${inst.up ? '+' : ''}</b> · ${esc(roleName(def.role))} · ${esc(ownerName(def.owner))}`];
+  const who = def.owner ? ownerName(def.owner) : def.category === 'junk' ? '' : t('any hero');
+  const lines = [`<b>${esc(cardName(def.id))}${inst.up ? '+' : ''}</b> · ${esc(categoryName(def.category))} · ${esc(who)}`];
+  // the rules line: what the category means for this card
+  if (def.category === 'basic') lines.push(`<span class="dim">${esc(t('{s} attack (rank {r}): any hero can perform it; generates {n} Momentum.', { s: strengthName(def.rank), r: def.rank, n: def.gain }))}</span>`);
+  else if (def.category === 'arte') lines.push(`<span class="dim">${esc(t('{hero}\'s arte (rank {r}, costs {n} Momentum): needs a basic attack earlier in {hero}\'s combo.', { hero: { hero: def.owner }, r: def.rank, n: def.cost }))}</span>`);
+  else if (def.category === 'support') lines.push(`<span class="dim">${esc(def.cost > 0 ? t('Support (costs {n} Momentum): playable any time, in or out of a combo.', { n: def.cost }) : t('Support (free): playable any time, in or out of a combo.'))}</span>`);
   lines.push(cardText(def, inst.up));
   if (coversParty(def)) lines.push(`<span class="kw-cover">${esc(t('Cover: for 4s, hits aimed at Corvin or Pin land on Hessa, and her 30% Defense applies.'))}</span>`);
   if (inst.graft) lines.push(`<i>${esc(t('Graft — {g}:', { g: graftName(inst.graft) }))}</i> ${esc(graftText(inst.graft))}`);

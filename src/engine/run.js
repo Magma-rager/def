@@ -1,11 +1,11 @@
 // Run state machine: map, nodes, rewards, shops, events, rest, surgery, bosses, mutations, saving.
 // All run data lives in the plain object `this.d` so it serializes to localStorage verbatim.
 import { RNG, seedFrom } from '../core/rng.js';
-import { CARDS, STARTER_DECK, rewardPool, GRAFTS, ARCHETYPES } from '../data/cards.js';
+import { CARDS, STARTER_DECK, rewardPool, graftPool, ARCHETYPES, MIGRATE_CARDS, UNKNOWN_CARD_FALLBACK, isOffensive } from '../data/cards.js';
 import { RELICS, relicPool } from '../data/relics.js';
 import { ENEMIES, FORMATIONS, ELITES, BOSSES } from '../data/enemies.js';
 import { EVENTS, EVENT_MAP } from '../data/events.js';
-import { MUTATIONS, MUTATION_IDS } from '../data/mutations.js';
+import { MUTATIONS, mutationPool } from '../data/mutations.js';
 import { ADAPTATIONS } from '../data/adaptations.js';
 import { TRAIT_IDS } from '../data/traits.js';
 import { PREPARED_PLANS, VOLATILE_OUTCOMES } from '../data/acts.js';
@@ -17,10 +17,29 @@ export const PARTY_BASE = { V: 46, C: 34, S: 38 };
 export const PARTY_HP_BONUS = 12;
 export const PARTY_MAX_HP = PARTY_BASE.V + PARTY_BASE.C + PARTY_BASE.S + PARTY_HP_BONUS;
 export const MAP_DEPTHS = 8; // depths 0..7, boss at depth 8
-const SAVE_VERSION = 4;
+const SAVE_VERSION = 5;
 
-// Older saves are converted once when loaded. v3 → v4: per-hero HP becomes the shared pool
-// (a knocked-out hero counts 0), and gets the same bonus a new run has.
+// Save version 5 (docs/COMBAT_SPEC.md §19): card ids of the old Opener/Converter/Closer catalogue that
+// Phase 4 withholds (they need Relays) become a converted card of the same hero and rarity; unknown ids
+// become a Medium basic attack. Everything on the instance (uid, upgrade, graft, rank modifier, suit) is
+// kept, and the number of cards does not change. A suit set by an earlier recut is marked as such.
+export function migrateCardId(id) {
+  if (MIGRATE_CARDS[id]) return MIGRATE_CARDS[id];
+  return CARDS[id] ? id : UNKNOWN_CARD_FALLBACK;
+}
+function migrateCard(c) {
+  const id = migrateCardId(c.id);
+  const out = { ...c, id };
+  if (id !== c.id) out.was = c.id;
+  if (out.variant && out.variant !== CARDS[id].variant && out.recut === undefined) out.recut = true;
+  return out;
+}
+const migrateSpec = (spec) => (spec && spec.id ? { ...spec, id: migrateCardId(spec.id) } : spec);
+
+// Older saves are converted once when loaded, one version at a time.
+// v3 → v4: per-hero HP becomes the shared pool (a knocked-out hero counts 0), plus the same bonus a
+// new run has.  v4 → v5: the card catalogue (above), including cards offered by a pending reward,
+// shop or event.
 function migrate(obj) {
   if (obj.version === 3) {
     const party = obj.party || [];
@@ -29,6 +48,14 @@ function migrate(obj) {
     obj.hp = Math.max(1, Math.min(obj.maxHp, party.reduce((a, m) => a + Math.max(0, m.hp || 0), 0) + PARTY_HP_BONUS));
     obj.party = party.map((m) => ({ id: m.id }));
     obj.version = 4;
+  }
+  if (obj.version === 4) {
+    obj.deck = (obj.deck || []).map(migrateCard);
+    const p = obj.pending;
+    if (p && p.type === 'reward' && Array.isArray(p.cards)) p.cards = p.cards.map(migrateSpec);
+    if (p && p.type === 'shop' && p.stock && Array.isArray(p.stock.cards)) p.stock.cards = p.stock.cards.map((x) => ({ ...x, spec: migrateSpec(x.spec) }));
+    if (p && p.result && Array.isArray(p.result.offer)) p.result.offer = p.result.offer.map(migrateSpec);
+    obj.version = 5;
   }
   return obj;
 }
@@ -87,7 +114,7 @@ export class Run {
       relicsSeen: [starterRelic],
     };
     const run = new Run(d);
-    for (const id of STARTER_DECK) run.addCard({ id });
+    for (const spec of STARTER_DECK) run.addCard(spec);
     const brng = new RNG(seedFrom(s, 'bosses'));
     for (const act of [1, 2, 3]) d.bosses[act] = brng.pick(BOSSES[act]);
     run.generateMap(1);
@@ -124,8 +151,9 @@ export class Run {
     this.d.hp = Math.min(this.d.hp, this.d.maxHp);
   }
 
-  addCard({ id, up = false, graft = null, variant = null, rankMod = 0 }) {
+  addCard({ id, up = false, graft = null, variant = null, rankMod = 0, recut = false }) {
     const inst = { uid: `c${this.d.nextUid++}`, id, up, graft, rankMod, variant };
+    if (recut) inst.recut = true;
     this.d.deck.push(inst);
     return inst;
   }
@@ -139,23 +167,25 @@ export class Run {
   }
 
   effRank(inst) {
+    if (!isOffensive(CARDS[inst.id])) return 0;
     return Math.max(1, Math.min(9, CARDS[inst.id].rank + (inst.rankMod || 0)));
   }
   effVariant(inst) {
     return inst.variant || CARDS[inst.id].variant;
   }
 
-  roleCount(role) {
-    return this.d.deck.filter((c) => CARDS[c.id].role === role).length;
+  categoryCount(cat) {
+    return this.d.deck.filter((c) => CARDS[c.id].category === cat).length;
   }
 
+  // Removal keeps a playable deck: at least 8 cards, 4 of them basic attacks (every combo starts
+  // with one).
   canRemove(uid) {
     const inst = this.card(uid);
     if (!inst) return false;
-    const role = CARDS[inst.id].role;
-    const min = { open: 4, conv: 3, close: 2 };
-    if (this.d.deck.length <= 10) return false;
-    return this.roleCount(role) > min[role];
+    if (this.d.deck.length <= 8) return false;
+    if (CARDS[inst.id].category === 'basic') return this.categoryCount('basic') > 4;
+    return true;
   }
 
   removeCard(uid) {
@@ -317,7 +347,7 @@ export class Run {
         this.d.pending = { type: 'rest', nodeId: id, done: false, quiet: node.trait === 'QUIET_CHANNEL' };
         break;
       case 'surgery':
-        this.d.pending = { type: 'surgery', nodeId: id, ops: 0, grafts: rng.sample(Object.keys(GRAFTS), 3), select: null };
+        this.d.pending = { type: 'surgery', nodeId: id, ops: 0, grafts: rng.sample(graftPool(), 3), select: null };
         break;
       case 'treasure':
         this.d.pending = { type: 'treasure', nodeId: id, relics: this.randomRelics(rng, 2), taken: false, scrap: 20 };
@@ -456,6 +486,9 @@ export class Run {
     const pool = rewardPool();
     const tags = this.dominantTags();
     const out = [];
+    // Every combo starts with a basic attack: when fewer than 40% of the deck are basic attacks, the
+    // first card offered is one (prototype, docs/COMBAT_SPEC.md §25), so a deck full of artes stays playable.
+    const needBasic = this.d.deck.length > 0 && this.categoryCount('basic') / this.d.deck.length < 0.4;
     for (let i = 0; i < n; i++) {
       let rarity;
       if (kind === 'boss') rarity = 'rare';
@@ -467,14 +500,18 @@ export class Run {
       if (minRarity === 'uncommon' && rarity === 'common') rarity = 'uncommon';
       if (minRarity === 'rare') rarity = 'rare';
       let cands = pool.filter((c) => c.rarity === rarity && !out.some((o) => o.id === c.id));
+      if (i === 0 && needBasic) {
+        const b = cands.filter((c) => c.category === 'basic');
+        cands = b.length ? b : pool.filter((c) => c.category === 'basic' && !out.some((o) => o.id === c.id));
+      }
       const wantTag = tag || (i === 0 && tags.length && rng.chance(0.65) ? tags[0] : i === 1 && tags[1] && rng.chance(0.4) ? tags[1] : null);
-      if (wantTag) {
+      if (wantTag && !(i === 0 && needBasic)) {
         const t = cands.filter((c) => c.tags.includes(wantTag));
         if (t.length) cands = t;
       }
       if (!cands.length) cands = pool.filter((c) => !out.some((o) => o.id === c.id));
       const pick = rng.pick(cands);
-      out.push({ id: pick.id, up: false, graft: grafted ? rng.pick(Object.keys(GRAFTS)) : null });
+      out.push({ id: pick.id, up: false, graft: grafted ? rng.pick(graftPool()) : null });
     }
     return out;
   }
@@ -517,7 +554,7 @@ export class Run {
   }
 
   mutationOptions(rng) {
-    const avail = MUTATION_IDS.filter((m) => !this.d.mutations.includes(m));
+    const avail = mutationPool().filter((m) => !this.d.mutations.includes(m));
     const tags = this.dominantTags();
     const out = [];
     const tagged = avail.filter((m) => MUTATIONS[m].tag === tags[0]);
@@ -639,17 +676,19 @@ export class Run {
     return p.result;
   }
 
+  // Suit and rank changes only apply to attacks (basic attacks and artes); support has neither.
   canApplySelect(action, inst) {
     const d = CARDS[inst.id];
+    const off = !!d && isOffensive(d);
     switch (action) {
       case 'remove': return this.canRemove(inst.uid);
       case 'upgrade': return !inst.up;
-      case 'transform': return true;
+      case 'transform': return !!d && d.category !== 'junk';
       case 'duplicate': return true;
-      case 'recut': return this.effVariant(inst) !== 'EX';
-      case 'ex': return this.effVariant(inst) !== 'EX';
-      case 'rankup': return this.effRank(inst) < 9;
-      case 'rankdown': return this.effRank(inst) > 1;
+      case 'recut': return off && this.effVariant(inst) !== 'EX';
+      case 'ex': return off && this.effVariant(inst) !== 'EX';
+      case 'rankup': return off && this.effRank(inst) < 9;
+      case 'rankdown': return off && this.effRank(inst) > 1;
       default:
         if (action.startsWith('graft:')) return inst.graft !== action.slice(6);
         return !!d;
@@ -664,15 +703,21 @@ export class Run {
       case 'remove': this.removeCard(uid); break;
       case 'upgrade': inst.up = true; break;
       case 'transform': {
-        const role = CARDS[inst.id].role;
-        const cands = rewardPool().filter((c) => c.role === role && c.id !== inst.id);
+        const cat = CARDS[inst.id].category;
+        const cands = rewardPool().filter((c) => c.category === cat && c.id !== inst.id);
         inst.id = rng.pick(cands).id;
-        inst.variant = null; inst.rankMod = 0; inst.up = false;
+        inst.variant = null; inst.rankMod = 0; inst.up = false; delete inst.recut;
         break;
       }
-      case 'duplicate': this.addCard({ ...inst, variant: rng.pick(['A', 'B', 'EX']) }); break;
-      case 'recut': inst.variant = this.effVariant(inst) === 'A' ? 'B' : 'A'; break;
-      case 'ex': inst.variant = 'EX'; break;
+      case 'duplicate': {
+        // the copy of an attack gets a random suit; a support card has none to change
+        const off = isOffensive(CARDS[inst.id]);
+        const variant = off ? rng.pick(['A', 'B', 'EX']) : inst.variant;
+        this.addCard({ ...inst, variant, recut: off && variant !== CARDS[inst.id].variant });
+        break;
+      }
+      case 'recut': inst.variant = this.effVariant(inst) === 'A' ? 'B' : 'A'; inst.recut = true; break;
+      case 'ex': inst.variant = 'EX'; inst.recut = true; break;
       case 'rankup': inst.rankMod = (inst.rankMod || 0) + 1; break;
       case 'rankdown': inst.rankMod = (inst.rankMod || 0) - 1; break;
       default:
@@ -735,7 +780,7 @@ export class Run {
       },
       offerCards: (n, minRarity, tag) => ({ text: { k: '$Choose a card.' }, offer: run.cardChoices(rng, n, { minRarity, tag }) }),
       offerGraft: () => {
-        const g = rng.pick(Object.keys(GRAFTS));
+        const g = rng.pick(graftPool());
         return { text: { k: '$The Oracle prepares a {g} graft.', p: { g: { graft: g } } }, select: { title: { k: 'Graft {g}', p: { g: { graft: g } } }, filter: 'graftable', action: `graft:${g}` } };
       },
       addRandomRelic: () => {
@@ -754,7 +799,7 @@ export class Run {
         return r;
       },
       mutateRandomRank: () => {
-        const c = rng.pick(run.d.deck);
+        const c = rng.pick(run.d.deck.filter((x) => isOffensive(CARDS[x.id])));
         const delta = rng.chance(0.5) ? 1 : -1;
         const before = run.effRank(c);
         c.rankMod = (c.rankMod || 0) + delta;
@@ -783,7 +828,7 @@ export class Run {
       healPrice: Math.round(45 * disc), healUsed: false,
       upgradePrice: Math.round(60 * disc), upgradeUsed: false,
       surgeryPrice: Math.round(70 * disc), surgeryUsed: false,
-      grafts: rng.sample(Object.keys(GRAFTS), 3),
+      grafts: rng.sample(graftPool(), 3),
     };
   }
 

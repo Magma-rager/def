@@ -7,7 +7,7 @@ export const RELICS = {
 
   junk_dividend: { name: 'Junk Dividend', rarity: 'uncommon', icon: 'coin', tag: 'cashout', text: 'Each Cash Out: +1 Momentum and 3 Scrap (max 15 Scrap per battle).' },
   heat_shield: { name: 'Heat Shield', rarity: 'uncommon', icon: 'shield', tag: 'guard', text: 'When Guard fully absorbs an enemy hit, apply 2 Scorch to the attacker.' },
-  echo_splice: { name: 'Echo Splice', rarity: 'rare', icon: 'spiral', tag: 'relay', text: 'The first Relay each combo Echoes the previous card at 40%.' },
+  echo_splice: { name: 'Echo Splice', rarity: 'rare', icon: 'spiral', tag: 'relay', text: 'The first Relay each combo Echoes the previous card at 40%.', p4: 'withheld' },
   breach_clamp: { name: 'Breach Clamp', rarity: 'uncommon', icon: 'chain', tag: 'interference', text: 'When an enemy Locks or Scrambles your cards: +1 Momentum and +3 Guard. Locks last 1s less.' },
 
   brass_metronome: { name: 'Brass Metronome', rarity: 'common', icon: 'clock', tag: 'flow', text: 'Natural Flow refunds are a third larger: 1.33s per card (the 5s refund cap still applies).' },
@@ -28,13 +28,13 @@ export const RELICS = {
   patch_kit: { name: 'Patch Kit', rarity: 'common', icon: 'cross', tag: 'guard', text: 'After each battle, the party heals 12 HP.' },
   counter_spring: { name: 'Counter Spring', rarity: 'uncommon', icon: 'spring', tag: 'guard', text: 'Counter damage is doubled.' },
   long_fuse: { name: 'Long Fuse', rarity: 'rare', icon: 'flame', tag: 'cashout', text: 'When Flow runs out, the combo pays out at 50% instead of dropping (no Momentum loss).' },
-  relay_harness: { name: 'Relay Harness', rarity: 'rare', icon: 'hook', tag: 'relay', text: 'Each Relay gives later cards in the combo +2 damage (stacking).' },
+  relay_harness: { name: 'Relay Harness', rarity: 'rare', icon: 'hook', tag: 'relay', text: 'Each Relay gives later cards in the combo +2 damage (stacking).', p4: 'withheld' },
   scrap_magnet: { name: 'Scrap Magnet', rarity: 'common', icon: 'magnet', tag: null, text: '+25% Scrap from battles.' },
-  wild_hinge: { name: 'Wild Hinge', rarity: 'rare', icon: 'prism', tag: 'variant', text: 'Switching suits may climb +1 or +2 ranks.' },
-  iron_filings: { name: 'Iron Filings', rarity: 'common', icon: 'shield', tag: 'guard', text: 'Each Converter played grants 1 Guard.' },
+  wild_hinge: { name: 'Wild Hinge', rarity: 'rare', icon: 'prism', tag: 'variant', text: 'Every Cross also counts as a Step.' },
+  iron_filings: { name: 'Iron Filings', rarity: 'common', icon: 'shield', tag: 'guard', text: 'Each basic attack played grants 1 Guard.' },
   dead_mans_switch: { name: "Dead Man's Switch", rarity: 'uncommon', icon: 'skull', tag: null, text: 'The first time party HP falls below 25% in a battle: deal 15 to ALL enemies and gain 5 Momentum.' },
   glitch_jar: { name: 'Glitch Jar', rarity: 'rare', icon: 'jar', tag: 'interference', text: 'Scrambled cards in your hand count as EX.' },
-  kettle_drum: { name: 'Kettle Drum', rarity: 'rare', icon: 'drum', tag: 'ladder', text: 'Closers in combos of 5+ cards deal +25%.' },
+  kettle_drum: { name: 'Kettle Drum', rarity: 'rare', icon: 'drum', tag: 'ladder', text: 'Artes in combos of 5+ cards deal +25%.' },
   quiet_coil: { name: 'Quiet Coil', rarity: 'common', icon: 'spring', tag: 'guard', text: 'Guard decays 50% slower.' },
   regent_mainspring: { name: "Regent's Mainspring", rarity: 'boss', icon: 'clock', tag: 'interference', boss: 'clockwork_regent', text: 'Enemy Locks last 1s less. Whenever a Lock expires, gain 1 Momentum.' },
   scrap_heart: { name: 'Scrap Heart', rarity: 'boss', icon: 'shield', tag: 'guard', boss: 'scrap_tyrant', text: 'Start each battle with 10 Guard. Your Guard cap is raised by 20.' },
@@ -46,8 +46,10 @@ export const RELICS = {
 
 export const RELIC_IDS = Object.keys(RELICS);
 
+// Relics that rewards, shops and events may offer. Echo Splice and Relay Harness need the Relay
+// command (Phase 5): kept for runs that already own them (they have no effect yet), never offered.
 export function relicPool(exclude = []) {
-  return RELIC_IDS.filter((id) => RELICS[id].rarity !== 'starter' && RELICS[id].rarity !== 'boss' && !exclude.includes(id));
+  return RELIC_IDS.filter((id) => RELICS[id].rarity !== 'starter' && RELICS[id].rarity !== 'boss' && RELICS[id].p4 !== 'withheld' && !exclude.includes(id));
 }
 
 // Relics that may be chosen as the starting relic once unlocked in the Museum.
@@ -55,5 +57,5 @@ export const STARTER_OPTIONS = [
   { id: 'beta_badge', unlock: null, hint: 'Default' },
   { id: 'stopwatch_gear', unlock: 'boss1', hint: 'Defeat any Act I boss' },
   { id: 'pressure_gauge', unlock: 'runs3', hint: 'Finish 3 runs (win or lose)' },
-  { id: 'echo_splice', unlock: 'win', hint: 'Win a run' },
+  { id: 'spare_pockets', unlock: 'win', hint: 'Win a run' },
 ];

@@ -15,14 +15,14 @@ export const SCENES = {
     { who: 'sys', text: 'WELCOME, PLAYER. PLEASE ENJOY THE INTENDED EXPERIENCE.' },
     { who: 'dev', text: 'Oh. A player. Hi. I\'m Ozmund, I made this. Please don\'t touch the Relay system, it\'s, uh, deprecated.' },
     { who: 'gran', text: 'A dev who lives inside his own failed game. That\'s new. Okay, Ozmund. What does the Relay system do?' },
-    { who: 'dev', text: 'Nothing! It lets three party members share one hand and chain cards in real time. Openers, Converters, Closers. Very confusing. Ignore it.' },
+    { who: 'dev', text: 'Nothing! It lets three party members share one hand and chain cards in real time. Basic attacks, artes, support. Very confusing. Ignore it.' },
     { who: 'V', text: 'Commander. Hessa Rivetbourne, Vanguard. Hammer, shield, opinions. Point me at something.' },
     { who: 'C', text: 'Corvin Ashwell. Channeler. I make the lightning go where the arguments are.' },
     { who: 'S', text: 'Pin Wexley! Striker! I shoot things and also sometimes the right things!' },
     { who: 'gran', text: 'Alright. Let\'s see how broken this is.' },
   ],
   tutorial_done: [
-    { who: 'gran', text: '...Hold on. Opener, Converter, Closer, all inside three seconds, passing the turn between them like a baton?' },
+    { who: 'gran', text: '...Hold on. Weak, Strong, then an arte, all inside three seconds, and the next hero picks up the hand like a baton?' },
     { who: 'gran', text: 'That\'s not broken. That\'s good. That\'s really good.' },
     { who: 'dev', text: 'It is NOT good. It\'s a legacy system. Please use the normal attacks.' },
     { who: 'gran', text: 'There are no normal attacks, Ozmund.' },
@@ -89,7 +89,7 @@ export const SCENES = {
 export const DEFEAT_LINES = [
   [{ who: 'dev', text: 'See? Relay is too hard. Maybe try the... no, there are no other options. Try again?' }, { who: 'gran', text: 'I dropped the baton. That\'s on me, not the system.' }],
   [{ who: 'dev', text: 'GAME OVER. I recorded a sad trombone for this. Nobody had ever heard it before.' }, { who: 'gran', text: 'Again. I\'m seeing new lines.' }],
-  [{ who: 'dev', text: 'Your build was interesting. Wrong, but interesting.' }, { who: 'gran', text: 'Next run I\'m bringing more Converters.' }],
+  [{ who: 'dev', text: 'Your build was interesting. Wrong, but interesting.' }, { who: 'gran', text: 'Next run I\'m bringing more artes.' }],
   [{ who: 'dev', text: 'You know, most people quit after one defeat. You\'re making my telemetry look busy.' }, { who: 'gran', text: 'Your telemetry is about to see a lot more of me.' }],
 ];
 

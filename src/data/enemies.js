@@ -171,7 +171,7 @@ export const ENEMIES = {
     name: 'Archive Censor', act: 2, tier: 'elite', hp: 150, actTime: 6.0, art: 'censor', size: 1.45,
     lore: 'Redacts anything that might be fun.',
     intents: {
-      redact: { kind: 'lock', name: 'Redact', desc: 'Lock every Closer in your hand for 3s.', exec: (e, c) => c.lockCards(e, 6, (uid) => c.roleOf(uid) === 'close') },
+      redact: { kind: 'lock', name: 'Redact', desc: 'Lock every arte in your hand for 3s.', exec: (e, c) => c.lockCards(e, 6, (uid) => c.categoryOf(uid) === 'arte') },
       file: scramble('Misfile', 2, 'both'),
       strike: atk('Stamp of Denial', 13),
       audit: { kind: 'aoe', name: 'Audit', dmg: 4, desc: 'Hit every ally for 4, +2 per card in your Reserve.', exec: (e, c) => c.hitAll(e, c.edmg(e, 4 + 2 * c.reserve.length)) },
@@ -251,7 +251,7 @@ export const ENEMIES = {
     intents: {
       audit: {
         kind: 'special', name: 'Pattern Audit', dmg: 7,
-        desc: 'Checks your last two combos. Same opening suit or same Closer: issue a Citation (-40% damage until you vary). Strikes for 7.',
+        desc: 'Checks your last two combos. Same first attack strength or same finishing arte: issue a Citation (-40% damage until you vary). Strikes for 7.',
         exec: (e, c, it) => { c.auditPatterns(e); c.hitParty(e, it.target, c.edmg(e, 7)); },
       },
       redtape: lock('Red Tape', 2),
@@ -267,7 +267,7 @@ export const ENEMIES = {
     intents: {
       reflect: { kind: 'atk', name: 'Reflection', dmg: 8, desc: 'Fires back 60% of your last combo’s strongest card (min 8).', exec: (e, c, it) => c.hitParty(e, it.target, c.edmg(e, Math.max(8, Math.round(0.6 * c.lastStrongestHit())))) },
       mguard: { kind: 'guard', name: 'Mirror Guard', desc: 'Gain Guard equal to your Guard (max 30) + 6.', exec: (e, c) => c.enemyGuard(e, Math.min(30, Math.floor(c.guard)) + 6) },
-      mlock: { kind: 'lock', name: 'Mirror Lock', desc: 'Lock up to 2 hand cards that match the suit of your last combo’s opener.', exec: (e, c) => { const v = c.lastOpenerSuit(); c.lockCards(e, 2, v ? (uid) => c.effVariant(uid) === v : null); } },
+      mlock: { kind: 'lock', name: 'Mirror Lock', desc: 'Lock up to 2 hand cards that match the suit of your last combo’s first card.', exec: (e, c) => { const v = c.lastOpenerSuit(); c.lockCards(e, 2, v ? (uid) => c.effVariant(uid) === v : null); } },
       shatter: aoe('Shatter Glare', 7),
     },
     phases: [{ at: 0.5, name: 'SPLIT IMAGE', text: 'The Array splits. Two Mirror Shards break free.', actTime: 5.2, summon: ['mirror_shard', 'mirror_shard'] }],

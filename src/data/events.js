@@ -50,7 +50,7 @@ export const EVENTS = [
     text: 'A floating scroll unrolls: "BALANCE CHANGES: Relay is now worse (it was already bad?). Fixed a bug where players had fun." It offers to apply a hotfix to you.',
     choices: [
       { label: 'Accept the nerf', hint: 'Remove a card. Gain 30 Scrap.', results: { ok: 'Ozmund: "See? Healthy for the meta."' }, run: (R) => { R.gain(30); return { text: say('ok'), select: { title: 'Nerf (remove) a card', filter: 'removable', action: 'remove' } }; } },
-      { label: 'Request a rework', hint: 'Transform a card into a random card of the same role.', results: { ok: 'The scroll sighs and rewrites a card.' }, run: () => ({ text: say('ok'), select: { title: 'Rework a card', filter: 'transformable', action: 'transform' } }) },
+      { label: 'Request a rework', hint: 'Transform a card into a random card of the same kind (basic attack, arte or support).', results: { ok: 'The scroll sighs and rewrites a card.' }, run: () => ({ text: say('ok'), select: { title: 'Rework a card', filter: 'transformable', action: 'transform' } }) },
       { label: 'Mark as "won\'t fix"', hint: 'Nothing happens.', results: { ok: 'Granraku: "Classic."' }, run: () => ({ text: say('ok') }) },
     ],
   },

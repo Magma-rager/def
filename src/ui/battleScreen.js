@@ -1,16 +1,32 @@
 // Battle screen: owns the Combat instance for one encounter, renders the hand/controls,
 // handles touch gestures (tap = play, swipe down = Churn, swipe up = Reserve, hold = details).
 import { Combat, RULES } from '../engine/combat.js';
-import { CARDS } from '../data/cards.js';
+import { CARDS, isOffensive } from '../data/cards.js';
 import { DEV_REMARKS } from '../data/story.js';
 import { TRAITS } from '../data/traits.js';
-import { t, msg, num, secs, block, cardName, enemyName, traitName, traitText, adaptName, adaptDesc, adaptBreak, relicName, remark } from '../i18n/index.js';
+import { t, msg, num, secs, block, cardName, enemyName, traitName, traitText, adaptName, adaptDesc, adaptBreak, relicName, remark, ownerName, ownerInitial, strengthName } from '../i18n/index.js';
 import { BattleView } from '../render/battleView.js';
 import { drawPortrait } from '../render/rig.js';
 import { h, clear } from './dom.js';
-import { cardEl, cardTooltip, fitText } from './cardView.js';
+import { cardEl, cardTooltip, fitText, CAT_GLYPH } from './cardView.js';
 
 const OWNER_COL = { V: '#d0603f', C: '#b48cf0', S: '#e6c25a' };
+const HERO_KEYS = { KeyQ: 'V', KeyW: 'C', KeyE: 'S' };
+const KEY_OF = { V: 'Q', C: 'W', S: 'E' };
+// reasons an unplayable hand card shows on its face (others are shown by the card's own state)
+const SHOWN_REASONS = ['rank', 'owner', 'needbasic', 'momentum', 'junk'];
+
+// A mini card (Reserve, next card): rank and suit for attacks, a cross for support, then the name.
+function miniCard(c, uid, inst) {
+  const def = CARDS[inst.id];
+  const off = isOffensive(def);
+  const v = uid && c ? c.effVariant(uid) : inst.variant || def.variant;
+  const rank = uid && c ? c.effRank(uid) : def.rank;
+  return h('div', { class: `res-card owner-${def.owner || 'N'} v-${v} cat-${def.category}`, role: 'button', tabindex: '0', 'data-uid': uid || inst.uid },
+    h('span', { class: 'rr' }, off ? String(rank) : CAT_GLYPH[def.category]),
+    off ? h('span', { class: 'rv' }, v) : def.cost ? h('span', { class: 'rc' }, `${def.cost}M`) : h('span', {}),
+    h('span', { class: 'rn' }, cardName(def.id)));
+}
 
 
 // A Reserve mini-card keeps rank and suit on their own row while the name fits beneath them;
@@ -65,8 +81,19 @@ export class BattleScreen {
     // who the next attack hits; tap to switch to the next enemy (enemies can also be tapped directly)
     this.targetChip = h('button', { class: 'target-chip', type: 'button' }, h('span', { class: 'tc-ico', 'aria-hidden': 'true' }, '⌖'), h('span', { class: 'tc-name' }), h('span', { class: 'tc-cycle', 'aria-hidden': 'true' }, '⟳'));
     this.targetChip.addEventListener('click', () => this.cycleTarget());
-    const strip = h('div', { class: 'strip' }, this.targetChip, h('div', { class: 'combo-wrap' }, this.chipsEl, this.nextEl), this.flowBar);
-    this.reserveEl = h('div', { class: 'reserve' }, h('div', { class: 'zone-label' }));
+    // hero selector: who performs basic attacks and starts the next combo (also: tap a hero, Q/W/E)
+    this.heroSel = h('div', { class: 'hero-sel', role: 'group' });
+    this.heroBtns = {};
+    for (const id of ['V', 'C', 'S']) {
+      const b = h('button', { class: `hero-btn owner-${id}`, type: 'button', 'data-hero': id }, h('span', { class: 'hb-i' }), h('span', { class: 'hb-n' }), h('span', { class: 'hb-a' }));
+      b.addEventListener('click', () => this.doSelectHero(id));
+      this.heroBtns[id] = b;
+      this.heroSel.append(b);
+    }
+    const strip = h('div', { class: 'strip' }, this.heroSel, this.targetChip, h('div', { class: 'combo-wrap' }, this.chipsEl, this.nextEl), this.flowBar);
+    this.nextCell = h('div', { class: 'next-cell' }, h('span', { class: 'nc-label' }), h('div', { class: 'nc-body' }));
+    this.nextCell.lastChild.style.cssText = 'flex:1;display:flex;min-height:0';
+    this.reserveEl = h('div', { class: 'reserve' }, this.nextCell, h('div', { class: 'zone-label' }));
     this.reserveSlots = h('div', { class: 'reserve-slots' });
     this.reserveEl.append(this.reserveSlots);
     this.handEl = h('div', { class: 'hand' });
@@ -108,7 +135,9 @@ export class BattleScreen {
     this.canvas.addEventListener('pointerdown', (e) => {
       const r = this.canvas.getBoundingClientRect();
       const uid = this.view.hitTest(e.clientX - r.left, e.clientY - r.top);
-      if (uid) { c.setTarget(uid); this.app.audio.sfx('click'); }
+      if (uid) { c.setTarget(uid); this.app.audio.sfx('click'); return; }
+      const hero = this.view.heroHitTest(e.clientX - r.left, e.clientY - r.top);
+      if (hero) this.doSelectHero(hero);
     });
     this.keyHandler = (e) => this.onKey(e);
     window.addEventListener('keydown', this.keyHandler);
@@ -125,6 +154,12 @@ export class BattleScreen {
   // Fixed labels; called on mount and after a language switch.
   applyLabels() {
     this.reserveEl.querySelector('.zone-label').textContent = t('RESERVE');
+    this.nextCell.querySelector('.nc-label').textContent = t('NEXT CARD');
+    for (const [id, b] of Object.entries(this.heroBtns)) {
+      b.querySelector('.hb-i').textContent = ownerInitial(id);
+      b.querySelector('.hb-n').textContent = ownerName(id);
+      b.title = t('{hero} performs basic attacks and starts the next combo (key {k})', { hero: { hero: id }, k: KEY_OF[id] });
+    }
     for (const s of this.slots) s.box.querySelector('.slot-jam span').textContent = t('STATIC');
     this.cashBtn.querySelector('.ctl-main').textContent = t('CASH OUT');
     this.flowBtn.querySelector('.ctl-main').textContent = t('+FLOW');
@@ -135,7 +170,7 @@ export class BattleScreen {
   relocalize() {
     this.applyLabels();
     this.renderTop();
-    for (const k of ['_ft', '_fbs', '_gbs', '_gh', '_ch', '_cs', 'chipSig', 'momSig', 'resSig', 'adaptHtml', 'tgtSig']) this[k] = undefined;
+    for (const k of ['_ft', '_fbs', '_gbs', '_gh', '_ch', '_cs', '_cm', 'chipSig', 'momSig', 'resSig', 'adaptHtml', 'tgtSig', 'heroSig', 'nextSig']) this[k] = undefined;
     for (const s of this.slots) {
       if (s.el) s.el.remove();
       s.el = null;
@@ -230,6 +265,7 @@ export class BattleScreen {
     const c = this.combat;
     if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') { this.app.pause(); e.preventDefault(); return; }
     if (this.app.paused) return;
+    if (HERO_KEYS[e.code] && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) { this.doSelectHero(HERO_KEYS[e.code]); e.preventDefault(); return; }
     const n = parseInt(e.key, 10);
     const digit = /^Digit[1-8]$/.test(e.code) ? parseInt(e.code.slice(5), 10) : n;
     if (digit >= 1 && digit <= 6) {
@@ -268,10 +304,9 @@ export class BattleScreen {
     const res = c.playCard(uid);
     if (res.ok) {
       this.causes[uid] = 'play';
-      this.app.audio.sfx('cardPlay', { rank: def ? def.rank : 1 });
-      if (this.setup.tutorial) {
-        if (def.role === 'open') this.tutorial('opened');
-      }
+      this.app.audio.sfx('cardPlay', { rank: def ? Math.max(1, def.rank) : 1 });
+      if (this.setup.tutorial && res.kind === 'open') this.tutorial('opened');
+      if (res.category === 'support' && this.setup.tutorial) this.tutorial('afterCombo');
     } else if (res.reason === 'locked' || res.reason === 'junk' || res.reason === 'recover' || res.reason === 'latched') {
       this.app.audio.sfx('reject');
     } else this.app.audio.sfx(c.phase === 'ACTIVE' || (c.combo && c.combo.stumbles) ? 'stumble' : 'reject');
@@ -294,10 +329,18 @@ export class BattleScreen {
     this.afterAction();
   }
 
+  // the end-of-combo button: FINISH after an arte (a Perfect), CASH OUT otherwise
   doCashOut() {
     if (this.app.paused || this.ended) return;
-    const r = this.combat.cashOut();
+    const r = this.combat.finishOrCashOut();
     if (!r.ok) this.app.audio.sfx('reject');
+    this.afterAction();
+  }
+
+  doSelectHero(id) {
+    if (this.app.paused || this.ended) return;
+    const r = this.combat.selectHero(id);
+    this.app.audio.sfx(r.ok ? 'click' : 'reject');
     this.afterAction();
   }
 
@@ -357,7 +400,7 @@ export class BattleScreen {
         default: break;
       }
     }
-    if (this.setup.tutorial && c.phase === 'ACTIVE' && c.hand.some((u) => u && c.roleOf(u) === 'close' && c.check(u).ok)) this.tutorial('closer');
+    if (this.setup.tutorial && c.phase === 'ACTIVE' && [...c.hand, ...c.reserve].some((u) => u && c.categoryOf(u) === 'arte' && c.check(u).ok)) this.tutorial('closer');
   }
 
   onComboEnd(ev) {
@@ -421,10 +464,10 @@ export class BattleScreen {
     const meta = this.app.meta;
     if (!this.app.settings.hints || meta.tut[key]) return;
     const TXT = {
-      start: ['THE RELAY', 'Your three heroes share one hand of six cards. Enemies act in real time — watch their ATB bars and intent bubbles. A <b>red ring</b> under a hero shows who an enemy is about to hit.<br><br>Your attacks hit the enemy in <b>gold brackets</b> (TARGET). <b>Tap an enemy</b> to choose another.<br><br><b>Tap an OPENER</b> to start a combo.'],
-      opened: ['FLOW IS TICKING', 'Your hand swapped to <b>Converters ⟳</b> and <b>Closers ■</b>. Flow <b>holds for a moment</b> so you can read them, then counts down from 5 seconds.<br><br>Each card must have a <b>higher rank</b>. Same suit (A→A, B→B): any higher rank. Switching suit (A↔B) is a <b>Cross</b>: exactly +1. <b>EX</b> fits anything.<br><br>Bright cards are legal. Each valid card gives back 1s of Flow, and Flow also holds while it plays out, so take a moment to choose.<br><br><b>Hold a card</b> to read it in full: the battle pauses while you read.'],
-      closer: ['CLOSE IT', 'A <b>Closer</b> is legal now. Closers end the combo with a payoff based on everything you played before — card count, Relays between heroes, Steps, Crosses.<br><br>A Closer ending is a <b>PERFECT</b>: +2 Momentum and a Churn charge.'],
-      afterCombo: ['MORE TOOLS', '<b>Swipe a card DOWN</b> to Churn it (uses a charge, replaces it).<br><b>Swipe UP</b> to stash it in Reserve; Reserve cards can be played later.<br><b>CASH OUT</b> ends a combo of 2+ cards early for a guaranteed payout (bonus if 2.5s+ Flow remains).<br><b>Momentum</b> buys +Flow or +Guard. Guard is shared and slowly fades.'],
+      start: ['THE RELAY', 'Your three heroes share one hand of six cards. Enemies act in real time — watch their ATB bars and intent bubbles. A <b>red ring</b> under a hero shows who an enemy is about to hit.<br><br>Your attacks hit the enemy in <b>gold brackets</b> (TARGET). <b>Tap an enemy</b> to choose another.<br><br>Pick the hero who attacks with the buttons above the hand (or tap a hero). A ★ on a button means that hero has an <b>arte</b> in hand. Then <b>tap a basic attack ◆</b> to start a combo.'],
+      opened: ['COMBO STARTED', 'Each next attack needs a <b>higher rank</b> (skipping ranks is fine). Basic attacks give <b>Momentum</b>: Weak and Medium +1, Strong +2, and changing suit (a <b>Cross</b>) +1 more.<br><br>Flow <b>holds for a moment</b> so you can choose, then counts down from 5 seconds. Each valid card gives back 1s, and Flow also holds while it plays out.<br><br><b>Hold a card</b> to read it in full: the battle pauses while you read.'],
+      closer: ['ARTE READY', 'This hero\'s <b>arte ★</b> is playable. Artes cost Momentum (the number in the corner) and need a basic attack earlier in the combo.<br><br>Ending a combo with an arte is a <b>PERFECT</b>: +2 Momentum and a Churn charge. After an arte, play a higher one of the same hero, or press <b>FINISH</b>.'],
+      afterCombo: ['MORE TOOLS', '<b>Support ✚</b> cards (healing, Guard, utility) can be played any time, in or out of a combo; some cost Momentum.<br><b>Swipe a card DOWN</b> to Churn it (uses a charge, replaces it).<br><b>Swipe UP</b> to stash it in Reserve; Reserve cards can be played later.<br><b>CASH OUT</b> ends a combo of 2+ basic attacks early for a payout (bonus if 2.5s+ Flow remains).<br><b>NEXT CARD</b> beside the hand is the card you will draw next.'],
       lock: ['CARD LOCKED', 'An enemy <b>Locked</b> a card (chain icon). Locks show their source and expire after their timer runs out — even between combos. Plan around them.'],
       scramble: ['SCRAMBLED', 'A <b>Scramble</b> temporarily changed a card\'s rank or suit (glitch stripes). The card shows its current values; it reverts in a few seconds.'],
       jam: ['SLOT JAMMED', 'Static jammed a hand slot. No card can fill it until the static clears.'],
@@ -480,26 +523,62 @@ export class BattleScreen {
     } else {
       set('_ff', (v) => (this.flowFill.style.width = v), '0%');
       set('_fc', (v) => (this.flowCap.style.width = v), '0%');
-      set('_ft', (v) => (this.flowText.textContent = v), c.phase === 'RECOVER' ? t('BREATHER · ENEMIES WAIT') : c.phase === 'END' ? '—' : t('PRE-COMBO · PLAY AN OPENER'));
+      const stranded = c.stranded();
+      set('_ft', (v) => (this.flowText.textContent = v), c.phase === 'RECOVER' ? t('BREATHER · ENEMIES WAIT') : c.phase === 'END' ? '—' : stranded ? t('NOTHING PLAYABLE · CHURN IS FREE') : t('{hero} · PLAY A BASIC ATTACK', { hero: ownerName(c.selected).toUpperCase() }));
       set('_fb', (v) => (this.flowBar.className = v), `flow-bar ${c.phase === 'PRE' ? 'pre' : c.phase === 'RECOVER' ? 'breather' : ''}`);
     }
-    // combo chips
+    // combo chips: rank, suit, Step ↑ / Cross ✕, arte ★, in the hero's colour
     const combo = c.combo;
-    const sig = combo ? combo.cards.map((e) => e.uid + e.kind).join() + combo.rank + combo.variant : c.phase;
+    const sig = combo ? combo.cards.map((e) => e.uid + e.kind).join() + combo.rank + combo.variant + c.available() : `${c.phase}${c.selected}`;
     if (force || sig !== this.chipSig) {
       this.chipSig = sig;
       clear(this.chipsEl);
       if (combo) {
         for (const e of combo.cards) {
-          this.chipsEl.append(h('span', { class: `chip v-${e.variant}`, style: { borderColor: OWNER_COL[e.owner] } },
-            h('b', {}, String(e.rank)), e.variant, e.kind === 'step' ? h('i', { class: 'k' }, '↑') : e.kind === 'cross' ? h('i', { class: 'k' }, '✕') : null, e.relay ? h('i', { class: 'k relay' }, '⇄') : null));
+          this.chipsEl.append(h('span', { class: `chip v-${e.variant}${e.category === 'arte' ? ' arte' : ''}`, style: { borderColor: OWNER_COL[e.owner] } },
+            h('b', {}, String(e.rank)), e.variant, e.step ? h('i', { class: 'k' }, '↑') : null, e.cross ? h('i', { class: 'k' }, '✕') : null, e.category === 'arte' ? h('i', { class: 'cat' }, '★') : null));
         }
-        const rv = combo.variant === 'EX' ? t('any suit') : `${combo.variant}/EX`;
-        const crossV = combo.variant === 'A' ? 'B' : combo.variant === 'B' ? 'A' : null;
-        this.nextEl.innerHTML = `${t('NEXT')} <b>${rv} ${Math.min(9, combo.rank + 1)}+</b>${crossV && combo.rank < 9 ? ` · <b>${crossV} ${combo.rank + 1}${c.crossGap() > 1 ? `–${Math.min(9, combo.rank + 2)}` : ''}</b>` : ''}${combo.convCount < 1 ? ` · <i>${t('Converter before Closer')}</i>` : ''}`;
+        const hero = ownerName(combo.hero);
+        this.setNext(c.lastIsArte()
+          ? t('<b>{hero}</b>: a higher arte, or FINISH', { hero })
+          : combo.hasBasic ? t('NEXT <b>rank {n}+</b> · {hero}\'s arte or a basic attack', { n: Math.min(9, combo.rank + 1), hero }) : t('NEXT <b>rank {n}+</b>', { n: Math.min(9, combo.rank + 1) }));
       } else {
-        this.nextEl.innerHTML = c.phase === 'PRE' ? t('Any <b>Opener ▶</b> starts a combo') : '';
+        this.setNext(c.phase === 'PRE' ? t('<b>{hero}</b> starts: tap a basic attack ◆', { hero: ownerName(c.selected) }) : '');
       }
+    }
+    // hero selector: the selected (or attacking) hero, and how many of each hero's artes are in hand
+    const heroSig = `${c.performer()}|${!!combo}|${[...c.hand, ...c.reserve].map((u) => (u ? c.categoryOf(u) + c.def(u).owner : '')).join()}`;
+    if (force || heroSig !== this.heroSig) {
+      this.heroSig = heroSig;
+      for (const [id, b] of Object.entries(this.heroBtns)) {
+        const artes = [...c.hand, ...c.reserve].filter((u) => u && c.categoryOf(u) === 'arte' && c.def(u).owner === id).length;
+        b.classList.toggle('sel', c.performer() === id);
+        b.classList.toggle('locked', !!combo && combo.hero !== id);
+        b.querySelector('.hb-a').textContent = '★'.repeat(Math.min(3, artes));
+        b.setAttribute('aria-pressed', String(c.performer() === id));
+      }
+    }
+    // next card: the real top of the draw pile; nothing is shown (or drawn) when it is empty
+    const nu = c.nextCard();
+    // with 3-4 Reserve slots the preview shrinks to one row (rank, suit, owner colour; hold for the card)
+    const row = c.reserveMax() > 2;
+    const nextSig = (nu ? nu + c.effRank(nu) + c.effVariant(nu) : `-${c.discard.length}`) + row;
+    if (force || nextSig !== this.nextSig) {
+      this.nextSig = nextSig;
+      this.reserveEl.classList.toggle('many', row);
+      this.nextCell.querySelector('.nc-label').textContent = row ? t('NEXT') : t('NEXT CARD');
+      const body = this.nextCell.querySelector('.nc-body');
+      clear(body);
+      if (nu) {
+        const el = miniCard(c, nu, c.cards.get(nu));
+        el.removeAttribute('tabindex');
+        el.setAttribute('data-uid', nu);
+        let lp;
+        el.addEventListener('pointerdown', () => { lp = setTimeout(() => { if (el.isConnected) this.showDetail(nu); }, 480); });
+        for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) el.addEventListener(ev, () => clearTimeout(lp));
+        body.append(el);
+        if (!row) requestAnimationFrame(() => fitReserveCard(el));
+      } else body.append(h('div', { class: 'nc-empty', title: c.discard.length ? t('Discard reshuffles') : '' }, c.discard.length ? (row ? '↻' : t('Discard reshuffles')) : '—'));
     }
     // momentum
     const max = c.momentumMax();
@@ -522,14 +601,20 @@ export class BattleScreen {
     const snared = c.churnJamUntil > c.t;
     let dots = '';
     for (let i = 0; i < c.churnMax(); i++) dots += `<i class="${i < c.churn.charges ? 'on' : ''}"></i>`;
-    const free = c.relics.has('beta_badge') && !c.churn.freeUsed;
+    const free = (c.relics.has('beta_badge') && !c.churn.freeUsed) || c.stranded();
     set('_ch', (v) => (this.churnEl.innerHTML = v), `<span class="ic">⟲</span><span class="dots">${dots}</span><span class="lblwrap"><span class="lbl">${snared ? t('SNARED') : t('CHURN')}</span>${free && !snared ? `<span class="free">${t('FREE')}</span>` : ''}</span>`);
     this.churnEl.classList.toggle('snared', snared);
-    // cash out
+    // cash out / finish
+    const fin = c.canFinish();
     const can = c.canCashOut();
-    this.cashBtn.disabled = !can;
+    set('_cm', (v) => (this.cashBtn.querySelector('.ctl-main').textContent = v), fin ? t('FINISH ★') : t('CASH OUT'));
+    this.cashBtn.classList.toggle('finish', fin);
+    this.cashBtn.disabled = !can && !fin;
     const sub = this.cashBtn.querySelector('.ctl-sub');
-    if (can) {
+    if (fin) {
+      set('_cs', (v) => (sub.textContent = v), t('PERFECT · +2M'));
+      this.cashBtn.classList.remove('quick');
+    } else if (can) {
       const p = c.payoutAmount(1);
       set('_cs', (v) => (sub.textContent = v), `${p.quick ? t('QUICK · ') : ''}${t('≈{n} dmg +{g}▣', { n: p.amount, g: p.guard })}`);
       this.cashBtn.classList.toggle('quick', p.quick);
@@ -542,7 +627,7 @@ export class BattleScreen {
       this.adaptEl.hidden = false;
       const parts = [];
       if (c.adapt) parts.push(`<div class="ad-title ${c.adapt.broken ? 'broken' : ''}">${c.adapt.broken ? t('BROKEN · ') : t('ADAPTATION · ')}${adaptName(c.adapt)}</div><div class="ad-desc">${c.adapt.broken ? t('Disabled.') : adaptDesc(c.adapt)}</div>${c.adapt.broken ? '' : `<div class="ad-break">${t('Break: {b}', { b: adaptBreak(c.adapt) })} <b>${Math.floor(c.adapt.progress)}/${c.adapt.need}</b></div>`}`);
-      if (c.citation) parts.push(`<div class="ad-title cite">${t('CITATION · -40% damage')}</div><div class="ad-desc">${c.citation.kind === 'suit' ? t('Open with a suit other than {s}', { s: c.citation.value }) : t('Finish with a different Closer')}</div>`);
+      if (c.citation) parts.push(`<div class="ad-title cite">${t('CITATION · -40% damage')}</div><div class="ad-desc">${c.citation.kind === 'strength' ? t('Start a combo with something other than a {s} attack', { s: strengthName(c.citation.value) }) : t('Finish with a different arte')}</div>`);
       const html = parts.join('');
       if (html !== this.adaptHtml) { this.adaptHtml = html; this.adaptEl.innerHTML = html; }
     } else this.adaptEl.hidden = true;
@@ -595,14 +680,14 @@ export class BattleScreen {
         el.classList.toggle('locked', locked);
         el.classList.toggle('scrambled', scr);
         const def = CARDS[c.cards.get(uid).id];
-        if (def.role !== 'junk') {
+        if (isOffensive(def)) {
           s.rankEl.textContent = String(c.effRank(uid));
           const v = c.effVariant(uid);
-          s.varEl.textContent = v;
+          if (s.varEl) s.varEl.textContent = v;
           el.classList.remove('v-A', 'v-B', 'v-EX');
           el.classList.add(`v-${v}`);
         }
-        s.reasonEl.textContent = !chk.ok && !locked && ['rank', 'cross', 'needconv', 'junk', 'role'].includes(chk.reason) && c.phase !== 'RECOVER' ? msg(chk.text) : '';
+        s.reasonEl.textContent = !chk.ok && !locked && SHOWN_REASONS.includes(chk.reason) && c.phase !== 'RECOVER' ? msg(chk.text) : '';
         if (locked) s.lockSrc.textContent = c.locks[uid].source ? enemyName(c.locks[uid].source) : t('Interference');
       }
       if (locked) {
@@ -618,10 +703,16 @@ export class BattleScreen {
     }
   }
 
+  // the hint beside the combo chips shrinks a little rather than end in an ellipsis
+  setNext(html) {
+    this.nextEl.innerHTML = html;
+    requestAnimationFrame(() => { if (this.nextEl.isConnected) fitText(this.nextEl, 0.8); });
+  }
+
   updateReserve() {
     const c = this.combat;
     const max = c.reserveMax();
-    const sig = c.reserve.join() + '|' + max;
+    const sig = c.reserve.map((u) => u + c.effRank(u) + c.effVariant(u)).join() + '|' + max;
     if (sig !== this.resSig) {
       this.resSig = sig;
       clear(this.reserveSlots);
@@ -632,9 +723,7 @@ export class BattleScreen {
         const cell = h('div', { class: 'res-cell' });
         if (uid) {
           const inst = c.cards.get(uid);
-          const def = CARDS[inst.id];
-          const el = h('div', { class: `res-card owner-${def.owner} v-${c.effVariant(uid)} role-${def.role}`, role: 'button', tabindex: '0' },
-            h('span', { class: 'rr' }, String(c.effRank(uid))), h('span', { class: 'rv' }, c.effVariant(uid)), h('span', { class: 'rn' }, cardName(def.id)));
+          const el = miniCard(c, uid, inst);
           el.addEventListener('click', () => this.doPlay(uid));
           let lp;
           // hold for details; a re-render under the finger removes this element, so check it is still shown

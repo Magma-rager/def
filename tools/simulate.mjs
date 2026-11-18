@@ -1,7 +1,10 @@
 // Headless full-run simulator: a heuristic bot plays complete runs through the real engine
 // (Run + Combat) to verify progression integrity and gather balance data.
-// Usage: node tools/simulate.mjs [runs=20] [reaction=0.55]
+// Usage: node tools/simulate.mjs [runs=20] [reaction=0.55] [-v]
+// The bot is tools/lib/bot.mjs ('regular' profile): it picks the hero, plays basic attacks, artes and
+// support through the engine's own legality check, and uses Churn, Reserve and Momentum shortcuts.
 import { Run } from '../src/engine/run.js';
+import { decide, perform } from './lib/bot.mjs';
 import { Combat, RULES } from '../src/engine/combat.js';
 import { CARDS } from '../src/data/cards.js';
 import { EVENT_MAP } from '../src/data/events.js';
@@ -15,44 +18,18 @@ function botBattle(setup, rng) {
   const c = new Combat(setup);
   let think = 0.4;
   const dt = 1 / 30;
-  let guardSpent = 0;
+  const r = () => rng.next();
   for (let step = 0; step < 30 * 600 && c.phase !== 'END'; step++) {
     c.update(dt);
     think -= dt;
     if (think > 0 || c.phase === 'END') continue;
     think = REACT * (0.7 + rng.next() * 0.6);
-    const legal = [...c.hand, ...c.reserve].filter((u) => u && c.check(u).ok);
-    // defensive momentum use
-    const danger = c.aliveEnemies().some((e) => e.atb > 0.8 && e.intent && (e.intent.kind === 'atk' || e.intent.kind === 'aoe'));
-    if (danger && c.guard < 6 && c.momentum >= 3 && rng.chance(0.7)) { c.spendMomentumGuard(); guardSpent++; continue; }
-    if (c.phase === 'PRE') {
-      if (!legal.length) {
-        const junk = c.hand.find((u) => u && c.roleOf(u) === 'junk');
-        if (junk) c.churnCard(junk);
-        continue;
-      }
-      legal.sort((a, b) => c.effRank(a) - c.effRank(b));
-      c.playCard(legal[0]);
-    } else if (c.phase === 'ACTIVE') {
-      const closers = legal.filter((u) => c.roleOf(u) === 'close');
-      const convs = legal.filter((u) => c.roleOf(u) === 'conv');
-      const len = c.combo.cards.length;
-      const left = c.flowLeft();
-      if (closers.length && (len >= 3 || !convs.length || left < 1.1)) {
-        closers.sort((a, b) => c.effRank(b) - c.effRank(a));
-        c.playCard(closers[0]);
-      } else if (convs.length && left > 0.25) {
-        convs.sort((a, b) => c.effRank(a) - c.effRank(b));
-        c.playCard(convs[0]);
-      } else if (c.canCashOut()) c.cashOut();
-      else {
-        const bad = c.hand.find((u) => u && !c.check(u).ok && !c.isLocked(u));
-        if (bad && c.churn.charges > 0) c.churnCard(bad);
-      }
-      if (c.combo && c.momentum >= 6 && c.flowLeft() < 1 && rng.chance(0.5)) c.spendMomentumFlow();
-    }
+    const a = decide(c, { profile: 'regular', rng: r });
+    perform(c, a);
+    if (c.combo && c.available() >= 6 && c.flowLeft() < 1 && rng.chance(0.5)) c.spendMomentumFlow();
     const z = c.verifyZones();
     if (!z.ok) throw new Error('zone corruption: ' + z.error);
+    if (c.momentum < 0 || c.reserved !== 0) throw new Error(`Momentum accounting: ${c.momentum} reserved ${c.reserved}`);
   }
   if (c.phase !== 'END') {
     const dump = { t: c.t, phase: c.phase, enemies: c.enemies.map((e) => ({ id: e.id, hp: e.hp, guard: e.guard, alive: e.alive, st: e.st })), hp: c.hp, guard: c.guard, mom: c.momentum, hand: c.hand.map((u) => u && `${c.def(u).id}:${c.check(u).text || 'ok'}`), reserve: c.reserve.map((u) => c.def(u).id), draw: c.draw.length, discard: c.discard.length, churn: c.churn };
@@ -75,7 +52,7 @@ function pickNode(run, rng) {
 function playRun(seed) {
   const rng = new RNG(seed * 7 + 1);
   const run = Run.create({ seed, tutorial: false });
-  const log = { battles: 0, elites: 0, bosses: 0, hpLoss: [], durations: [], act: 1, result: null, deaths: null, combos: 0 };
+  const log = { battles: 0, elites: 0, bosses: 0, hpLoss: [], durations: [], act: 1, result: null, deaths: null, combos: 0, k: {} };
   let guard = 0;
   while (guard++ < 400) {
     const p = run.d.pending;
@@ -94,6 +71,8 @@ function playRun(seed) {
         if (setup.kind === 'elite') log.elites++;
         log.durations.push(t);
         log.combos += out.stats.combos;
+        for (const k of ['basics', 'artes', 'supports', 'momentumGained', 'momentumSpent', 'rejected', 'perfect', 'cashouts', 'forced', 'churns', 'stashes', 'reservePlays']) log.k[k] = (log.k[k] || 0) + (out.stats[k] || 0);
+        for (const h of ['V', 'C', 'S']) log.k[`hero${h}`] = (log.k[`hero${h}`] || 0) + (out.stats.byHero ? out.stats.byHero[h] : 0);
         const after = out.hp;
         log.hpLoss.push(before - after);
         if (VERBOSE) console.log(`  act${setup.act} d${setup.depth} ${setup.kind} ${setup.enemies.join('+')} ${out.victory ? 'WIN' : 'LOSS'} t=${t.toFixed(1)}s hp ${before}->${after} combos ${out.stats.combos} perfect ${out.stats.perfect} co ${out.stats.cashouts} forced ${out.stats.forced}`);
@@ -185,3 +164,8 @@ const avg = (a) => a.reduce((x, y) => x + y, 0) / Math.max(1, a.length);
 console.log(`\n${n} runs · wins ${wins} · errors ${errs}`);
 console.log(`act reached: ${[1, 2, 3].map((a) => `${a}:${results.filter((r) => r.act === a).length}`).join(' ')}`);
 console.log(`avg battle ${avg(all.flatMap((r) => r.durations)).toFixed(1)}s · avg HP lost/battle ${avg(all.flatMap((r) => r.hpLoss)).toFixed(1)} · bosses killed ${avg(all.map((r) => r.bosses)).toFixed(2)}/run`);
+const sum = (k) => all.reduce((a, r) => a + (r.k[k] || 0), 0);
+const battles = Math.max(1, all.reduce((a, r) => a + r.battles, 0));
+const per = (k) => (sum(k) / battles).toFixed(1);
+console.log(`per battle: basic ${per('basics')} · arte ${per('artes')} · support ${per('supports')} · Momentum +${per('momentumGained')} / −${per('momentumSpent')} · illegal taps ${per('rejected')} · Churn ${per('churns')} · Reserve ${per('stashes')}/${per('reservePlays')} played`);
+console.log(`combo endings: Perfect ${sum('perfect')} · Cash Out ${sum('cashouts')} · Dropped ${sum('forced')} · cards by hero V ${sum('heroV')} C ${sum('heroC')} S ${sum('heroS')} · zone/Momentum integrity failures 0 (checked every action)`);

@@ -11,34 +11,37 @@ import fs from 'node:fs';
 
 const PARTY = [{ id: 'V', hp: 300, maxHp: 300 }, { id: 'C', hp: 300, maxHp: 300 }, { id: 'S', hp: 300, maxHp: 300 }];
 function mk(ids = STARTER_DECK, enemies = ['foundry_warden'], extra = {}) {
-  const c = new Combat({ deck: ids.map((id, i) => ({ uid: `t${i}`, id })), party: PARTY.map((p) => ({ ...p })), enemies, seed: 9, act: 1, ...extra });
+  const c = new Combat({ deck: ids.map((s, i) => (typeof s === 'string' ? { uid: `t${i}`, id: s } : { uid: `t${i}`, ...s })), party: PARTY.map((p) => ({ ...p })), enemies, seed: 9, act: 1, ...extra });
   for (const e of c.enemies) e.atb = -1000;
   return c;
 }
-const legal = (c, role) => [...c.hand, ...c.reserve].find((u) => u && c.check(u).ok && (!role || c.roleOf(u) === role));
+const legal = (c, cat) => [...c.hand, ...c.reserve].find((u) => u && c.check(u).ok && (!cat || c.categoryOf(u) === cat));
 
 test('Momentum: 3 buys Flow (within cap) and 3 buys +8 Guard', () => {
   const c = mk();
   c.momentum = 6;
-  c.playCard(legal(c, 'open'));
+  c.playCard(legal(c, 'basic'));
   const d0 = c.combo.deadline;
   assert.ok(c.spendMomentumFlow().ok);
   assert.ok(Math.abs(c.combo.deadline - d0 - RULES.FLOW_SPEND) < 1e-9);
   const g0 = c.guard;
   assert.ok(c.spendMomentumGuard().ok);
   assert.equal(c.guard - g0, 8);
-  assert.equal(c.momentum <= 1, true);
+  assert.ok(c.momentum <= 2, `${c.momentum}`);
   assert.equal(c.spendMomentumGuard().ok, false, 'not enough Momentum');
 });
 
-test('Relay: switching heroes mid-combo grants Momentum and records the relay', () => {
-  const c = mk(['scrapline', 'rethread', 'scrapfall']); // Pin opener -> Corvin converter
-  c.playCard(legal(c, 'open'));
+test('No automatic Relay: a basic attack is performed by the combo\'s hero, whoever "owned" the old card', () => {
+  const c = mk(['scrapline', 'hotwire', 'scrapfall']); // Scrapline was Pin's, Hotwire Corvin's in the old catalogue
+  c.selectHero('V');
+  const byId = (id) => c.hand.find((u) => u && c.def(u).id === id);
+  c.playCard(byId('scrapline'));
   const m0 = c.momentum;
-  c.playCard(legal(c, 'conv'));
-  assert.equal(c.combo.relays, 1);
+  c.playCard(byId('hotwire'));
+  assert.equal(c.combo.relays, 0);
+  assert.deepEqual(c.combo.owners, ['V']);
+  assert.ok(c.combo.cards.every((e) => e.owner === 'V'));
   assert.ok(c.momentum >= m0 + 1);
-  assert.deepEqual(c.combo.owners.sort(), ['C', 'S']);
 });
 
 test('Interference: Churn snare, Reserve latch, Flow drain and Glitch cards all resolve and expire', () => {
@@ -61,7 +64,7 @@ test('Interference: Churn snare, Reserve latch, Flow drain and Glitch cards all 
   assert.ok(c.stash(c.hand.find(Boolean)).ok, 'seal expired');
   // drain
   c.reserve.length && c.playCard(c.reserve[0]);
-  if (c.phase !== 'ACTIVE') c.playCard(legal(c, 'open'));
+  if (c.phase !== 'ACTIVE') c.playCard(legal(c, 'basic'));
   const d0 = c.combo.deadline;
   c.drainFlow(e, 1);
   assert.ok(c.combo.deadline <= d0 - 1 + 1e-9);
@@ -73,8 +76,8 @@ test('Glitch cards: unplayable, Churned for free, removed from the game', () => 
   c.addGlitch(c.enemies[0], 3);
   const charges = c.churn.charges;
   for (let i = 0; i < 40; i++) c.update(0.05);
-  for (let k = 0; k < 6; k++) { c.hand.forEach((u, i) => { if (u && c.roleOf(u) !== 'junk') c.tuck(i); }); c.refill(); }
-  const g = c.hand.find((u) => u && c.roleOf(u) === 'junk');
+  for (let k = 0; k < 6; k++) { c.hand.forEach((u, i) => { if (u && c.categoryOf(u) !== 'junk') c.tuck(i); }); c.refill(); }
+  const g = c.hand.find((u) => u && c.categoryOf(u) === 'junk');
   assert.ok(g, 'a Glitch reached the hand');
   assert.equal(c.check(g).ok, false);
   assert.ok(c.churnCard(g).ok);

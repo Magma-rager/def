@@ -7,6 +7,7 @@
 // The first fight is entered through the map like a player would; the others set up a specific
 // Act I formation (state injection) so the same encounters can be compared before and after a change.
 import { createRequire } from 'node:module';
+import { uiDecision, uiPerform } from './lib/uibot.mjs';
 import fs from 'node:fs';
 const { chromium } = createRequire(import.meta.url)('playwright');
 
@@ -117,8 +118,7 @@ async function playFight(f) {
     const st = await p.evaluate(() => {
       const c = window.__sb.battle && window.__sb.battle.combat;
       if (!c) return { gone: true };
-      const legal = [...c.hand].filter((u) => u && c.check(u).ok).map((u) => ({ u, role: c.roleOf(u), rank: c.effRank(u) }));
-      return { phase: c.phase, hand: c.hand.join(','), legal, len: c.combo ? c.combo.cards.length : 0, canCash: c.canCashOut(), flow: c.flowLeft(), end: c.phase === 'END' };
+      return { phase: c.phase, hand: c.hand.join(','), len: c.combo ? c.combo.cards.length : 0, end: c.phase === 'END' };
     });
     if (st.gone || st.end) break;
     if (st.hand !== lastHand) {
@@ -128,25 +128,19 @@ async function playFight(f) {
     }
     wait -= 0.1;
     if (wait > 0) continue;
-    wait = CARD;
-    if (st.phase === 'PRE' && st.legal.length) {
-      st.legal.sort((a, c) => a.rank - c.rank);
-      await tapCard(st.legal[0].u);
-    } else if (st.phase === 'ACTIVE') {
-      const conv = st.legal.filter((x) => x.role === 'conv').sort((a, c) => a.rank - c.rank);
-      const close = st.legal.filter((x) => x.role === 'close').sort((a, c) => c.rank - a.rank);
-      if (conv.length && (st.len < 4 || !close.length)) await tapCard(conv[0].u);
-      else if (close.length) await tapCard(close[0].u);
-      else if (st.canCash) await p.tap('.ctl.cash').catch(() => {});
-      if (!shot && st.len >= 2) { shot = true; await p.screenshot({ path: `${out}/${LANG}-${W}-${f.name.replace(/\W+/g, '_')}.png` }); }
-    }
+    // the learner policy (tools/lib/bot.mjs), performed with touch: hero buttons, cards, FINISH
+    const a = await uiDecision(p, 'learner');
+    if (!a || a.type === 'wait') { wait = 0.2; continue; }
+    await uiPerform(p, a, { touch: true });
+    wait = a.type === 'select' || a.type === 'finish' ? 0.4 : CARD;
+    if (!shot && st.len >= 2) { shot = true; await p.screenshot({ path: `${out}/${LANG}-${W}-${f.name.replace(/\W+/g, '_')}.png` }); }
   }
   await p.waitForTimeout(400);
   const r = await p.evaluate(() => {
     const c = window.__sb.battle ? window.__sb.battle.combat : null;
     const P = c && c.__probe;
     if (!P) return null;
-    return { states: P.states, acts: P.acts, combos: P.combos, t: c.t, result: c.result, hpLost: P.hpStart - Math.max(0, c.hp), hpStart: P.hpStart, dmg: P.dmg, interference: P.interference, ko: c.party.filter((x) => x.ko).length };
+    return { states: P.states, acts: P.acts, combos: P.combos, t: c.t, result: c.result, hpLost: P.hpStart - Math.max(0, c.hp), hpStart: P.hpStart, dmg: P.dmg, interference: P.interference, stats: { basics: c.stats.basics, artes: c.stats.artes, supports: c.stats.supports, perfect: c.stats.perfect, cashouts: c.stats.cashouts, forced: c.stats.forced, rejected: c.stats.rejected } };
   });
   return { fight: f.name, enemies, ...r };
 }
@@ -174,9 +168,11 @@ for (const r of results) {
   }
   const rate = (s) => (r.states[s] && r.states[s].combat > 0 ? (r.states[s].atb / r.states[s].combat).toFixed(3) : '-');
   const time = (s) => (r.states[s] ? r.states[s].combat.toFixed(1) : '0.0');
-  const actsIn = (s) => (r.states[s] ? r.states[s].enemyActs : 0);
+  // by the state when the enemy acted (a frame that began in the breather and acted after it ended
+  // counts where the action happened)
+  const actsIn = (s) => r.acts.filter((x) => x.state === s).length;
   const noLegal = r.acts.filter((a) => a.state === 'pre' && a.legal === 0).length;
-  lines.push(`${r.fight} [${r.enemies.join('+')}] → ${r.result && r.result.victory ? 'victory' : 'defeat'} in ${r.t.toFixed(0)}s, then ${r.after}; HP lost ${r.hpLost}/${r.hpStart}, heroes down ${r.ko}`);
+  lines.push(`${r.fight} [${r.enemies.join('+')}] → ${r.result && r.result.victory ? 'victory' : 'defeat'} in ${r.t.toFixed(0)}s, then ${r.after}; HP lost ${r.hpLost}/${r.hpStart}; cards: basic ${r.stats.basics}, arte ${r.stats.artes}, support ${r.stats.supports}; endings: Perfect ${r.stats.perfect}, Cash Out ${r.stats.cashouts}, Dropped ${r.stats.forced}; illegal taps ${r.stats.rejected}`);
   lines.push(`  first enemy action ${r.acts[0] ? r.acts[0].t.toFixed(1) + 's' : '-'}; enemy actions ${r.acts.length} (${Object.entries(per).map(([k, v]) => `${k} ${v}`).join(', ')}); gaps median ${med(gaps) ? med(gaps).toFixed(2) : '-'}s, min ${gaps.length ? Math.min(...gaps).toFixed(2) : '-'}s`);
   lines.push(`  combat time by state: deciding (pre) ${time('pre')}s, Flow held ${time('hold')}s, combo ${time('active')}s, breather ${time('recover')}s, finisher ${time('finisher')}s`);
   lines.push(`  ATB per enemy-second by state: pre ${rate('pre')}, held ${rate('hold')}, combo ${rate('active')}, breather ${rate('recover')}, finisher ${rate('finisher')}`);

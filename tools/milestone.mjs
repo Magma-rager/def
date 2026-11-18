@@ -15,6 +15,7 @@
 // SB_FLOW=defeat after the first run, restarts a fight from the pause menu, loses the next run (the bot
 //                stops acting at its Act I boss), and starts a third run up to its first victory.
 import { createRequire } from 'node:module';
+import { uiDecision, uiPerform } from './lib/uibot.mjs';
 import fs from 'node:fs';
 import { findIssues } from './lib/text-issues.mjs';
 import { RU } from '../src/i18n/ru.js';
@@ -74,7 +75,7 @@ const snap = () => p.evaluate(() => {
 });
 // Words of 3+ Latin letters that may legitimately stay in Latin script in any language.
 // Language names in the switch are written in their own language on purpose.
-const LATIN_OK = /^(SIGNAL|BREAK|Signalbreak|EX|ATB|Mk\d*|Shift|Alt|Tab|Esc|JRPG|NPC|root|Root|give|rare|English)$/;
+const LATIN_OK = /^(SIGNAL|BREAK|Signalbreak|SIGNALBREAK|EX|ATB|Mk\d*|Shift|Alt|Tab|Esc|JRPG|NPC|root|Root|give|rare|English)$/;
 const leftovers = new Map();
 const layoutIssues = new Map();
 async function scanScreen(name) {
@@ -118,7 +119,7 @@ async function reloadAndContinue(label) {
   await clickText('Continue');
   await p.waitForTimeout(800);
   const after = await snap();
-  const diff = after ? same(before, after, ['act', 'floors', 'scrap', 'deck', 'relics', 'mutations', 'party', 'path', 'map', 'bossDecisions', 'pending']) : ['run missing'];
+  const diff = after ? same(before, after, ['act', 'floors', 'scrap', 'deck', 'relics', 'mutations', 'hp', 'path', 'map', 'bossDecisions', 'pending']) : ['run missing'];
   check(`${label}: state identical after reload`, diff.length === 0, diff.length ? `differs: ${diff.join(', ')}` : `act ${after.act}, floor ${after.floors}, deck ${after.deck.length}, relics ${after.relics.length}`);
   return { before, after };
 }
@@ -145,8 +146,8 @@ async function fightLog() {
   const f = await p.evaluate(() => {
     const c = window.__sb.battle && window.__sb.battle.combat;
     if (!c) return null;
-    const roles = c.hand.map((u) => (u ? c.roleOf(u) : '-')).join(',');
-    return `t=${c.t.toFixed(0)}s enemies ${c.enemies.filter((e) => e.alive).map((e) => `${e.id} ${Math.round(e.hp)}/${e.maxHp} g${Math.round(e.guard)}`).join(' ')} | party ${Math.round(c.hp)}/${c.maxHp} g${Math.round(c.guard)} | ${c.phase} hand ${roles} | glitch in draw ${c.draw.filter((u) => c.roleOf(u) === 'junk').length} | churn ${c.churn.charges}`;
+    const roles = c.hand.map((u) => (u ? c.categoryOf(u) : '-')).join(',');
+    return `t=${c.t.toFixed(0)}s enemies ${c.enemies.filter((e) => e.alive).map((e) => `${e.id} ${Math.round(e.hp)}/${e.maxHp} g${Math.round(e.guard)}`).join(' ')} | party ${Math.round(c.hp)}/${c.maxHp} g${Math.round(c.guard)} | ${c.phase} hand ${roles} | glitch in draw ${c.draw.filter((u) => c.categoryOf(u) === 'junk').length} | churn ${c.churn.charges}`;
   });
   if (f) log(`fight ${f}`);
   await scanScreen('battle');
@@ -154,43 +155,13 @@ async function fightLog() {
 
 async function battleTick() {
   if (await click('.tut-layer:not([hidden]) .btn')) return;
-  const st = await p.evaluate(() => {
-    const bs = window.__sb.battle;
-    const c = bs && bs.combat;
-    if (!c || c.phase === 'END') return null;
-    const legal = c.hand.map((u, i) => (u && c.check(u).ok ? { i, role: c.roleOf(u), rank: c.effRank(u) } : null)).filter(Boolean);
-    const res = c.reserve.map((u, i) => (c.check(u).ok ? { i, role: c.roleOf(u), rank: c.effRank(u) } : null)).filter(Boolean);
-    return {
-      phase: c.phase, len: c.combo ? c.combo.cards.length : 0, left: c.flowLeft(), mom: c.momentum, guard: c.guard,
-      danger: c.aliveEnemies().some((e) => e.atb > 0.8 && e.intent && (e.intent.kind === 'atk' || e.intent.kind === 'aoe')),
-      canCash: c.canCashOut(), legal, res, flowCost: c.momentumCostFlow(),
-      bad: c.hand.findIndex((u) => u && !c.check(u).ok && !c.isLocked(u)), charges: c.churn.charges,
-      junk: c.hand.findIndex((u) => u && c.roleOf(u) === 'junk'),
-    };
-  });
-  if (!st) return;
-  // Glitch cards cost nothing to Churn: swipe them away whenever they show up
-  if (st.junk >= 0) { await swipeDown(st.junk); return; }
-  if (st.danger && st.guard < 6 && st.mom >= 3) { await p.click('.ctl.mom:nth-of-type(2)', { timeout: 300 }).catch(() => {}); return; }
-  if (st.phase === 'ACTIVE' && st.mom >= 6 && st.left < 1 && st.len >= 2) { await p.click('.ctl.mom:nth-of-type(1)', { timeout: 300 }).catch(() => {}); }
-  let pick = null;
-  if (st.phase === 'PRE') {
-    pick = st.legal.filter((x) => x.role === 'open').sort((a, b2) => a.rank - b2.rank)[0];
-    if (!pick && st.bad >= 0 && st.charges > 0) { await swipeDown(st.bad); return; }
-  }
-  else if (st.phase === 'ACTIVE') {
-    const closers = st.legal.filter((x) => x.role === 'close').sort((a, b2) => b2.rank - a.rank);
-    const convs = st.legal.filter((x) => x.role === 'conv').sort((a, b2) => a.rank - b2.rank);
-    if (closers.length && (st.len >= 3 || !convs.length || st.left < 1.1)) pick = closers[0];
-    else if (convs.length && st.left > 0.25) pick = convs[0];
-    else if (st.res.length) { await p.click(`.res-cell:nth-child(${st.res[0].i + 1}) .res-card`, { timeout: 300 }).catch(() => {}); return; }
-    else if (st.canCash) { await p.click('.ctl.cash', { timeout: 300 }).catch(() => {}); return; }
-    else if (st.bad >= 0 && st.charges > 0) { await swipeDown(st.bad); return; }
-  }
-  if (pick) {
-    const box = await (await p.$$('.slot'))[pick.i].boundingBox();
-    if (box) await p.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-  }
+  // the Phase 4 player policy (tools/lib/bot.mjs), performed with real taps and swipes
+  const a = await uiDecision(p, 'regular');
+  if (!a) return;
+  await uiPerform(p, a);
+  // a combo short on Flow: buy more with Momentum (the +FLOW button)
+  const st = await p.evaluate(() => { const c = window.__sb.battle && window.__sb.battle.combat; return c && c.combo ? { left: c.flowLeft(), mom: c.available(), len: c.combo.cards.length } : null; });
+  if (st && st.mom >= 6 && st.left < 1 && st.len >= 2) await p.click('.ctl.mom:nth-of-type(1)', { timeout: 300 }).catch(() => {});
 }
 
 await p.goto(URL);

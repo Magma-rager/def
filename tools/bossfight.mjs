@@ -1,5 +1,6 @@
 // Starts a specific battle through the live app and captures interference/boss visuals.
 import { createRequire } from 'node:module';
+import { uiDecision, uiPerform } from './lib/uibot.mjs';
 const { chromium } = createRequire(import.meta.url)('playwright');
 const [w = 1194, h = 834, tag = 'ipad', act = '1', boss = 'clockwork_regent'] = process.argv.slice(2);
 const OUT = '/tmp/claude-0/shots';
@@ -27,30 +28,20 @@ await p.evaluate(([act, boss]) => {
 }, [act, boss]);
 await p.waitForTimeout(900);
 await p.screenshot({ path: `${OUT}/${tag}-b-${boss}-0.png` });
-const tapLegal = async (pref) => {
-  const slots = await p.$$('.slot');
-  for (const s of slots) {
-    const c = await s.$('.card.legal' + (pref || ''));
-    if (c) { const bb = await s.boundingBox(); await p.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2); return true; }
-  }
-  return false;
-};
-for (let round = 0; round < 6; round++) {
-  await tapLegal('.role-open');
-  await p.waitForTimeout(200);
-  await tapLegal('.role-conv');
-  await p.waitForTimeout(200);
-  if (round === 1) await p.screenshot({ path: `${OUT}/${tag}-b-${boss}-combo.png` });
-  if (!(await tapLegal('.role-close'))) await p.click('.ctl.cash', { timeout: 300 }).catch(() => {});
-  await p.waitForTimeout(round === 2 ? 120 : 900);
-  if (round === 2) await p.screenshot({ path: `${OUT}/${tag}-b-${boss}-hit.png` });
+for (let round = 0; round < 24; round++) {
+  // the Phase 4 player policy (tools/lib/bot.mjs), performed with real clicks
+  const a = await uiDecision(p, 'regular');
+  if (a) await uiPerform(p, a);
+  await p.waitForTimeout(250);
+  if (round === 6) await p.screenshot({ path: `${OUT}/${tag}-b-${boss}-combo.png` });
+  if (round === 10) await p.screenshot({ path: `${OUT}/${tag}-b-${boss}-hit.png` });
 }
 // force interference visuals via the engine
 await p.evaluate(() => { const c = window.__sb.battle.combat; const e = c.enemies[0]; c.lockCards(e, 2); c.scrambleCards(e, 1, 'suit'); c.jamSlot(e, 4); c.stash(c.hand.find((u) => u && !c.isLocked(u))); });
 await p.waitForTimeout(500);
 await p.screenshot({ path: `${OUT}/${tag}-b-${boss}-interfere.png` });
 // phase change
-await p.evaluate(() => { const c = window.__sb.battle.combat; const e = c.enemies[0]; c.dealDamage(e, Math.ceil(e.hp - e.maxHp * 0.45), { src: 'V', closer: true, pierce: true }); });
+await p.evaluate(() => { const c = window.__sb.battle.combat; const e = c.enemies[0]; c.dealDamage(e, Math.ceil(e.hp - e.maxHp * 0.45), { src: 'V', arte: true, pierce: true }); });
 await p.waitForTimeout(350);
 await p.screenshot({ path: `${OUT}/${tag}-b-${boss}-phase.png` });
 // finisher cut-in

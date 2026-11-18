@@ -53,7 +53,8 @@ test('all current content is translated', () => {
   for (const p of PREPARED_PLANS) { filled(RU.plans[p.id].name, `plan ${p.id}`); filled(RU.plans[p.id].text, `plan ${p.id}`); }
   for (const v of VOLATILE_OUTCOMES) { filled(RU.volatile[v.id].name, `volatile ${v.id}`); filled(RU.volatile[v.id].text, `volatile ${v.id}`); }
   for (const act of Object.keys(THEME_NAMES)) filled(RU.themes[act], `theme ${act}`);
-  for (const role of ['open', 'conv', 'close', 'junk']) filled(RU.roles[role], `role ${role}`);
+  for (const cat of ['basic', 'arte', 'support', 'junk']) filled(RU.categories[cat], `category ${cat}`);
+  for (const r of [1, 2, 3]) filled(RU.strengths[r], `strength ${r}`);
   for (const o of ['V', 'C', 'S']) { filled(RU.owners[o], `owner ${o}`); filled(RU.initials[o], `initial ${o}`); filled(RU.heroRoles[o], `hero role ${o}`); }
   for (const r of new Set([...CARD_LIST.map((c) => c.rarity), ...Object.values(RELICS).map((r) => r.rarity)])) filled(RU.rarities[r], `rarity ${r}`);
   for (const tier of new Set(Object.values(ENEMIES).map((e) => e.tier))) filled(RU.tiers[tier], `tier ${tier}`);

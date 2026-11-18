@@ -219,7 +219,7 @@ export function mapScreen(app, root) {
     const type = NODE_TYPES[n.type];
     const cur = run.d.position === n.id;
     const cls = ['map-node', `t-${n.type}`, avail.has(n.id) ? 'avail' : '', n.visited ? 'visited' : '', cur ? 'current' : ''].join(' ');
-    const b = h('button', { class: cls, type: 'button', style: { left: `${x * 100}%`, top: `${y * 100}%`, '--nc': type.color }, 'aria-label': `${nodeName(n.type)}${n.trait ? ' · ' + traitName(n.trait) : ''}` },
+    const b = h('button', { class: cls, type: 'button', 'data-node': n.id, style: { left: `${x * 100}%`, top: `${y * 100}%`, '--nc': type.color }, 'aria-label': `${nodeName(n.type)}${n.trait ? ' · ' + traitName(n.trait) : ''}` },
       h('span', { class: 'mn-ico', html: iconSvg(type.icon) }), n.trait ? h('span', { class: 'mn-trait', style: { background: TRAITS[n.trait].color }, title: traitName(n.trait) }) : null);
     b.addEventListener('click', () => select(n));
     nodeEls[n.id] = b;

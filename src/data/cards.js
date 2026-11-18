@@ -1,11 +1,32 @@
-// SIGNAL//BREAK card library.
-// owner: V = Hessa (Vanguard), C = Corvin (Channeler), S = Pin (Striker)
-// role: open | conv | close.  variant: A | B | EX.  rank 1-9.
+// SIGNAL//BREAK card library (docs/COMBAT_SPEC.md §5, §18.1).
+//
+// category: basic | arte | support | junk
+//   basic   — neutral attacks any hero performs; rank 1 Weak, 2 Medium, 3 Strong; cost 0; generate
+//             Momentum when they resolve (BASIC_GAIN)
+//   arte    — one hero's offensive ability; rank 4-6; costs Momentum (ARTE_COST); needs a basic
+//             attack earlier in the same combo, performed by the same hero
+//   support — no rank; performed by its owner (or the selected hero if neutral); never part of a combo
+//   junk    — unplayable; Churn deletes it
+// owner: V = Hessa, C = Corvin, S = Pin, null = neutral.  variant (suit): A | B | EX — a bonus layer
+// (Step, Cross), never a legality rule.
 // v: numeric values [base, upgraded]; text uses {key} placeholders that render those values.
-// fx(A): effect script run by the combat engine. A is the card API (see engine/combat.js makeApi).
+// fx(A): effect script run by the combat engine. A is the card API (engine/combat.js makeApi).
+//
+// Phase 4 conversion status (p4):
+//   'converted' — reviewed for the new rules; offered by rewards, shops and events
+//   'compat'    — older card kept playable in existing decks with an interim conversion, but not
+//                 offered until its planned conversion (Rewind "techniques", Phase 8)
+//   'withheld'  — depends on Relays (Phase 5); never offered, and save version 5 replaces it with
+//                 `migrate` (same hero and rarity) when an older save is loaded
 
-export const ROLE_NAMES = { open: 'Opener', conv: 'Converter', close: 'Closer', junk: 'Glitch' };
+export const CATEGORY_NAMES = { basic: 'Basic', arte: 'Arte', support: 'Support', junk: 'Glitch' };
+export const STRENGTH_NAMES = { 1: 'Weak', 2: 'Medium', 3: 'Strong' };
 export const OWNER_NAMES = { V: 'Hessa', C: 'Corvin', S: 'Pin' };
+// prototype values (docs/COMBAT_SPEC.md §21)
+export const BASIC_GAIN = { 1: 1, 2: 1, 3: 2 }; // Momentum a basic attack generates, by its printed rank
+export const ARTE_COST = { 4: 2, 5: 3, 6: 4 }; // Momentum an arte costs, by its printed rank
+// the attack a hero uses for a neutral basic attack
+export const HERO_ANIM = { V: 'melee', C: 'cast', S: 'shoot' };
 
 export const ARCHETYPES = {
   ladder: 'Rank Ladder',
@@ -22,424 +43,476 @@ export const ARCHETYPES = {
 
 const C = [];
 function card(def) {
+  def.tags = def.tags || [];
+  def.p4 = def.p4 || 'converted';
+  if (def.category === 'basic') {
+    def.owner = null;
+    def.cost = 0;
+    def.gain = BASIC_GAIN[def.rank];
+    def.strength = def.rank;
+  } else if (def.category === 'arte') {
+    def.cost = def.cost !== undefined ? def.cost : ARTE_COST[def.rank];
+  } else if (def.category === 'support') {
+    def.rank = 0;
+    def.cost = def.cost || 0;
+  }
   C.push(def);
 }
 
-// ───────────────────────────── OPENERS ─────────────────────────────
+// ───────────────────────────── BASIC ATTACKS (neutral) ─────────────────────────────
+// Weak (rank 1)
 card({
-  id: 'scrapline', name: 'Scrapline', owner: 'S', role: 'open', rank: 1, variant: 'A', rarity: 'starter', anim: 'shoot', glyph: 'arrow',
-  v: { d: [5, 7] }, text: 'Deal {d}.', tags: [],
+  id: 'scrapline', name: 'Scrapline', category: 'basic', rank: 1, variant: 'A', rarity: 'starter', anim: 'shoot', glyph: 'arrow',
+  v: { d: [5, 7] }, text: 'Deal {d}.',
   fx: (A) => A.dmg(A.v('d')),
 });
 card({
-  id: 'hotwire', name: 'Hotwire', owner: 'C', role: 'open', rank: 2, variant: 'B', rarity: 'starter', anim: 'cast', glyph: 'bolt',
-  v: { d: [3, 4], m: [1, 2] }, text: 'Deal {d}. Gain {m} Momentum.', tags: ['momentum'],
-  fx: (A) => { A.dmg(A.v('d')); A.mom(A.v('m')); },
-});
-card({
-  id: 'salvage', name: 'Salvage', owner: 'V', role: 'open', rank: 1, variant: 'B', rarity: 'starter', anim: 'guard', glyph: 'box',
-  v: { g: [5, 7] }, text: 'Gain {g} Guard. Recover 1 Churn charge.', tags: ['guard', 'churn'],
-  fx: (A) => { A.guard(A.v('g')); A.churnGain(1); },
-});
-card({
-  id: 'rivet_jab', name: 'Rivet Jab', owner: 'V', role: 'open', rank: 2, variant: 'A', rarity: 'starter', anim: 'melee', glyph: 'hammer',
-  v: { d: [6, 8] }, text: 'Deal {d}.', tags: [],
-  fx: (A) => A.dmg(A.v('d')),
-});
-card({
-  id: 'spark_primer', name: 'Spark Primer', owner: 'C', role: 'open', rank: 1, variant: 'EX', rarity: 'common', anim: 'cast', glyph: 'star',
-  v: { d: [2, 3], b: [4, 6] }, text: 'Deal {d}. The next card this combo deals +{b}.', tags: ['flow'],
+  id: 'spark_primer', name: 'Spark Primer', category: 'basic', rank: 1, variant: 'EX', rarity: 'common', anim: 'cast', glyph: 'star',
+  v: { d: [3, 4], b: [4, 6] }, text: 'Deal {d}. The next card this combo deals +{b}.', tags: ['flow'],
   fx: (A) => { A.dmg(A.v('d')); A.nextBonus(A.v('b')); },
 });
 card({
-  id: 'pinprick', name: 'Pinprick', owner: 'S', role: 'open', rank: 1, variant: 'A', rarity: 'common', anim: 'shoot', glyph: 'arrow',
-  v: { d: [3, 4] }, text: 'Deal {d} twice.', tags: [],
+  id: 'pinprick', name: 'Pinprick', category: 'basic', rank: 1, variant: 'A', rarity: 'common', anim: 'shoot', glyph: 'arrow',
+  v: { d: [3, 4] }, text: 'Deal {d} twice.',
   fx: (A) => A.dmg(A.v('d'), { hits: 2 }),
 });
 card({
-  id: 'brace_up', name: 'Brace Up', owner: 'V', role: 'open', rank: 3, variant: 'A', rarity: 'common', anim: 'guard', glyph: 'shield',
-  v: { g: [7, 9], k: [3, 5] }, text: 'Gain {g} Guard. Counter {k}.', tags: ['guard'],
-  fx: (A) => { A.guard(A.v('g')); A.counter(A.v('k')); },
-});
-card({
-  id: 'low_gear', name: 'Low Gear', owner: 'C', role: 'open', rank: 1, variant: 'B', rarity: 'common', anim: 'buff', glyph: 'gear',
-  v: { m: [2, 3] }, text: 'Gain {m} Momentum.', tags: ['momentum'],
-  fx: (A) => A.mom(A.v('m')),
-});
-card({
-  id: 'first_rung', name: 'First Rung', owner: 'S', role: 'open', rank: 1, variant: 'A', rarity: 'uncommon', anim: 'shoot', glyph: 'ladder',
+  id: 'first_rung', name: 'First Rung', category: 'basic', rank: 1, variant: 'A', rarity: 'uncommon', anim: 'shoot', glyph: 'ladder',
   v: { d: [3, 4], b: [2, 3] }, text: 'Deal {d}. This combo, every Step deals +{b} bonus damage.', tags: ['ladder'],
   fx: (A) => { A.dmg(A.v('d')); A.ctxAdd('stepBonus', A.v('b')); },
 });
 card({
-  id: 'tinder_toss', name: 'Tinder Toss', owner: 'C', role: 'open', rank: 2, variant: 'A', rarity: 'common', anim: 'cast', glyph: 'flame',
-  v: { s: [3, 5] }, text: 'Apply {s} Scorch.', tags: ['interference'],
-  fx: (A) => A.status('scorch', A.v('s')),
+  id: 'cold_start', name: 'Cold Start', category: 'basic', rank: 1, variant: 'A', rarity: 'common', anim: 'melee', glyph: 'hammer',
+  v: { d: [4, 5], m: [2, 3] }, text: 'Deal {d}. If you have 0 Momentum, gain {m}.', tags: ['momentum'],
+  fx: (A) => { const zero = A.c.available() === 0; A.dmg(A.v('d')); if (zero) A.mom(A.v('m')); },
 });
 card({
-  id: 'gauge_read', name: 'Gauge Read', owner: 'S', role: 'open', rank: 2, variant: 'EX', rarity: 'uncommon', anim: 'shoot', glyph: 'eye',
-  v: { d: [3, 5] }, text: 'Deal {d}. If Reserve holds a card: +1 Momentum and +0.3s Flow.', tags: ['reserve'],
-  fx: (A) => { A.dmg(A.v('d')); if (A.c.reserve.length > 0) { A.mom(1); A.flow(0.3); } },
+  id: 'hidden_ace', name: 'Hidden Ace', category: 'basic', rank: 1, variant: 'EX', rarity: 'uncommon', anim: 'shoot', glyph: 'star',
+  v: { d: [4, 5] }, text: 'Deal {d}. From Reserve: deal triple and +1 Momentum.', tags: ['reserve'],
+  fx: (A) => { if (A.fromReserve) { A.dmg(A.v('d') * 3); A.mom(1); } else A.dmg(A.v('d')); },
 });
 card({
-  id: 'quickdraw', name: 'Quickdraw', owner: 'S', role: 'open', rank: 3, variant: 'B', rarity: 'common', anim: 'shoot', glyph: 'clock',
-  v: { d: [5, 7] }, text: 'Deal {d}. Continuations this combo refund +0.06s more (refund cap still applies).', tags: ['flow'],
-  fx: (A) => { A.dmg(A.v('d')); A.ctxAdd('refundBonus', 0.06); },
-});
-card({
-  id: 'shield_bash', name: 'Shield Bash', owner: 'V', role: 'open', rank: 3, variant: 'B', rarity: 'common', anim: 'melee', glyph: 'shield',
-  v: { d: [4, 6] }, text: 'Deal damage equal to half your Guard (min {d}).', tags: ['guard'],
-  fx: (A) => A.dmg(Math.max(A.v('d'), Math.floor(A.c.guard / 2))),
-});
-card({
-  id: 'junk_toss', name: 'Junk Toss', owner: 'V', role: 'open', rank: 2, variant: 'B', rarity: 'common', anim: 'melee', glyph: 'box',
-  v: { d: [4, 5] }, text: 'Deal {d}, +2 per Churn used this battle (max +10).', tags: ['churn'],
-  fx: (A) => A.dmg(A.v('d') + Math.min(10, 2 * A.c.stats.churns)),
-});
-card({
-  id: 'fault_finder', name: 'Fault Finder', owner: 'S', role: 'open', rank: 2, variant: 'A', rarity: 'uncommon', anim: 'shoot', glyph: 'eye',
-  v: { d: [3, 4], b: [6, 9] }, text: 'Deal {d}. Apply 4s Exposed. +{b} damage if a hand card is Locked or Scrambled.', tags: ['interference'],
-  fx: (A) => { A.dmg(A.v('d') + (A.disruptedCount() > 0 ? A.v('b') : 0)); A.status('exposed', 4); },
-});
-card({
-  id: 'mirror_wire', name: 'Mirror Wire', owner: 'C', role: 'open', rank: 3, variant: 'EX', rarity: 'uncommon', anim: 'cast', glyph: 'spiral',
-  v: { d: [3, 4], p: [50, 75] }, text: 'Deal {d}. The first Relay this combo Echoes the previous card at {p}%.', tags: ['relay'],
-  fx: (A) => { A.dmg(A.v('d')); A.ctxSet('relayEcho', A.v('p') / 100); },
-});
-card({
-  id: 'open_ledger', name: 'Open Ledger', owner: 'V', role: 'open', rank: 1, variant: 'A', rarity: 'uncommon', anim: 'guard', glyph: 'coin',
-  v: { g: [3, 5], p: [50, 75] }, text: 'Gain {g} Guard. If this combo Cashes Out, payout +{p}%.', tags: ['cashout'],
-  fx: (A) => { A.guard(A.v('g')); A.ctxAdd('cashPct', A.v('p') / 100); },
-});
-card({
-  id: 'polarity_shift', name: 'Polarity Shift', owner: 'C', role: 'open', rank: 2, variant: 'A', rarity: 'uncommon', anim: 'cast', glyph: 'wave',
-  v: { d: [3, 5] }, text: "Deal {d}. The combo's suit becomes B.", tags: ['variant'],
-  fx: (A) => { A.dmg(A.v('d')); A.setVariant('B'); },
-});
-card({
-  id: 'overture', name: 'Overture', owner: 'C', role: 'open', rank: 4, variant: 'EX', rarity: 'rare', anim: 'cast', glyph: 'star',
-  v: { d: [5, 7] }, text: 'Deal {d} to ALL. Gain 1 Momentum per hero in the party.', tags: ['momentum', 'relay'],
-  fx: (A) => { A.dmg(A.v('d'), { all: true }); A.mom(A.c.party.length); },
-});
-card({
-  id: 'deadeye_set', name: 'Deadeye Set', owner: 'S', role: 'open', rank: 4, variant: 'A', rarity: 'rare', anim: 'shoot', glyph: 'eye',
-  v: { d: [4, 6] }, text: 'Deal {d}. Mark the target: its next Closer hit deals +50%.', tags: ['ladder'],
-  fx: (A) => { A.dmg(A.v('d')); A.status('mark', 1); },
-});
-card({
-  id: 'iron_oath', name: 'Iron Oath', owner: 'V', role: 'open', rank: 2, variant: 'EX', rarity: 'rare', anim: 'guard', glyph: 'shield',
-  v: { g: [10, 14] }, text: 'Gain {g} Guard. Guard stops decaying for 8s.', tags: ['guard'],
-  fx: (A) => { A.guard(A.v('g')); A.holdGuard(8); },
-});
-card({
-  id: 'static_bloom', name: 'Static Bloom', owner: 'C', role: 'open', rank: 1, variant: 'B', rarity: 'rare', anim: 'cast', glyph: 'bolt',
+  id: 'static_bloom', name: 'Static Bloom', category: 'basic', rank: 1, variant: 'B', rarity: 'rare', anim: 'cast', glyph: 'bolt',
   v: { d: [2, 3] }, text: 'Deal {d} to ALL. Unlock every Locked hand card; +1 Momentum for each.', tags: ['interference'],
   fx: (A) => { A.dmg(A.v('d'), { all: true }); const n = A.unlockAll(); A.mom(n); },
 });
 card({
-  id: 'cold_start', name: 'Cold Start', owner: 'V', role: 'open', rank: 1, variant: 'A', rarity: 'common', anim: 'melee', glyph: 'hammer',
-  v: { d: [4, 5], m: [2, 3] }, text: 'Deal {d}. If you have 0 Momentum, gain {m}.', tags: ['momentum'],
-  fx: (A) => { const zero = A.c.momentum === 0; A.dmg(A.v('d')); if (zero) A.mom(A.v('m')); },
+  id: 'open_ledger', name: 'Open Ledger', category: 'basic', rank: 1, variant: 'A', rarity: 'uncommon', anim: 'melee', glyph: 'coin',
+  v: { d: [3, 4], p: [50, 75] }, text: 'Deal {d}. If this combo Cashes Out, payout +{p}%.', tags: ['cashout'],
+  fx: (A) => { A.dmg(A.v('d')); A.ctxAdd('cashPct', A.v('p') / 100); },
+});
+// Medium (rank 2)
+card({
+  id: 'rivet_jab', name: 'Rivet Jab', category: 'basic', rank: 2, variant: 'A', rarity: 'starter', anim: 'melee', glyph: 'hammer',
+  v: { d: [7, 9] }, text: 'Deal {d}.',
+  fx: (A) => A.dmg(A.v('d')),
 });
 card({
-  id: 'tripwire', name: 'Tripwire', owner: 'S', role: 'open', rank: 3, variant: 'A', rarity: 'common', anim: 'shoot', glyph: 'hook',
-  v: { d: [4, 6] }, text: 'Deal {d}. Apply 4s Weak (target deals -25%).', tags: ['guard'],
-  fx: (A) => { A.dmg(A.v('d')); A.status('weak', 4); },
-});
-card({
-  id: 'hidden_ace', name: 'Hidden Ace', owner: 'S', role: 'open', rank: 1, variant: 'EX', rarity: 'uncommon', anim: 'shoot', glyph: 'star',
-  v: { d: [4, 5] }, text: 'Deal {d}. From Reserve: deal triple and +1 Momentum.', tags: ['reserve'],
-  fx: (A) => { if (A.fromReserve) { A.dmg(A.v('d') * 3); A.mom(1); } else A.dmg(A.v('d')); },
-});
-
-// ──────────────────────────── CONVERTERS ────────────────────────────
-card({
-  id: 'rethread', name: 'Rethread', owner: 'C', role: 'conv', rank: 3, variant: 'A', rarity: 'starter', anim: 'cast', glyph: 'spiral',
-  v: { d: [3, 5] }, text: 'Deal {d}. Rewind 2 (combo rank -2).', tags: ['ladder'],
-  fx: (A) => { A.dmg(A.v('d')); A.rewind(2); },
-});
-card({
-  id: 'splitter', name: 'Splitter', owner: 'S', role: 'conv', rank: 4, variant: 'B', rarity: 'starter', anim: 'shoot', glyph: 'arrow',
-  v: { d: [3, 4] }, text: 'Deal {d} to target and {d} to a random enemy. Relay: +1 Momentum.', tags: ['relay'],
-  fx: (A) => { A.dmg(A.v('d')); A.dmg(A.v('d'), { rand: true }); if (A.relay) A.mom(1); },
-});
-card({
-  id: 'dead_drop', name: 'Dead Drop', owner: 'V', role: 'conv', rank: 3, variant: 'EX', rarity: 'starter', anim: 'guard', glyph: 'box',
-  v: { g: [3, 4], p: [60, 90] }, text: 'Gain {g} Guard. Store: when this combo Closes or Cashes Out, Echo its strongest card at {p}%.', tags: ['relay', 'cashout'],
-  fx: (A) => { A.guard(A.v('g')); A.storeEcho(A.v('p') / 100); },
-});
-card({
-  id: 'gear_swap', name: 'Gear Swap', owner: 'V', role: 'conv', rank: 3, variant: 'B', rarity: 'starter', anim: 'melee', glyph: 'gear',
-  v: { d: [4, 6] }, text: "Deal {d}. Flip the combo's suit (A↔B).", tags: ['variant'],
-  fx: (A) => { A.dmg(A.v('d')); A.flipVariant(); },
-});
-card({
-  id: 'step_up', name: 'Step Up', owner: 'S', role: 'conv', rank: 2, variant: 'A', rarity: 'starter', anim: 'shoot', glyph: 'ladder',
-  v: { d: [3, 4], b: [3, 4] }, text: 'Deal {d}. As a Step: +{b} damage and +1 Momentum.', tags: ['ladder'],
-  fx: (A) => { const st = A.kind === 'step'; A.dmg(A.v('d') + (st ? A.v('b') : 0)); if (st) A.mom(1); },
-});
-card({
-  id: 'coil_charge', name: 'Coil Charge', owner: 'C', role: 'conv', rank: 4, variant: 'A', rarity: 'starter', anim: 'cast', glyph: 'bolt',
-  v: { m: [1, 2], d: [2, 4] }, text: 'Deal {d}. Gain {m} Momentum.', tags: ['momentum'],
+  id: 'hotwire', name: 'Hotwire', category: 'basic', rank: 2, variant: 'B', rarity: 'starter', anim: 'cast', glyph: 'bolt',
+  v: { d: [4, 5], m: [1, 2] }, text: 'Deal {d}. Gain {m} Momentum.', tags: ['momentum'],
   fx: (A) => { A.dmg(A.v('d')); A.mom(A.v('m')); },
 });
 card({
-  id: 'ward_weave', name: 'Ward Weave', owner: 'C', role: 'conv', rank: 4, variant: 'B', rarity: 'common', anim: 'guard', glyph: 'shield',
-  v: { g: [5, 7], r: [3, 4] }, text: 'Gain {g} Guard. Relay: +{r} more.', tags: ['guard', 'relay'],
-  fx: (A) => A.guard(A.v('g') + (A.relay ? A.v('r') : 0)),
+  id: 'step_up', name: 'Step Up', category: 'basic', rank: 2, variant: 'A', rarity: 'common', anim: 'shoot', glyph: 'ladder',
+  v: { d: [4, 5], b: [3, 4] }, text: 'Deal {d}. As a Step: +{b} damage and +1 Momentum.', tags: ['ladder'],
+  fx: (A) => { const st = A.step; A.dmg(A.v('d') + (st ? A.v('b') : 0)); if (st) A.mom(1); },
 });
 card({
-  id: 'riposte_frame', name: 'Riposte Frame', owner: 'V', role: 'conv', rank: 5, variant: 'A', rarity: 'uncommon', anim: 'guard', glyph: 'shield',
-  v: { g: [5, 7], k: [5, 8] }, text: 'Gain {g} Guard. Counter {k}.', tags: ['guard'],
-  fx: (A) => { A.guard(A.v('g')); A.counter(A.v('k')); },
+  id: 'tinder_toss', name: 'Tinder Toss', category: 'basic', rank: 2, variant: 'A', rarity: 'common', anim: 'cast', glyph: 'flame',
+  v: { s: [3, 5] }, text: 'Apply {s} Scorch.', tags: ['interference'],
+  fx: (A) => A.status('scorch', A.v('s')),
 });
 card({
-  id: 'feedback_loop', name: 'Feedback Loop', owner: 'C', role: 'conv', rank: 5, variant: 'EX', rarity: 'uncommon', anim: 'cast', glyph: 'spiral',
-  v: { p: [75, 100] }, text: 'Echo the previous card at {p}%.', tags: ['relay'],
-  fx: (A) => A.echoPrev(A.v('p') / 100),
+  id: 'gauge_read', name: 'Gauge Read', category: 'basic', rank: 2, variant: 'EX', rarity: 'uncommon', anim: 'shoot', glyph: 'eye',
+  v: { d: [4, 6] }, text: 'Deal {d}. If Reserve holds a card: +1 Momentum and +0.3s Flow.', tags: ['reserve'],
+  fx: (A) => { A.dmg(A.v('d')); if (A.c.reserve.length > 0) { A.mom(1); A.flow(0.3); } },
 });
 card({
-  id: 'hand_off', name: 'Hand Off', owner: 'S', role: 'conv', rank: 2, variant: 'EX', rarity: 'common', anim: 'buff', glyph: 'hook',
-  v: { p: [40, 60] }, text: 'Gain 1 Momentum. If the next card is a Relay, it Echoes at {p}%.', tags: ['relay'],
-  fx: (A) => { A.mom(1); A.ctxSet('nextRelayEcho', A.v('p') / 100); },
+  id: 'junk_toss', name: 'Junk Toss', category: 'basic', rank: 2, variant: 'B', rarity: 'common', anim: 'melee', glyph: 'box',
+  v: { d: [4, 5] }, text: 'Deal {d}, +2 per Churn used this battle (max +10).', tags: ['churn'],
+  fx: (A) => A.dmg(A.v('d') + Math.min(10, 2 * A.c.stats.churns)),
 });
 card({
-  id: 'overclock', name: 'Overclock', owner: 'C', role: 'conv', rank: 5, variant: 'B', rarity: 'uncommon', anim: 'cast', glyph: 'clock',
-  v: { f: [0.5, 0.7], d: [2, 3] }, text: 'Gain {f}s Flow. Deal {d}.', tags: ['flow'],
-  fx: (A) => { A.flow(A.v('f')); A.dmg(A.v('d')); },
+  id: 'fault_finder', name: 'Fault Finder', category: 'basic', rank: 2, variant: 'A', rarity: 'uncommon', anim: 'shoot', glyph: 'eye',
+  v: { d: [3, 4], b: [6, 9] }, text: 'Deal {d}. 4s Exposed. +{b} if a hand card is Locked or Scrambled.', tags: ['interference'],
+  fx: (A) => { A.dmg(A.v('d') + (A.disruptedCount() > 0 ? A.v('b') : 0)); A.status('exposed', 4); },
 });
 card({
-  id: 'slipstream', name: 'Slipstream', owner: 'S', role: 'conv', rank: 4, variant: 'EX', rarity: 'uncommon', anim: 'shoot', glyph: 'wave',
-  v: { d: [2, 3] }, text: 'Deal {d} twice. This card refunds double Flow.', tags: ['flow'],
-  fx: (A) => { A.dmg(A.v('d'), { hits: 2 }); A.extraRefund(); },
+  id: 'polarity_shift', name: 'Polarity Shift', category: 'basic', rank: 2, variant: 'A', rarity: 'uncommon', anim: 'cast', glyph: 'wave',
+  v: { d: [4, 5] }, text: "Deal {d}. The combo's suit becomes B.", tags: ['variant'],
+  fx: (A) => { A.dmg(A.v('d')); A.setVariant('B'); },
 });
 card({
-  id: 'scrap_feed', name: 'Scrap Feed', owner: 'V', role: 'conv', rank: 4, variant: 'A', rarity: 'common', anim: 'melee', glyph: 'gear',
-  v: { d: [4, 6] }, text: 'Deal {d}. Gain 1 Churn charge.', tags: ['churn'],
+  id: 'tally_mark', name: 'Tally Mark', category: 'basic', rank: 2, variant: 'A', rarity: 'uncommon', anim: 'melee', glyph: 'coin',
+  v: { d: [3, 4], b: [3, 4] }, text: 'Deal {d}. If this combo Cashes Out, payout +{b} per card.', tags: ['cashout'],
+  fx: (A) => { A.dmg(A.v('d')); A.ctxAdd('cashPerCard', A.v('b')); },
+});
+// Strong (rank 3)
+card({
+  id: 'piston_strike', name: 'Piston Strike', category: 'basic', rank: 3, variant: 'A', rarity: 'starter', anim: 'melee', glyph: 'hammer',
+  v: { d: [10, 13] }, text: 'Deal {d}.',
+  fx: (A) => A.dmg(A.v('d')),
+});
+card({
+  id: 'quickdraw', name: 'Quickdraw', category: 'basic', rank: 3, variant: 'B', rarity: 'common', anim: 'shoot', glyph: 'clock',
+  v: { d: [7, 9] }, text: 'Deal {d}. Later cards this combo refund +0.3s more Flow.', tags: ['flow'],
+  fx: (A) => { A.dmg(A.v('d')); A.ctxAdd('refundBonus', 0.3); },
+});
+card({
+  id: 'tripwire', name: 'Tripwire', category: 'basic', rank: 3, variant: 'A', rarity: 'common', anim: 'shoot', glyph: 'hook',
+  v: { d: [6, 8] }, text: 'Deal {d}. Apply 4s Weak (target deals -25%).', tags: ['guard'],
+  fx: (A) => { A.dmg(A.v('d')); A.status('weak', 4); },
+});
+card({
+  id: 'shield_bash', name: 'Shield Bash', category: 'basic', rank: 3, variant: 'B', rarity: 'common', anim: 'melee', glyph: 'shield',
+  v: { d: [6, 8] }, text: 'Deal damage equal to half your Guard (min {d}).', tags: ['guard'],
+  fx: (A) => A.dmg(Math.max(A.v('d'), Math.floor(A.c.guard / 2))),
+});
+card({
+  id: 'gear_swap', name: 'Gear Swap', category: 'basic', rank: 3, variant: 'B', rarity: 'common', anim: 'melee', glyph: 'gear',
+  v: { d: [7, 9] }, text: "Deal {d}. Flip the combo's suit (A↔B).", tags: ['variant'],
+  fx: (A) => { A.dmg(A.v('d')); A.flipVariant(); },
+});
+card({
+  id: 'pocket_watch', name: 'Pocket Watch', category: 'basic', rank: 3, variant: 'B', rarity: 'uncommon', anim: 'shoot', glyph: 'clock',
+  v: { d: [6, 8] }, text: 'Deal {d}. Stash the highest-rank arte in hand into Reserve.', tags: ['reserve'],
+  fx: (A) => { A.dmg(A.v('d')); A.stashBestArte(); },
+});
+card({
+  id: 'cache_hook', name: 'Cache Hook', category: 'basic', rank: 3, variant: 'A', rarity: 'uncommon', anim: 'shoot', glyph: 'hook', p4: 'compat',
+  v: { d: [6, 8] }, text: 'Deal {d}. From Reserve: Rewind 2 and gain 1 Momentum.', tags: ['reserve', 'ladder'],
+  fx: (A) => { A.dmg(A.v('d')); if (A.fromReserve) { A.rewind(2); A.mom(1); } },
+});
+
+// ───────────────────────────── ARTES ─────────────────────────────
+// Hessa (V): heavy blows, Guard and piercing
+card({
+  id: 'scrapfall', name: 'Scrapfall', owner: 'V', category: 'arte', rank: 4, variant: 'A', rarity: 'starter', anim: 'melee', glyph: 'hammer',
+  v: { d: [6, 8], b: [3, 4] }, text: 'Deal {d} + {b} per card in this combo.',
+  fx: (A) => A.dmg(A.v('d') + A.v('b') * A.ctx.len),
+});
+card({
+  id: 'scrap_feed', name: 'Scrap Feed', owner: 'V', category: 'arte', rank: 4, variant: 'A', rarity: 'common', anim: 'melee', glyph: 'gear',
+  v: { d: [8, 10] }, text: 'Deal {d}. Gain 1 Churn charge.', tags: ['churn'],
   fx: (A) => { A.dmg(A.v('d')); A.churnGain(1); },
 });
 card({
-  id: 'shuffle_step', name: 'Shuffle Step', owner: 'S', role: 'conv', rank: 5, variant: 'A', rarity: 'uncommon', anim: 'buff', glyph: 'spiral',
-  v: { d: [2, 3] }, text: 'Replace every unplayable hand card for free. Deal {d} per card replaced.', tags: ['churn'],
-  fx: (A) => { const n = A.recycleIllegal(); if (n > 0) A.dmg(A.v('d') * n); },
+  id: 'dead_drop', name: 'Dead Drop', owner: 'V', category: 'arte', rank: 4, variant: 'EX', rarity: 'uncommon', anim: 'guard', glyph: 'box',
+  v: { g: [4, 5], p: [60, 90] }, text: 'Gain {g} Guard. On a Perfect or Cash Out: Echo the strongest card at {p}%.', tags: ['guard', 'cashout'],
+  fx: (A) => { A.guard(A.v('g')); A.storeEcho(A.v('p') / 100); },
 });
 card({
-  id: 'pocket_watch', name: 'Pocket Watch', owner: 'S', role: 'conv', rank: 3, variant: 'B', rarity: 'uncommon', anim: 'buff', glyph: 'clock',
-  v: { d: [3, 5] }, text: 'Deal {d}. Stash the highest-rank Closer in hand into Reserve.', tags: ['reserve'],
-  fx: (A) => { A.dmg(A.v('d')); A.stashBestCloser(); },
+  id: 'clean_exit', name: 'Clean Exit', owner: 'V', category: 'arte', rank: 4, variant: 'EX', rarity: 'uncommon', anim: 'buff', glyph: 'coin',
+  v: { p: [40, 60] }, text: 'End this combo as a Cash Out with +{p}% payout. Recover 1 Churn charge.', tags: ['cashout'],
+  fx: (A) => { A.ctxAdd('cashPct', A.v('p') / 100); A.churnGain(1); A.closeAsCashOut(); },
 });
 card({
-  id: 'bulwark_shift', name: 'Bulwark Shift', owner: 'V', role: 'conv', rank: 6, variant: 'B', rarity: 'uncommon', anim: 'guard', glyph: 'shield',
-  v: { p: [50, 75] }, text: "Gain Guard equal to {p}% of this combo's damage (min 4).", tags: ['guard'],
-  fx: (A) => A.guard(Math.max(4, Math.floor((A.ctx.damage * A.v('p')) / 100))),
+  id: 'jam_breaker', name: 'Jam Breaker', owner: 'V', category: 'arte', rank: 5, variant: 'B', rarity: 'uncommon', anim: 'melee', glyph: 'chain',
+  v: { d: [8, 10], b: [2, 3] }, text: 'Deal {d}, +{b} per interference endured this battle (max 5).', tags: ['interference'],
+  fx: (A) => A.dmg(A.v('d') + A.v('b') * Math.min(5, A.c.stats.interference)),
 });
 card({
-  id: 'pressure_valve', name: 'Pressure Valve', owner: 'C', role: 'conv', rank: 6, variant: 'A', rarity: 'uncommon', anim: 'cast', glyph: 'flame',
-  v: { d: [3, 4] }, text: 'Spend all Momentum: deal {d} per point.', tags: ['momentum'],
-  fx: (A) => { const n = A.spendMomentum(); if (n > 0) A.dmg(A.v('d') * n); },
+  id: 'recycler', name: 'Recycler', owner: 'V', category: 'arte', rank: 5, variant: 'A', rarity: 'common', anim: 'melee', glyph: 'gear',
+  v: { d: [11, 14] }, text: 'Deal {d}. Gain 2 Churn charges.', tags: ['churn'],
+  fx: (A) => { A.dmg(A.v('d')); A.churnGain(2); },
 });
 card({
-  id: 'prism_cut', name: 'Prism Cut', owner: 'C', role: 'conv', rank: 5, variant: 'EX', rarity: 'rare', anim: 'cast', glyph: 'prism',
-  v: { d: [4, 6] }, text: 'Deal {d}. The combo becomes EX (any suit may follow). Rewind 1.', tags: ['variant'],
-  fx: (A) => { A.dmg(A.v('d')); A.setVariant('EX'); A.rewind(1); },
+  id: 'fortress_slam', name: 'Fortress Slam', owner: 'V', category: 'arte', rank: 5, variant: 'B', rarity: 'uncommon', anim: 'melee', glyph: 'shield',
+  v: { d: [4, 7] }, text: 'Deal damage equal to your Guard + {d}. Keep your Guard.', tags: ['guard'],
+  fx: (A) => A.dmg(Math.floor(A.c.guard) + A.v('d')),
 });
 card({
-  id: 'short_circuit', name: 'Short Circuit', owner: 'S', role: 'conv', rank: 4, variant: 'A', rarity: 'uncommon', anim: 'shoot', glyph: 'bolt',
-  v: { d: [4, 5], b: [6, 9] }, text: 'Deal {d}. Unlock a hand card; if you did, deal {b} more.', tags: ['interference'],
-  fx: (A) => { const u = A.unlockOne(); A.dmg(A.v('d') + (u ? A.v('b') : 0)); },
+  id: 'bulwark_shift', name: 'Bulwark Shift', owner: 'V', category: 'arte', rank: 5, variant: 'B', rarity: 'uncommon', anim: 'guard', glyph: 'shield',
+  v: { p: [60, 85] }, text: "Gain Guard equal to {p}% of this combo's damage (min 6).", tags: ['guard'],
+  fx: (A) => A.guard(Math.max(6, Math.floor((A.ctx.damage * A.v('p')) / 100))),
 });
 card({
-  id: 'tally_mark', name: 'Tally Mark', owner: 'V', role: 'conv', rank: 2, variant: 'A', rarity: 'uncommon', anim: 'buff', glyph: 'coin',
-  v: { g: [3, 4], b: [3, 4] }, text: 'Gain {g} Guard. If this combo Cashes Out, payout +{b} per card.', tags: ['cashout'],
-  fx: (A) => { A.guard(A.v('g')); A.ctxAdd('cashPerCard', A.v('b')); },
-});
-card({
-  id: 'relay_baton', name: 'Relay Baton', owner: 'S', role: 'conv', rank: 5, variant: 'B', rarity: 'rare', anim: 'buff', glyph: 'hook',
-  v: { f: [0.2, 0.3] }, text: 'For each different ally who has acted this combo: +1 Momentum and +{f}s Flow.', tags: ['flow', 'relay'],
-  fx: (A) => { const n = A.ctx.owners.length; A.mom(n); A.flow(n * A.v('f')); },
-});
-card({
-  id: 'downshift', name: 'Downshift', owner: 'V', role: 'conv', rank: 6, variant: 'EX', rarity: 'rare', anim: 'melee', glyph: 'hammer',
+  id: 'downshift', name: 'Downshift', owner: 'V', category: 'arte', rank: 5, variant: 'EX', rarity: 'rare', anim: 'melee', glyph: 'hammer', p4: 'compat',
   v: { d: [6, 8], r: [4, 5] }, text: 'Deal {d}. Rewind {r}.', tags: ['ladder', 'flow'],
   fx: (A) => { A.dmg(A.v('d')); A.rewind(A.v('r')); },
 });
 card({
-  id: 'signal_boost', name: 'Signal Boost', owner: 'C', role: 'conv', rank: 3, variant: 'B', rarity: 'common', anim: 'cast', glyph: 'wave',
-  v: { s: [4, 6] }, text: 'Apply {s}s Exposed to ALL enemies.', tags: ['interference'],
-  fx: (A) => A.status('exposed', A.v('s'), { all: true }),
+  id: 'sunderline', name: 'Sunderline', owner: 'V', category: 'arte', rank: 6, variant: 'B', rarity: 'uncommon', anim: 'melee', glyph: 'hammer',
+  v: { d: [16, 20] }, text: 'Deal {d}. Pierces Guard.',
+  fx: (A) => A.dmg(A.v('d'), { pierce: true }),
 });
 card({
-  id: 'kindling', name: 'Kindling', owner: 'C', role: 'conv', rank: 4, variant: 'A', rarity: 'common', anim: 'cast', glyph: 'flame',
-  v: { s: [2, 3] }, text: 'Apply {s} Scorch. If already Scorched, apply {s} more.', tags: ['interference'],
-  fx: (A) => { const had = A.target && (A.target.st.scorch || 0) > 0; A.status('scorch', A.v('s') * (had ? 2 : 1)); },
+  id: 'capstone', name: 'Capstone', owner: 'V', category: 'arte', rank: 6, variant: 'B', rarity: 'uncommon', anim: 'melee', glyph: 'hammer',
+  v: { d: [12, 15] }, text: 'Deal {d}. Double damage if this combo has 2+ Steps.', tags: ['ladder'],
+  fx: (A) => A.dmg(A.v('d') * (A.ctx.steps >= 2 ? 2 : 1)),
 });
 card({
-  id: 'jam_breaker', name: 'Jam Breaker', owner: 'V', role: 'conv', rank: 5, variant: 'B', rarity: 'uncommon', anim: 'melee', glyph: 'chain',
-  v: { d: [4, 5], b: [2, 3] }, text: 'Deal {d}, +{b} per interference endured this battle (max 5).', tags: ['interference'],
-  fx: (A) => A.dmg(A.v('d') + A.v('b') * Math.min(5, A.c.stats.interference)),
-});
-card({
-  id: 'cache_hook', name: 'Cache Hook', owner: 'S', role: 'conv', rank: 3, variant: 'A', rarity: 'uncommon', anim: 'shoot', glyph: 'hook',
-  v: { d: [4, 6] }, text: 'Deal {d}. From Reserve: Rewind 2 and gain 1 Momentum.', tags: ['reserve', 'ladder'],
-  fx: (A) => { A.dmg(A.v('d')); if (A.fromReserve) { A.rewind(2); A.mom(1); } },
-});
-card({
-  id: 'vault_guard', name: 'Vault Guard', owner: 'V', role: 'conv', rank: 4, variant: 'B', rarity: 'uncommon', anim: 'guard', glyph: 'box',
-  v: { g: [4, 5] }, text: 'Gain {g} Guard, +{g} per card in Reserve.', tags: ['reserve', 'guard'],
-  fx: (A) => A.guard(A.v('g') * (1 + A.c.reserve.length)),
-});
-
-// ───────────────────────────── CLOSERS ─────────────────────────────
-card({
-  id: 'scrapfall', name: 'Scrapfall', owner: 'V', role: 'close', rank: 5, variant: 'A', rarity: 'starter', anim: 'melee', glyph: 'hammer', big: true,
-  v: { d: [6, 8], b: [3, 4] }, text: 'Deal {d} + {b} per card in this combo.', tags: [],
-  fx: (A) => A.dmg(A.v('d') + A.v('b') * A.ctx.len),
-});
-card({
-  id: 'sunderline', name: 'Sunderline', owner: 'V', role: 'close', rank: 6, variant: 'B', rarity: 'starter', anim: 'melee', glyph: 'hammer', big: true,
-  v: { d: [9, 12], b: [5, 6] }, text: 'Deal {d} + {b} per Relay this combo. Pierces Guard.', tags: ['relay'],
-  fx: (A) => A.dmg(A.v('d') + A.v('b') * A.ctx.relays, { pierce: true }),
-});
-card({
-  id: 'last_word', name: 'Last Word', owner: 'C', role: 'close', rank: 6, variant: 'EX', rarity: 'starter', anim: 'cast', glyph: 'star', big: true,
-  v: { d: [4, 6], p: [30, 45] }, text: "Deal {d} + {p}% of this combo's damage to ALL enemies.", tags: [],
-  fx: (A) => A.dmg(A.v('d') + Math.floor((A.ctx.damage * A.v('p')) / 100), { all: true }),
-});
-card({
-  id: 'bolt_volley', name: 'Bolt Volley', owner: 'S', role: 'close', rank: 5, variant: 'B', rarity: 'starter', anim: 'shoot', glyph: 'arrow', big: true,
-  v: { d: [3, 4] }, text: 'Deal {d} once per card in this combo.', tags: [],
-  fx: (A) => A.dmg(A.v('d'), { hits: A.ctx.len }),
-});
-card({
-  id: 'ladder_peak', name: 'Ladder Peak', owner: 'S', role: 'close', rank: 9, variant: 'A', rarity: 'rare', anim: 'shoot', glyph: 'ladder', big: true,
-  v: { d: [10, 14], b: [5, 6] }, text: 'Deal {d} + {b} per Step this combo.', tags: ['ladder'],
-  fx: (A) => A.dmg(A.v('d') + A.v('b') * A.ctx.steps),
-});
-card({
-  id: 'capstone', name: 'Capstone', owner: 'V', role: 'close', rank: 8, variant: 'B', rarity: 'uncommon', anim: 'melee', glyph: 'hammer', big: true,
-  v: { d: [16, 20] }, text: 'Deal {d}. Double damage if this combo has 3+ Steps.', tags: ['ladder'],
-  fx: (A) => A.dmg(A.v('d') * (A.ctx.steps >= 3 ? 2 : 1)),
-});
-card({
-  id: 'crosscut', name: 'Crosscut', owner: 'S', role: 'close', rank: 6, variant: 'B', rarity: 'uncommon', anim: 'shoot', glyph: 'prism', big: true,
-  v: { d: [6, 8], b: [6, 8] }, text: 'Deal {d} + {b} per Cross this combo.', tags: ['variant'],
-  fx: (A) => A.dmg(A.v('d') + A.v('b') * A.ctx.crosses),
-});
-card({
-  id: 'suit_storm', name: 'Suit Storm', owner: 'C', role: 'close', rank: 7, variant: 'EX', rarity: 'rare', anim: 'cast', glyph: 'prism', big: true,
-  v: { d: [5, 7] }, text: 'Deal {d} to ALL per distinct suit played this combo (A, B, EX).', tags: ['variant'],
-  fx: (A) => A.dmg(A.v('d') * A.ctx.suits.length, { all: true }),
-});
-card({
-  id: 'chorus_break', name: 'Chorus Break', owner: 'C', role: 'close', rank: 6, variant: 'A', rarity: 'uncommon', anim: 'cast', glyph: 'wave', big: true,
-  v: { p: [50, 70], d: [4, 6] }, text: 'Deal {d}. Echo every Relay card this combo at {p}%.', tags: ['relay'],
-  fx: (A) => { A.dmg(A.v('d')); A.ctx.cards.forEach((e, i) => { if (e.relay && i < A.ctx.cards.length - 1) A.echo(i, A.v('p') / 100); }); },
-});
-card({
-  id: 'overpressure', name: 'Overpressure', owner: 'C', role: 'close', rank: 6, variant: 'B', rarity: 'uncommon', anim: 'cast', glyph: 'flame', big: true,
-  v: { d: [5, 6] }, text: 'Spend all Momentum: deal {d} per point.', tags: ['momentum'],
-  fx: (A) => { const n = A.spendMomentum(); A.dmg(Math.max(3, A.v('d') * n)); },
-});
-card({
-  id: 'momentum_lance', name: 'Momentum Lance', owner: 'S', role: 'close', rank: 7, variant: 'A', rarity: 'uncommon', anim: 'shoot', glyph: 'arrow', big: true,
-  v: { d: [10, 13] }, text: 'Deal {d}. If you have 5+ Momentum, deal {d} more.', tags: ['momentum'],
-  fx: (A) => A.dmg(A.v('d') * (A.c.momentum >= 5 ? 2 : 1)),
-});
-card({
-  id: 'timekeeper', name: 'Timekeeper', owner: 'S', role: 'close', rank: 5, variant: 'EX', rarity: 'uncommon', anim: 'shoot', glyph: 'clock', big: true,
-  v: { d: [4, 6], b: [7, 9] }, text: 'Deal {d} + {b} per full second of Flow remaining.', tags: ['flow'],
-  fx: (A) => A.dmg(A.v('d') + A.v('b') * Math.floor(A.flowLeft())),
-});
-card({
-  id: 'recycler', name: 'Recycler', owner: 'V', role: 'close', rank: 5, variant: 'A', rarity: 'common', anim: 'melee', glyph: 'gear', big: true,
-  v: { d: [8, 11] }, text: 'Deal {d}. Gain 2 Churn charges.', tags: ['churn'],
-  fx: (A) => { A.dmg(A.v('d')); A.churnGain(2); },
-});
-card({
-  id: 'junkstorm', name: 'Junkstorm', owner: 'V', role: 'close', rank: 7, variant: 'A', rarity: 'rare', anim: 'melee', glyph: 'box', big: true,
-  v: { d: [6, 8] }, text: 'Deal {d} +2 per Churn used this battle (max +24) to ALL enemies.', tags: ['churn'],
-  fx: (A) => A.dmg(A.v('d') + Math.min(24, 2 * A.c.stats.churns), { all: true }),
-});
-card({
-  id: 'cache_release', name: 'Cache Release', owner: 'S', role: 'close', rank: 6, variant: 'EX', rarity: 'uncommon', anim: 'shoot', glyph: 'box', big: true,
-  v: { d: [5, 7], b: [7, 9] }, text: 'Deal {d} + {b} per card in Reserve.', tags: ['reserve'],
-  fx: (A) => A.dmg(A.v('d') + A.v('b') * A.c.reserve.length),
-});
-card({
-  id: 'fortress_slam', name: 'Fortress Slam', owner: 'V', role: 'close', rank: 6, variant: 'B', rarity: 'uncommon', anim: 'melee', glyph: 'shield', big: true,
-  v: { d: [2, 5] }, text: 'Deal damage equal to your Guard + {d}. Keep your Guard.', tags: ['guard'],
-  fx: (A) => A.dmg(Math.floor(A.c.guard) + A.v('d')),
-});
-card({
-  id: 'counterweight', name: 'Counterweight', owner: 'V', role: 'close', rank: 4, variant: 'A', rarity: 'common', anim: 'guard', glyph: 'shield', big: true,
-  v: { g: [12, 15], k: [6, 8] }, text: 'Gain {g} Guard. Counter {k}.', tags: ['guard'],
-  fx: (A) => { A.guard(A.v('g')); A.counter(A.v('k')); },
-});
-card({
-  id: 'mend_circuit', name: 'Mend Circuit', owner: 'C', role: 'close', rank: 5, variant: 'B', rarity: 'common', anim: 'cast', glyph: 'wave', big: true,
-  v: { h: [9, 15] }, text: 'Heal the party {h} + 3 per card in this combo.', tags: ['guard'],
-  fx: (A) => A.heal(A.v('h') + 3 * A.ctx.len, 'all'),
-});
-card({
-  id: 'detonate', name: 'Detonate', owner: 'C', role: 'close', rank: 7, variant: 'B', rarity: 'uncommon', anim: 'cast', glyph: 'flame', big: true,
-  v: { p: [3, 4] }, text: 'Consume all Scorch on enemies: deal {p}× the stacks to each.', tags: ['interference'],
-  fx: (A) => A.detonateScorch(A.v('p')),
-});
-card({
-  id: 'breach_payload', name: 'Breach Payload', owner: 'S', role: 'close', rank: 5, variant: 'A', rarity: 'rare', anim: 'shoot', glyph: 'chain', big: true,
-  v: { d: [6, 8], b: [5, 6] }, text: 'Deal {d} + {b} per interference endured this battle (max 6).', tags: ['interference'],
-  fx: (A) => A.dmg(A.v('d') + A.v('b') * Math.min(6, A.c.stats.interference)),
-});
-card({
-  id: 'clean_exit', name: 'Clean Exit', owner: 'V', role: 'close', rank: 3, variant: 'EX', rarity: 'uncommon', anim: 'buff', glyph: 'coin', big: true,
-  v: { p: [40, 60] }, text: 'Close this combo as a Cash Out with +{p}% payout. Recover 1 Churn charge.', tags: ['cashout'],
-  fx: (A) => { A.ctxAdd('cashPct', A.v('p') / 100); A.churnGain(1); A.closeAsCashOut(); },
-});
-card({
-  id: 'grand_relay', name: 'Grand Relay', owner: 'S', role: 'close', rank: 9, variant: 'EX', rarity: 'rare', anim: 'shoot', glyph: 'star', big: true,
-  v: { d: [10, 13] }, text: 'Deal {d} per different ally who acted this combo. All three: hits ALL enemies.', tags: ['relay'],
-  fx: (A) => { const n = A.ctx.owners.length; A.dmg(A.v('d') * n, { all: n >= 3 }); },
-});
-card({
-  id: 'echo_chamber', name: 'Echo Chamber', owner: 'C', role: 'close', rank: 8, variant: 'A', rarity: 'rare', anim: 'cast', glyph: 'spiral', big: true,
-  v: { p: [80, 100] }, text: 'Echo the two strongest cards this combo at {p}%.', tags: ['relay'],
-  fx: (A) => { A.strongestIdx(2).forEach((i) => A.echo(i, A.v('p') / 100)); },
-});
-card({
-  id: 'final_notice', name: 'Final Notice', owner: 'V', role: 'close', rank: 9, variant: 'B', rarity: 'rare', anim: 'melee', glyph: 'hammer', big: true,
+  id: 'final_notice', name: 'Final Notice', owner: 'V', category: 'arte', rank: 6, variant: 'B', rarity: 'rare', anim: 'melee', glyph: 'hammer',
   v: { d: [28, 36] }, text: 'Deal {d}. Pierces Guard.', tags: ['ladder'],
   fx: (A) => A.dmg(A.v('d'), { pierce: true }),
 });
 card({
-  id: 'payday', name: 'Payday', owner: 'S', role: 'close', rank: 4, variant: 'B', rarity: 'uncommon', anim: 'shoot', glyph: 'coin', big: true,
-  v: { d: [4, 6], p: [50, 70] }, text: 'Deal {d}. Then trigger a Cash Out payout at {p}% (still a Perfect close).', tags: ['cashout'],
+  id: 'junkstorm', name: 'Junkstorm', owner: 'V', category: 'arte', rank: 6, variant: 'A', rarity: 'rare', anim: 'melee', glyph: 'box',
+  v: { d: [8, 10] }, text: 'Deal {d} +2 per Churn used this battle (max +24) to ALL enemies.', tags: ['churn'],
+  fx: (A) => A.dmg(A.v('d') + Math.min(24, 2 * A.c.stats.churns), { all: true }),
+});
+// Corvin (C): fire, area damage, Momentum and Echoes
+card({
+  id: 'thermal_lance', name: 'Thermal Lance', owner: 'C', category: 'arte', rank: 4, variant: 'A', rarity: 'common', anim: 'cast', glyph: 'flame',
+  v: { d: [8, 10], s: [3, 4] }, text: 'Deal {d}. Apply {s} Scorch.', tags: ['interference'],
+  fx: (A) => { A.dmg(A.v('d')); A.status('scorch', A.v('s')); },
+});
+card({
+  id: 'coil_charge', name: 'Coil Charge', owner: 'C', category: 'arte', rank: 4, variant: 'A', rarity: 'common', anim: 'cast', glyph: 'bolt',
+  v: { d: [5, 7], m: [2, 3] }, text: 'Deal {d}. Gain {m} Momentum.', tags: ['momentum'],
+  fx: (A) => { A.dmg(A.v('d')); A.mom(A.v('m')); },
+});
+card({
+  id: 'kindling', name: 'Kindling', owner: 'C', category: 'arte', rank: 4, variant: 'A', rarity: 'common', anim: 'cast', glyph: 'flame',
+  v: { s: [4, 5] }, text: 'Apply {s} Scorch. If already Scorched, apply {s} more.', tags: ['interference'],
+  fx: (A) => { const had = A.target && (A.target.st.scorch || 0) > 0; A.status('scorch', A.v('s') * (had ? 2 : 1)); },
+});
+card({
+  id: 'overclock', name: 'Overclock', owner: 'C', category: 'arte', rank: 4, variant: 'B', rarity: 'uncommon', anim: 'cast', glyph: 'clock',
+  v: { f: [1.0, 1.5], d: [6, 8] }, text: 'Gain {f}s Flow. Deal {d}.', tags: ['flow'],
+  fx: (A) => { A.flow(A.v('f')); A.dmg(A.v('d')); },
+});
+card({
+  id: 'overture', name: 'Overture', owner: 'C', category: 'arte', rank: 4, variant: 'EX', rarity: 'rare', anim: 'cast', glyph: 'star',
+  v: { d: [6, 8] }, text: 'Deal {d} to ALL. Gain 1 Momentum per hero in the party.', tags: ['momentum'],
+  fx: (A) => { A.dmg(A.v('d'), { all: true }); A.mom(A.c.party.length); },
+});
+card({
+  id: 'rethread', name: 'Rethread', owner: 'C', category: 'arte', rank: 4, variant: 'A', rarity: 'starter', anim: 'cast', glyph: 'spiral', p4: 'compat',
+  v: { d: [4, 6] }, text: 'Deal {d}. Rewind 2 (combo rank -2).', tags: ['ladder'],
+  fx: (A) => { A.dmg(A.v('d')); A.rewind(2); },
+});
+card({
+  id: 'feedback_loop', name: 'Feedback Loop', owner: 'C', category: 'arte', rank: 5, variant: 'EX', rarity: 'uncommon', anim: 'cast', glyph: 'spiral',
+  v: { p: [90, 120] }, text: 'Echo the previous card at {p}%.', tags: ['relay'],
+  fx: (A) => A.echoPrev(A.v('p') / 100),
+});
+card({
+  id: 'detonate', name: 'Detonate', owner: 'C', category: 'arte', rank: 5, variant: 'B', rarity: 'uncommon', anim: 'cast', glyph: 'flame',
+  v: { p: [3, 4] }, text: 'Consume all Scorch on enemies: deal {p}× the stacks to each.', tags: ['interference'],
+  fx: (A) => A.detonateScorch(A.v('p')),
+});
+card({
+  id: 'prism_cut', name: 'Prism Cut', owner: 'C', category: 'arte', rank: 5, variant: 'EX', rarity: 'rare', anim: 'cast', glyph: 'prism', p4: 'compat',
+  v: { d: [6, 8] }, text: "Deal {d}. The combo's suit becomes EX. Rewind 1.", tags: ['variant'],
+  fx: (A) => { A.dmg(A.v('d')); A.setVariant('EX'); A.rewind(1); },
+});
+card({
+  id: 'last_word', name: 'Last Word', owner: 'C', category: 'arte', rank: 6, variant: 'EX', rarity: 'uncommon', anim: 'cast', glyph: 'star',
+  v: { d: [6, 8], p: [40, 55] }, text: "Deal {d} + {p}% of this combo's damage to ALL enemies.",
+  fx: (A) => A.dmg(A.v('d') + Math.floor((A.ctx.damage * A.v('p')) / 100), { all: true }),
+});
+card({
+  id: 'overpressure', name: 'Overpressure', owner: 'C', category: 'arte', rank: 6, variant: 'B', rarity: 'uncommon', anim: 'cast', glyph: 'flame',
+  v: { d: [5, 6] }, text: 'Spend all remaining Momentum: deal {d} per point (at least 10).', tags: ['momentum'],
+  fx: (A) => { const n = A.spendMomentum(); A.dmg(Math.max(10, A.v('d') * n)); },
+});
+card({
+  id: 'suit_storm', name: 'Suit Storm', owner: 'C', category: 'arte', rank: 6, variant: 'EX', rarity: 'rare', anim: 'cast', glyph: 'prism',
+  v: { d: [6, 8] }, text: 'Deal {d} to ALL per distinct suit played this combo (A, B, EX).', tags: ['variant'],
+  fx: (A) => A.dmg(A.v('d') * A.ctx.suits.length, { all: true }),
+});
+card({
+  id: 'echo_chamber', name: 'Echo Chamber', owner: 'C', category: 'arte', rank: 6, variant: 'A', rarity: 'rare', anim: 'cast', glyph: 'spiral',
+  v: { p: [80, 100] }, text: 'Echo the two strongest cards this combo at {p}%.', tags: ['relay'],
+  fx: (A) => { A.strongestIdx(2).forEach((i) => A.echo(i, A.v('p') / 100)); },
+});
+// Pin (S): multi-hits, Steps and Crosses, precision
+card({
+  id: 'bolt_volley', name: 'Bolt Volley', owner: 'S', category: 'arte', rank: 4, variant: 'B', rarity: 'starter', anim: 'shoot', glyph: 'arrow',
+  v: { d: [4, 5] }, text: 'Deal {d} once per card in this combo.',
+  fx: (A) => A.dmg(A.v('d'), { hits: A.ctx.len }),
+});
+card({
+  id: 'splitter', name: 'Splitter', owner: 'S', category: 'arte', rank: 4, variant: 'B', rarity: 'common', anim: 'shoot', glyph: 'arrow',
+  v: { d: [5, 6] }, text: 'Deal {d} to the target and {d} to a random enemy.',
+  fx: (A) => { A.dmg(A.v('d')); A.dmg(A.v('d'), { rand: true }); },
+});
+card({
+  id: 'slipstream', name: 'Slipstream', owner: 'S', category: 'arte', rank: 4, variant: 'EX', rarity: 'uncommon', anim: 'shoot', glyph: 'wave',
+  v: { d: [4, 5] }, text: 'Deal {d} twice. This card refunds double Flow.', tags: ['flow'],
+  fx: (A) => { A.dmg(A.v('d'), { hits: 2 }); A.extraRefund(); },
+});
+card({
+  id: 'short_circuit', name: 'Short Circuit', owner: 'S', category: 'arte', rank: 4, variant: 'A', rarity: 'uncommon', anim: 'shoot', glyph: 'bolt',
+  v: { d: [6, 8], b: [6, 9] }, text: 'Deal {d}. Unlock a hand card; if you did, deal {b} more.', tags: ['interference'],
+  fx: (A) => { const u = A.unlockOne(); A.dmg(A.v('d') + (u ? A.v('b') : 0)); },
+});
+card({
+  id: 'payday', name: 'Payday', owner: 'S', category: 'arte', rank: 4, variant: 'B', rarity: 'uncommon', anim: 'shoot', glyph: 'coin',
+  v: { d: [4, 6], p: [50, 70] }, text: 'Deal {d}. Then trigger a Cash Out payout at {p}%.', tags: ['cashout'],
   fx: (A) => { A.dmg(A.v('d')); A.payout(A.v('p') / 100); },
 });
 card({
-  id: 'thermal_lance', name: 'Thermal Lance', owner: 'C', role: 'close', rank: 5, variant: 'A', rarity: 'common', anim: 'cast', glyph: 'flame', big: true,
-  v: { d: [7, 9], s: [3, 4] }, text: 'Deal {d}. Apply {s} Scorch.', tags: ['interference'],
-  fx: (A) => { A.dmg(A.v('d')); A.status('scorch', A.v('s')); },
+  id: 'deadeye_set', name: 'Deadeye Set', owner: 'S', category: 'arte', rank: 4, variant: 'A', rarity: 'rare', anim: 'shoot', glyph: 'eye',
+  v: { d: [6, 8] }, text: 'Deal {d}. Mark the target: its next arte hit deals +50%.', tags: ['ladder'],
+  fx: (A) => { A.dmg(A.v('d')); A.status('mark', 1); },
+});
+card({
+  id: 'crosscut', name: 'Crosscut', owner: 'S', category: 'arte', rank: 5, variant: 'B', rarity: 'uncommon', anim: 'shoot', glyph: 'prism',
+  v: { d: [8, 10], b: [6, 8] }, text: 'Deal {d} + {b} per Cross this combo.', tags: ['variant'],
+  fx: (A) => A.dmg(A.v('d') + A.v('b') * A.ctx.crosses),
+});
+card({
+  id: 'momentum_lance', name: 'Momentum Lance', owner: 'S', category: 'arte', rank: 5, variant: 'A', rarity: 'uncommon', anim: 'shoot', glyph: 'arrow',
+  v: { d: [10, 13] }, text: 'Deal {d}. If you still have 3+ Momentum, deal {d} more.', tags: ['momentum'],
+  fx: (A) => A.dmg(A.v('d') * (A.c.available() >= 3 ? 2 : 1)),
+});
+card({
+  id: 'timekeeper', name: 'Timekeeper', owner: 'S', category: 'arte', rank: 5, variant: 'EX', rarity: 'uncommon', anim: 'shoot', glyph: 'clock',
+  v: { d: [6, 8], b: [4, 5] }, text: 'Deal {d} + {b} per full second of Flow remaining.', tags: ['flow'],
+  fx: (A) => A.dmg(A.v('d') + A.v('b') * Math.floor(A.flowLeft())),
+});
+card({
+  id: 'cache_release', name: 'Cache Release', owner: 'S', category: 'arte', rank: 5, variant: 'EX', rarity: 'uncommon', anim: 'shoot', glyph: 'box',
+  v: { d: [7, 9], b: [7, 9] }, text: 'Deal {d} + {b} per card in Reserve.', tags: ['reserve'],
+  fx: (A) => A.dmg(A.v('d') + A.v('b') * A.c.reserve.length),
+});
+card({
+  id: 'breach_payload', name: 'Breach Payload', owner: 'S', category: 'arte', rank: 5, variant: 'A', rarity: 'rare', anim: 'shoot', glyph: 'chain',
+  v: { d: [8, 10], b: [5, 6] }, text: 'Deal {d} + {b} per interference endured this battle (max 6).', tags: ['interference'],
+  fx: (A) => A.dmg(A.v('d') + A.v('b') * Math.min(6, A.c.stats.interference)),
+});
+card({
+  id: 'ladder_peak', name: 'Ladder Peak', owner: 'S', category: 'arte', rank: 6, variant: 'A', rarity: 'rare', anim: 'shoot', glyph: 'ladder',
+  v: { d: [12, 16], b: [5, 6] }, text: 'Deal {d} + {b} per Step this combo.', tags: ['ladder'],
+  fx: (A) => A.dmg(A.v('d') + A.v('b') * A.ctx.steps),
+});
+
+// ───────────────────────────── SUPPORT ─────────────────────────────
+// Hessa: Guard and Cover (her Guard cards also make her cover the party, engine/combat.js)
+card({
+  id: 'salvage', name: 'Salvage', owner: 'V', category: 'support', variant: 'B', rarity: 'starter', anim: 'guard', glyph: 'box',
+  v: { g: [5, 7] }, text: 'Gain {g} Guard. Recover 1 Churn charge.', tags: ['guard', 'churn'],
+  fx: (A) => { A.guard(A.v('g')); A.churnGain(1); },
+});
+card({
+  id: 'brace_up', name: 'Brace Up', owner: 'V', category: 'support', cost: 1, variant: 'A', rarity: 'common', anim: 'guard', glyph: 'shield',
+  v: { g: [7, 9], k: [3, 5] }, text: 'Gain {g} Guard. Counter {k}.', tags: ['guard'],
+  fx: (A) => { A.guard(A.v('g')); A.counter(A.v('k')); },
+});
+card({
+  id: 'riposte_frame', name: 'Riposte Frame', owner: 'V', category: 'support', cost: 1, variant: 'A', rarity: 'uncommon', anim: 'guard', glyph: 'shield',
+  v: { g: [6, 8], k: [7, 10] }, text: 'Gain {g} Guard. Counter {k}.', tags: ['guard'],
+  fx: (A) => { A.guard(A.v('g')); A.counter(A.v('k')); },
+});
+card({
+  id: 'counterweight', name: 'Counterweight', owner: 'V', category: 'support', cost: 2, variant: 'A', rarity: 'common', anim: 'guard', glyph: 'shield',
+  v: { g: [14, 17], k: [6, 8] }, text: 'Gain {g} Guard. Counter {k}.', tags: ['guard'],
+  fx: (A) => { A.guard(A.v('g')); A.counter(A.v('k')); },
+});
+card({
+  id: 'vault_guard', name: 'Vault Guard', owner: 'V', category: 'support', cost: 1, variant: 'B', rarity: 'uncommon', anim: 'guard', glyph: 'box',
+  v: { g: [4, 5] }, text: 'Gain {g} Guard, +{g} per card in Reserve.', tags: ['reserve', 'guard'],
+  fx: (A) => A.guard(A.v('g') * (1 + A.c.reserve.length)),
+});
+card({
+  id: 'iron_oath', name: 'Iron Oath', owner: 'V', category: 'support', cost: 2, variant: 'EX', rarity: 'rare', anim: 'guard', glyph: 'shield',
+  v: { g: [12, 16] }, text: 'Gain {g} Guard. Guard stops decaying for 8s.', tags: ['guard'],
+  fx: (A) => { A.guard(A.v('g')); A.holdGuard(8); },
+});
+// Corvin: healing, Momentum, debuffs
+card({
+  id: 'mend_circuit', name: 'Mend Circuit', owner: 'C', category: 'support', cost: 2, variant: 'B', rarity: 'common', anim: 'cast', glyph: 'wave',
+  v: { h: [14, 20] }, text: 'Heal the party {h}.', tags: ['guard'],
+  fx: (A) => A.heal(A.v('h'), 'all'),
+});
+card({
+  id: 'ward_weave', name: 'Ward Weave', owner: 'C', category: 'support', cost: 1, variant: 'B', rarity: 'common', anim: 'guard', glyph: 'shield',
+  v: { g: [7, 9] }, text: 'Gain {g} Guard.', tags: ['guard'],
+  fx: (A) => A.guard(A.v('g')),
+});
+card({
+  id: 'low_gear', name: 'Low Gear', owner: 'C', category: 'support', variant: 'B', rarity: 'common', anim: 'buff', glyph: 'gear',
+  v: { m: [2, 3] }, text: 'Gain {m} Momentum.', tags: ['momentum'],
+  fx: (A) => A.mom(A.v('m')),
+});
+card({
+  id: 'signal_boost', name: 'Signal Boost', owner: 'C', category: 'support', cost: 1, variant: 'B', rarity: 'common', anim: 'cast', glyph: 'wave',
+  v: { s: [5, 7] }, text: 'Apply {s}s Exposed to ALL enemies.', tags: ['interference'],
+  fx: (A) => A.status('exposed', A.v('s'), { all: true }),
+});
+// Pin: hand management
+card({
+  id: 'shuffle_step', name: 'Shuffle Step', owner: 'S', category: 'support', variant: 'A', rarity: 'uncommon', anim: 'buff', glyph: 'spiral',
+  v: {}, text: 'Replace every hand card you cannot play right now, for free.', tags: ['churn'],
+  fx: (A) => A.recycleIllegal(),
+});
+// neutral
+card({
+  id: 'hold_the_line', name: 'Hold the Line', owner: null, category: 'support', cost: 1, variant: 'EX', rarity: 'common', anim: 'guard', glyph: 'shield',
+  v: { s: [6, 9] }, text: 'Brace the hero an enemy is aiming at: +20% Defense for {s}s.', tags: ['guard'],
+  fx: (A) => A.brace(A.v('s')),
+});
+card({
+  id: 'spare_parts', name: 'Spare Parts', owner: null, category: 'support', variant: 'EX', rarity: 'common', anim: 'buff', glyph: 'gear',
+  v: { n: [2, 3] }, text: 'Recover {n} Churn charges.', tags: ['churn'],
+  fx: (A) => A.churnGain(A.v('n')),
+});
+
+// ─────────────── WITHHELD UNTIL RELAYS EXIST (Phase 5); replaced on load (save version 5) ───────────────
+// Their definitions and texts are kept for the Phase 5/8 conversion; they are never generated.
+card({
+  id: 'mirror_wire', name: 'Mirror Wire', owner: 'C', category: 'arte', rank: 4, variant: 'EX', rarity: 'uncommon', anim: 'cast', glyph: 'spiral', p4: 'withheld', migrate: 'feedback_loop',
+  v: { d: [3, 4], p: [50, 75] }, text: 'Deal {d}. The first Relay this combo Echoes the previous card at {p}%.', tags: ['relay'],
+  fx: (A) => { A.dmg(A.v('d')); A.ctxSet('relayEcho', A.v('p') / 100); },
+});
+card({
+  id: 'hand_off', name: 'Hand Off', category: 'basic', rank: 2, variant: 'EX', rarity: 'common', anim: 'buff', glyph: 'hook', p4: 'withheld', migrate: 'hotwire',
+  v: { p: [40, 60] }, text: 'Gain 1 Momentum. If the next card is a Relay, it Echoes at {p}%.', tags: ['relay'],
+  fx: (A) => { A.mom(1); A.ctxSet('nextRelayEcho', A.v('p') / 100); },
+});
+card({
+  id: 'relay_baton', name: 'Relay Baton', owner: 'S', category: 'arte', rank: 5, variant: 'B', rarity: 'rare', anim: 'buff', glyph: 'hook', p4: 'withheld', migrate: 'deadeye_set',
+  v: { f: [0.2, 0.3] }, text: 'For each different ally who has acted this combo: +1 Momentum and +{f}s Flow.', tags: ['flow', 'relay'],
+  fx: (A) => { const n = A.ctx.owners.length; A.mom(n); A.flow(n * A.v('f')); },
+});
+card({
+  id: 'chorus_break', name: 'Chorus Break', owner: 'C', category: 'arte', rank: 6, variant: 'A', rarity: 'uncommon', anim: 'cast', glyph: 'wave', p4: 'withheld', migrate: 'feedback_loop',
+  v: { p: [50, 70], d: [4, 6] }, text: 'Deal {d}. Echo every Relay card this combo at {p}%.', tags: ['relay'],
+  fx: (A) => { A.dmg(A.v('d')); A.ctx.cards.forEach((e, i) => { if (e.relay && i < A.ctx.cards.length - 1) A.echo(i, A.v('p') / 100); }); },
+});
+card({
+  id: 'grand_relay', name: 'Grand Relay', owner: 'S', category: 'arte', rank: 6, variant: 'EX', rarity: 'rare', anim: 'shoot', glyph: 'star', p4: 'withheld', migrate: 'ladder_peak',
+  v: { d: [10, 13] }, text: 'Deal {d} per different ally who acted this combo. All three: hits ALL enemies.', tags: ['relay'],
+  fx: (A) => { const n = A.ctx.owners.length; A.dmg(A.v('d') * n, { all: n >= 3 }); },
+});
+card({
+  id: 'pressure_valve', name: 'Pressure Valve', owner: 'C', category: 'arte', rank: 5, variant: 'A', rarity: 'uncommon', anim: 'cast', glyph: 'flame', p4: 'withheld', migrate: 'overpressure',
+  v: { d: [3, 4] }, text: 'Spend all Momentum: deal {d} per point.', tags: ['momentum'],
+  fx: (A) => { const n = A.spendMomentum(); if (n > 0) A.dmg(A.v('d') * n); },
 });
 
 // ─────────────────────────── STATUS / JUNK ───────────────────────────
 card({
-  id: 'glitch', name: 'Glitch', owner: null, role: 'junk', rank: 0, variant: 'EX', rarity: 'status', anim: 'buff', glyph: 'glitch',
-  v: {}, text: 'Unplayable corruption. Churn it for free; it is deleted.', tags: [], temp: true,
+  id: 'glitch', name: 'Glitch', owner: null, category: 'junk', rank: 0, variant: 'EX', rarity: 'status', anim: 'buff', glyph: 'glitch',
+  v: {}, text: 'Unplayable corruption. Churn it for free; it is deleted.', temp: true,
   fx: () => {},
 });
 
 export const CARDS = Object.fromEntries(C.map((c) => [c.id, c]));
 export const CARD_LIST = C;
+export const isOffensive = (def) => def.category === 'basic' || def.category === 'arte';
 
+// Starter deck (docs/COMBAT_SPEC.md §18.1, prototype): 3 Weak, 3 Medium, 2 Strong with mixed suits,
+// one rank-4 arte per hero, Corvin's heal and Hessa's Guard/Cover support.
 export const STARTER_DECK = [
-  'scrapline', 'scrapline', 'hotwire', 'hotwire', 'salvage', 'rivet_jab',
-  'rethread', 'step_up', 'gear_swap', 'splitter', 'coil_charge', 'dead_drop',
-  'scrapfall', 'sunderline', 'last_word', 'bolt_volley',
+  { id: 'scrapline', variant: 'A' }, { id: 'scrapline', variant: 'B' }, { id: 'scrapline', variant: 'A' },
+  { id: 'rivet_jab', variant: 'A' }, { id: 'rivet_jab', variant: 'B' }, { id: 'hotwire', variant: 'B' },
+  { id: 'piston_strike', variant: 'A' }, { id: 'piston_strike', variant: 'B' },
+  { id: 'scrapfall' }, { id: 'thermal_lance' }, { id: 'bolt_volley' },
+  { id: 'mend_circuit' }, { id: 'salvage' },
 ];
 
+// Cards that rewards, shops and events may offer: converted, non-starter, non-status.
 export function rewardPool() {
-  return C.filter((c) => c.rarity !== 'starter' && c.rarity !== 'status');
+  return C.filter((c) => c.p4 === 'converted' && c.rarity !== 'starter' && c.rarity !== 'status');
 }
+
+// Save version 5 card migration (docs/COMBAT_SPEC.md §19): withheld cards become a converted card of the
+// same hero and rarity; unknown ids become a Medium basic attack.
+export const MIGRATE_CARDS = Object.fromEntries(C.filter((c) => c.p4 === 'withheld').map((c) => [c.id, c.migrate]));
+export const UNKNOWN_CARD_FALLBACK = 'rivet_jab';
 
 export function cardValue(def, up, key) {
   const pair = def.v[key];
@@ -450,9 +523,9 @@ export function cardValue(def, up, key) {
 // Grafts: surgical alterations attached to a single card instance.
 export const GRAFTS = {
   spark: { name: 'Spark', text: '+1 Momentum when played.', tag: 'momentum' },
-  quick: { name: 'Quick', text: '+0.2s Flow when played.', tag: 'flow' },
+  quick: { name: 'Quick', text: '+0.5s Flow when played.', tag: 'flow' },
   plated: { name: 'Plated', text: '+3 Guard when played.', tag: 'guard' },
-  echoing: { name: 'Echoing', text: 'As a Relay, Echoes itself at 30%.', tag: 'relay' },
+  echoing: { name: 'Echoing', text: 'As a Relay, Echoes itself at 30%.', tag: 'relay', p4: 'withheld' },
   keen: { name: 'Keen', text: '+3 damage to its first hit.', tag: 'ladder' },
   cached: { name: 'Cached', text: '+50% power when played from Reserve.', tag: 'reserve' },
   churnfed: { name: 'Churnfed', text: 'When Churned: +1 Momentum and +2 Guard.', tag: 'churn' },
@@ -460,3 +533,5 @@ export const GRAFTS = {
   anchored: { name: 'Anchored', text: 'Cannot be Locked or Scrambled.', tag: 'interference' },
   ledger: { name: 'Ledger', text: 'Cash Out payout +3 if this card is in the combo.', tag: 'cashout' },
 };
+// Grafts that rewards, events and surgery may offer (Echoing needs Relays, Phase 5).
+export const graftPool = () => Object.keys(GRAFTS).filter((g) => GRAFTS[g].p4 !== 'withheld');

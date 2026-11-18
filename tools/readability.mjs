@@ -1,5 +1,5 @@
 // Card readability in the battle hand at the supported landscape sizes: the rendered font size of
-// each piece of card information (after the text-fitting step), for every card in the game.
+// each piece of card information (after the text-fitting step), for every card a player can hold.
 // Usage: node tools/readability.mjs [lang=en] [sizes]   (needs npm run serve on port 8123)
 import { createRequire } from 'node:module';
 const { chromium } = createRequire(import.meta.url)('playwright');
@@ -36,7 +36,8 @@ for (const vp of SIZES.split(',')) {
     const bs = window.__sb.battle;
     const c = bs.combat;
     bs.app.paused = true;
-    const ids = CARD_LIST.map((x) => x.id);
+    // every card a player can hold (withheld Relay cards are replaced when a save loads, docs/AUDIT.md Phase 4)
+    const ids = CARD_LIST.filter((x) => x.p4 !== 'withheld').map((x) => x.id);
     const acc = {};
     for (const k of Object.keys(parts)) acc[k] = [];
     let cardW = 0;

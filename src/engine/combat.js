@@ -1,7 +1,7 @@
 // SIGNAL//BREAK — authoritative Relay combat engine.
 // Pure logic: no DOM, no rendering. The view reads state and drains `events` for presentation.
 // All timing uses this.t (combat seconds), advanced only by update(); pausing = not calling update().
-import { CARDS, cardValue } from '../data/cards.js';
+import { CARDS, cardValue, HERO_ANIM, isOffensive } from '../data/cards.js';
 import { ENEMIES } from '../data/enemies.js';
 import { RNG } from '../core/rng.js';
 
@@ -11,7 +11,7 @@ import { RNG } from '../core/rng.js';
 export const RULES = {
   HAND: 6,
   FLOW_INITIAL: 5.0, // prototype (was 3.0)
-  FLOW_READ_GRACE: 1.2, // prototype: Flow holds this long after the opener, while the new hand is read
+  FLOW_READ_GRACE: 1.2, // prototype: Flow holds this long after a combo's first card, while the next one is chosen
   FLOW_CARD_HOLD: 0.7, // prototype: and this long after every other valid card, while its attack plays (0.5-0.7s) and the new card slides in
   FLOW_REFUND: 1.0, // prototype (was 0.18, then 0.8): per valid card
   FLOW_REFUND_MAX: 5.0, // prototype (was 1.2): per combo
@@ -37,15 +37,16 @@ export const RULES = {
   DEFENSE: { V: 0.3, S: 0.15, C: 0 }, // prototype: share of each enemy hit the hero shrugs off
   COVER_SECONDS: 4, // prototype: Hessa's Guard cards make her take single-target hits aimed at the others
   SWITCH_THRESHOLD: 0.25, // Dead Man's Switch fires the first time party HP falls below this share
+  BRACED_BONUS: 0.2, // prototype: Braced adds this much Defense to one hero
+  DEFENSE_CAP: 0.6,
   GUARD_DECAY_DELAY: 2.0,
   GUARD_DECAY_RATE: 1.0,
   GUARD_CAP: 80,
   FINISHER_HOLD: 0.7,
 };
 
-const OPEN_ROLES = ['open'];
-const CHAIN_ROLES = ['conv', 'close'];
-const SEQ_REASONS = new Set(['rank', 'cross', 'role', 'needconv']);
+// Illegal taps that cost a Stumble during a combo (docs/COMBAT_SPEC.md §8.4).
+const SEQ_REASONS = new Set(['rank', 'owner', 'needbasic', 'momentum']);
 
 export const PARTY_DEFS = {
   V: { name: 'Hessa', role: 'Vanguard' },
@@ -53,16 +54,15 @@ export const PARTY_DEFS = {
   S: { name: 'Pin', role: 'Striker' },
 };
 
-// Rank/suit continuation rule (pure, exported for UI hints and tests).
-// Same suit (or either side EX): any higher rank.  Opposite suit (A<->B): exactly +1 ("Cross")
-// (+1 or +2 with Wild Hinge).  "step" = same-suit exactly +1.
-export function seqCheck(curRank, curVar, rank, variant, crossGap = 1) {
+// Offensive continuation rule (pure, exported for UI hints and tests; docs/COMBAT_SPEC.md §5.2-5.3).
+// Ranks strictly ascend within a combo; skipping ranks is legal; suits never block a card. They are a
+// bonus layer: a Step is exactly +1 rank, a Cross is a suit different from the combo's current suit
+// (EX differs from A and B). Both can apply to one card. With Wild Hinge a Cross also counts as a Step.
+export function seqCheck(curRank, curVar, rank, variant, crossIsStep = false) {
   if (rank <= curRank) return { ok: false, reason: 'rank' };
-  if (curVar === 'EX' || variant === 'EX' || variant === curVar) {
-    return { ok: true, kind: rank === curRank + 1 ? 'step' : 'climb' };
-  }
-  if (rank - curRank <= crossGap) return { ok: true, kind: 'cross' };
-  return { ok: false, reason: 'cross' };
+  const cross = !!curVar && variant !== curVar;
+  const step = rank === curRank + 1 || (crossIsStep && cross);
+  return { ok: true, step, cross, kind: step ? 'step' : cross ? 'cross' : 'climb' };
 }
 
 export class Combat {
@@ -81,7 +81,7 @@ export class Combat {
     this.hold = 0;
     this.lastEnemyActT = -10;
     this.phase = 'PRE';
-    this.handMode = 'open';
+    this.combo = null;
     this.events = [];
     this.history = [];
     this.result = null;
@@ -104,6 +104,13 @@ export class Combat {
     this.wasLocked = new Set(); // for Signal Thief
     this.reserveLatchUntil = 0;
     this.churnJamUntil = 0;
+    // Commands (docs/COMBAT_SPEC.md §7.1, §11.3): a committed card waits in the queue with its Momentum
+    // reserved until it executes or is cancelled. Phase 4 executes each command at once (playCard); the
+    // queue zone, reservation and cancel exist so Phase 5 can run commands over time.
+    this.queue = [];
+    this.reserved = 0;
+    this.cmdSeq = 0;
+    this.heldSlots = new Set(); // hand slots whose card is in the queue (they do not refill)
 
     // ── party: three heroes, one HP pool (heroes never fall; defeat is the pool reaching 0) ──
     this.party = opts.party.map((p) => ({ id: p.id, name: PARTY_DEFS[p.id].name, def: RULES.DEFENSE[p.id] || 0, st: {} }));
@@ -112,6 +119,9 @@ export class Combat {
     this.hp = Math.min(this.maxHp, opts.hp !== undefined ? opts.hp : opts.party.reduce((a, p) => a + Math.max(0, p.hp || 0), 0));
     this.coverUntil = 0;
     this.switchUsed = false;
+    // the hero who performs neutral basic attacks and starts the next combo (Phase 4 hero selector)
+    this.selected = opts.leader && PARTY_DEFS[opts.leader] ? opts.leader : 'V';
+    this.lastHitHero = null;
     this.guard = 0;
     this.lastGuardT = -10;
     this.guardHoldUntil = 0;
@@ -143,6 +153,7 @@ export class Combat {
       reservePlays: 0, relays: 0, crosses: 0, steps: 0, guardGained: 0, guardAbsorbed: 0, interference: 0,
       variantPlays: { A: 0, B: 0, EX: 0 }, cardsPlayed: 0, momentumSpent: 0, flowGained: 0, longCombos: 0,
       stumbles: 0, damageTaken: 0, interferencePayoffs: 0, bestComboDamage: 0, finishers: 0,
+      basics: 0, artes: 0, supports: 0, momentumGained: 0, rejected: 0, byHero: { V: 0, C: 0, S: 0 }, strandedChurns: 0,
     };
 
     // ── battle-start effects ──
@@ -180,9 +191,21 @@ export class Combat {
     const inst = this.cards.get(uid);
     return inst ? CARDS[inst.id] : null;
   }
-  roleOf(uid) {
+  categoryOf(uid) {
     const d = this.def(uid);
-    return d ? d.role : null;
+    return d ? d.category : null;
+  }
+  // Momentum not reserved by a committed command: what legality checks and spending may use.
+  available() {
+    return Math.max(0, this.momentum - this.reserved);
+  }
+  // The hero who would perform a neutral card now: the combo's hero, or the selected hero.
+  performer() {
+    return this.combo ? this.combo.hero : this.selected;
+  }
+  lastIsArte() {
+    const c = this.combo;
+    return !!(c && c.cards.length && c.cards[c.cards.length - 1].category === 'arte');
   }
   member(id) {
     return this.party.find((p) => p.id === id);
@@ -230,6 +253,7 @@ export class Combat {
     if (this.draw.includes(uid)) return 'draw';
     if (this.discard.includes(uid)) return 'discard';
     if (this.exhaust.includes(uid)) return 'exhaust';
+    if (this.queue.some((q) => q.uid === uid)) return 'queue';
     return null;
   }
   isLocked(uid) {
@@ -247,7 +271,7 @@ export class Combat {
   effRank(uid) {
     const inst = this.cards.get(uid);
     const d = CARDS[inst.id];
-    if (d.role === 'junk') return 0;
+    if (!isOffensive(d)) return 0;
     let r = d.rank + (inst.rankMod || 0);
     const m = this.temp[uid];
     if (m && m.until > this.t) r += m.rankDelta || 0;
@@ -298,12 +322,13 @@ export class Combat {
   disruptedCount() {
     return this.hand.filter((u) => u && (this.isLocked(u) || this.isScrambled(u))).length;
   }
-  crossGap() {
-    return this.relics.has('wild_hinge') ? 2 : 1;
+  crossIsStep() {
+    return this.relics.has('wild_hinge');
   }
 
   // ───────────────────────── legality ─────────────────────────
-  // Single source of truth for "can this card be played right now". The UI renders from this.
+  // Single source of truth for "can this card be played right now" (docs/COMBAT_SPEC.md §8.2, §10).
+  // The hand, the Reserve, keyboard input, the bots and the tests all use it.
   check(uid) {
     const inst = this.cards.get(uid);
     if (!inst) return { ok: false, reason: 'missing', text: 'Missing card' };
@@ -311,63 +336,110 @@ export class Combat {
     const zone = this.hand.includes(uid) ? 'hand' : this.reserve.includes(uid) ? 'reserve' : null;
     if (!zone) return { ok: false, reason: 'zone', text: 'Not in hand' };
     if (this.phase === 'END') return { ok: false, reason: 'end', text: 'Battle over' };
-    if (d.role === 'junk') return { ok: false, reason: 'junk', text: 'Glitch: swipe down' };
+    if (d.category === 'junk') return { ok: false, reason: 'junk', text: 'Glitch: swipe down' };
     if (zone === 'reserve' && this.reserveLatchUntil > this.t) return { ok: false, reason: 'latched', text: 'Reserve sealed' };
     if (this.isLocked(uid)) return { ok: false, reason: 'locked', text: { k: 'Locked {s}s', p: { s: { n: this.lockLeft(uid), d: 1 } } } };
     if (this.phase === 'RECOVER') return { ok: false, reason: 'recover', text: 'Recovering' };
+    const cost = d.cost || 0;
+    const short = () => ({ ok: false, reason: 'momentum', text: { k: 'Needs {n} Momentum', p: { n: cost } } });
+    // support: independent of combos; performed by its owner, or by the selected hero when neutral
+    if (d.category === 'support') {
+      if (this.available() < cost) return short();
+      return { ok: true, kind: 'support', zone, category: 'support', hero: d.owner || this.performer() };
+    }
+    const rank = this.effRank(uid);
     if (this.phase === 'PRE') {
-      if (d.role !== 'open') return { ok: false, reason: 'role', text: 'Needs an Opener' };
-      return { ok: true, kind: 'open', zone };
+      // a combo starts with a basic attack, performed by the selected hero
+      if (d.category === 'arte') return { ok: false, reason: 'needbasic', text: 'Basic attack first' };
+      return { ok: true, kind: 'open', zone, category: 'basic', hero: this.selected, step: false, cross: false };
     }
-    // ACTIVE
-    if (d.role === 'open') return { ok: false, reason: 'role', text: 'Combo running' };
-    if (d.role === 'close' && this.combo.convCount < 1) return { ok: false, reason: 'needconv', text: 'Converter first' };
-    const r = seqCheck(this.combo.rank, this.combo.variant, this.effRank(uid), this.effVariant(uid), this.crossGap());
-    if (!r.ok) {
-      return r.reason === 'rank'
-        ? { ok: false, reason: 'rank', text: { k: 'Needs rank {n}+', p: { n: this.combo.rank + 1 } } }
-        : { ok: false, reason: 'cross', text: { k: 'Cross needs rank {n}', p: { n: this.combo.rank + 1 } } };
+    // ACTIVE: the next offensive card of the combo's hero
+    const c = this.combo;
+    if (d.category === 'arte') {
+      if (d.owner !== c.hero) return { ok: false, reason: 'owner', text: { k: '{hero} only', p: { hero: { hero: d.owner } } } };
+      if (!c.hasBasic) return { ok: false, reason: 'needbasic', text: 'Basic attack first' };
     }
-    return { ok: true, kind: r.kind, zone };
+    const r = seqCheck(c.rank, c.variant, rank, this.effVariant(uid), this.crossIsStep());
+    if (!r.ok) return { ok: false, reason: 'rank', text: { k: 'Needs rank {n}+', p: { n: c.rank + 1 } } };
+    if (this.available() < cost) return short();
+    return { ok: true, kind: r.kind, step: r.step, cross: r.cross, zone, category: d.category, hero: c.hero };
   }
 
+  // Cash Out: 2+ cards and the last one is not an arte (an arte ends the combo as a Perfect instead).
   canCashOut() {
-    return this.phase === 'ACTIVE' && this.combo && this.combo.cards.length >= RULES.CASHOUT_MIN;
+    return this.phase === 'ACTIVE' && this.combo && this.combo.cards.length >= RULES.CASHOUT_MIN && !this.lastIsArte();
+  }
+  canFinish() {
+    return this.phase === 'ACTIVE' && this.lastIsArte();
+  }
+  // A hand with nothing playable before a combo (for example only artes, which need a basic attack
+  // first, or support the party cannot afford) must not strand the player: until something is
+  // playable, Churn costs no charge (prototype, docs/COMBAT_SPEC.md §25).
+  stranded() {
+    if (this.phase !== 'PRE') return false;
+    const held = [...this.hand, ...this.reserve].filter(Boolean);
+    if (!held.length || !this.hand.some((u) => u && !this.isLocked(u))) return false;
+    return !held.some((u) => this.check(u).ok);
+  }
+
+  // Whether the combo's hero still has an offensive card that is playable now.
+  hasContinuation() {
+    for (const u of [...this.hand, ...this.reserve]) {
+      if (!u) continue;
+      const d = this.def(u);
+      if (d && isOffensive(d) && this.check(u).ok) return true;
+    }
+    return false;
+  }
+
+  // Phase 4 hero selector: who performs neutral basic attacks and starts the next combo. A combo
+  // keeps its hero until it ends (handing over to another hero is the Phase 5 Relay command).
+  selectHero(id) {
+    if (!this.member(id) || this.phase === 'END') return { ok: false };
+    if (this.combo && this.combo.hero !== id) {
+      const text = 'Finish this combo to switch heroes';
+      this.emit({ type: 'reject', reason: 'hero', text });
+      return { ok: false, text };
+    }
+    if (this.selected !== id) {
+      this.selected = id;
+      this.emit({ type: 'heroSelect', who: id });
+    }
+    return { ok: true };
   }
 
   // ───────────────────────── zones ─────────────────────────
-  matchesRoles(uid, roles) {
-    const d = this.def(uid);
-    if (!d) return false;
-    if (d.role === 'junk') return true;
-    return roles.includes(d.role);
+  // The hand is six persistent slots filled from the top of the draw pile (this.draw[0]); a played
+  // card's slot refills, other cards stay. When the draw pile is empty the discard pile is shuffled in.
+  nextCard() {
+    return this.draw[0] || null;
   }
-  drawMatching(roles, exclude) {
-    let idx = this.draw.findIndex((u) => u !== exclude && this.matchesRoles(u, roles));
-    if (idx < 0 && this.discard.length) {
+  drawTop(exclude) {
+    if (!this.draw.length && this.discard.length) {
       const pile = this.rng.shuffle(this.discard.splice(0));
+      // a card just Churned away is not drawn straight back
+      const i = exclude ? pile.indexOf(exclude) : -1;
+      if (i >= 0 && pile.length > 1) pile.push(pile.splice(i, 1)[0]);
       this.draw.push(...pile);
       this.emit({ type: 'reshuffle', n: pile.length });
-      idx = this.draw.findIndex((u) => u !== exclude && this.matchesRoles(u, roles));
     }
-    if (idx < 0) return null;
-    return this.draw.splice(idx, 1)[0];
+    return this.draw.length ? this.draw.shift() : null;
   }
   slotJammed(i) {
     const j = this.jams[i];
     return !!(j && j.until > this.t);
   }
   refill(exclude) {
-    const roles = this.handMode === 'open' ? OPEN_ROLES : CHAIN_ROLES;
     for (let i = 0; i < RULES.HAND; i++) {
-      if (this.hand[i] !== null || this.slotJammed(i)) continue;
-      const uid = this.drawMatching(roles, exclude);
+      if (this.hand[i] !== null || this.slotJammed(i) || this.heldSlots.has(i)) continue;
+      const uid = this.drawTop(exclude);
       if (!uid) continue;
       this.hand[i] = uid;
-      if (this.trait === 'WILD_SIGNAL' && !this.wild.has(uid) && this.def(uid).role !== 'junk' && this.rng.chance(0.25)) this.wild.add(uid);
+      if (this.trait === 'WILD_SIGNAL' && !this.wild.has(uid) && isOffensive(this.def(uid)) && this.rng.chance(0.25)) this.wild.add(uid);
       this.emit({ type: 'draw', uid, slot: i });
     }
   }
+  // a jammed slot's card goes to the bottom of the draw pile
   tuck(i) {
     const uid = this.hand[i];
     if (!uid) return;
@@ -375,77 +447,124 @@ export class Combat {
     this.draw.push(uid);
     this.emit({ type: 'tuck', uid, slot: i });
   }
-  transitionHand(mode) {
-    this.handMode = mode;
-    for (let i = 0; i < RULES.HAND; i++) {
-      const uid = this.hand[i];
-      if (!uid) continue;
-      const role = this.roleOf(uid);
-      if (role === 'junk') continue;
-      const off = mode === 'open' ? role !== 'open' : role === 'open';
-      if (off) this.tuck(i);
-    }
-    this.refill();
-  }
   // Integrity: every card instance lives in exactly one zone.
   verifyZones() {
     const seen = new Map();
-    const zones = { draw: this.draw, hand: this.hand.filter(Boolean), reserve: this.reserve, discard: this.discard, exhaust: this.exhaust };
+    const zones = { draw: this.draw, hand: this.hand.filter(Boolean), reserve: this.reserve, queue: this.queue.map((q) => q.uid), discard: this.discard, exhaust: this.exhaust };
     for (const [z, arr] of Object.entries(zones)) {
       for (const u of arr) {
         if (seen.has(u)) return { ok: false, error: `duplicate ${u} in ${seen.get(u)} and ${z}` };
+        if (!this.cards.has(u)) return { ok: false, error: `unknown card ${u} in ${z}` };
         seen.set(u, z);
       }
     }
     for (const u of this.cards.keys()) if (!seen.has(u)) return { ok: false, error: `missing ${u}` };
-    if (seen.size !== this.cards.size) return { ok: false, error: 'unknown card in zone' };
+    if (this.hand.length !== RULES.HAND) return { ok: false, error: 'hand size changed' };
+    if (this.reserved !== this.queue.reduce((a, q) => a + q.cost, 0)) return { ok: false, error: 'reservations out of step with the queue' };
     return { ok: true };
+  }
+
+  // ───────────────────────── commands ─────────────────────────
+  // commit: validate, move the card from its slot (or Reserve) into the queue, reserve its cost.
+  commit(uid) {
+    const chk = this.check(uid);
+    if (!chk.ok) {
+      this.stumble(uid, chk);
+      return { ok: false, chk };
+    }
+    const d = this.def(uid);
+    let slot = -1;
+    if (chk.zone === 'reserve') this.reserve.splice(this.reserve.indexOf(uid), 1);
+    else {
+      slot = this.hand.indexOf(uid);
+      this.hand[slot] = null;
+      this.heldSlots.add(slot);
+    }
+    const cmd = { id: ++this.cmdSeq, uid, zone: chk.zone, slot, cost: d.cost || 0, chk, hero: chk.hero };
+    this.reserved += cmd.cost;
+    this.queue.push(cmd);
+    return { ok: true, cmd, chk };
+  }
+  // cancel: an unstarted command returns its card where it came from and releases its reservation;
+  // nothing else happens (no effect, no Momentum gained).
+  cancel(cmd) {
+    const i = this.queue.indexOf(cmd);
+    if (i < 0) return false;
+    this.queue.splice(i, 1);
+    this.reserved -= cmd.cost;
+    if (cmd.zone === 'hand') {
+      this.heldSlots.delete(cmd.slot);
+      if (this.hand[cmd.slot] === null) this.hand[cmd.slot] = cmd.uid;
+      else this.discard.push(cmd.uid);
+    } else if (this.reserve.length < this.reserveMax()) this.reserve.push(cmd.uid);
+    else this.discard.push(cmd.uid);
+    this.emit({ type: 'cancel', uid: cmd.uid });
+    return true;
+  }
+  cancelAll() {
+    for (const q of [...this.queue]) this.cancel(q);
+  }
+  // execute: spend the reservation, resolve the card, then gains; the card goes to discard and its
+  // slot refills.
+  execute(cmd) {
+    const i = this.queue.indexOf(cmd);
+    if (i < 0) return false;
+    this.queue.splice(i, 1);
+    if (cmd.slot >= 0) this.heldSlots.delete(cmd.slot);
+    this.reserved -= cmd.cost;
+    if (cmd.cost > 0) {
+      this.momentum -= cmd.cost;
+      this.stats.momentumSpent += cmd.cost;
+      if (this.adaptOn('momentum_drain')) this.adaptProgress(cmd.cost);
+      this.emit({ type: 'momentum', delta: -cmd.cost, why: CARDS[this.cards.get(cmd.uid).id].name });
+    }
+    if (this.def(cmd.uid).category === 'support') this.resolveSupport(cmd);
+    else this.resolveCard(cmd);
+    return true;
   }
 
   // ───────────────────────── player actions ─────────────────────────
   playCard(uid) {
-    const chk = this.check(uid);
-    if (!chk.ok) {
-      this.stumble(uid, chk);
-      return chk;
-    }
-    this.resolveCard(uid, chk);
+    const r = this.commit(uid);
+    if (!r.ok) return r.chk;
+    this.execute(r.cmd);
     this.checkEnd();
-    return chk;
+    return r.chk;
   }
 
   stumble(uid, chk) {
+    this.stats.rejected++;
     this.emit({ type: 'reject', uid, reason: chk.reason, text: chk.text });
     if (this.phase !== 'ACTIVE' || !SEQ_REASONS.has(chk.reason)) return;
     const c = this.combo;
     c.stumbles++;
     this.stats.stumbles++;
     c.deadline = Math.max(this.t + 0.15, c.deadline - RULES.STUMBLE_FLOW);
-    if (this.momentum > 0) this.momentum -= 1;
+    if (this.available() > 0) this.momentum -= 1;
     this.emit({ type: 'stumble', uid, n: c.stumbles });
-    if (c.stumbles >= RULES.MAX_STUMBLES) this.finishCombo('forced');
+    if (c.stumbles >= RULES.MAX_STUMBLES) this.finishCombo(this.lastIsArte() ? 'perfect' : 'forced');
   }
 
-  startCombo() {
+  startCombo(hero) {
     const extra = this.firstCombo && this.relics.has('stopwatch_gear') ? 1.0 : 0;
     this.firstCombo = false;
     this.combo = {
       start: this.t,
       deadline: Math.min(this.t + RULES.FLOW_INITIAL + extra, this.t + RULES.FLOW_ABS_MAX),
-      graceUntil: 0, graceUsed: 0,
-      refundUsed: 0, cards: [], rank: 0, variant: null, owner: null, relays: 0, crosses: 0, steps: 0, climbs: 0,
-      convCount: 0, damage: 0, guardGained: 0, stumbles: 0, owners: [], suits: [], stepBonus: 0, refundBonus: 0,
+      graceUntil: 0, graceUsed: 0, hero, owner: hero, hasBasic: false, artes: 0,
+      refundUsed: 0, cards: [], rank: 0, variant: null, relays: 0, crosses: 0, steps: 0, climbs: 0,
+      damage: 0, guardGained: 0, stumbles: 0, owners: [hero], suits: [], stepBonus: 0, refundBonus: 0,
       relayEcho: 0, relayEchoUsed: false, nextRelayEcho: 0, cashPct: 0, cashPerCard: 0, stored: [], pendingBonus: 0,
       harness: 0, closeAsCashOut: false, churned: false, len: 0,
     };
     this.phase = 'ACTIVE';
-    this.emit({ type: 'comboStart', deadline: this.combo.deadline });
+    this.emit({ type: 'comboStart', deadline: this.combo.deadline, hero });
   }
 
   naturalRefund(entryIndex, times = 1) {
     const c = this.combo;
     let per = RULES.FLOW_REFUND * (this.relics.has('brass_metronome') ? 1.33 : 1) + c.refundBonus;
-    if (this.mutations.has('ascendant_ladder') && c.cards[entryIndex] && c.cards[entryIndex].kind === 'step') per += 0.06;
+    if (this.mutations.has('ascendant_ladder') && c.cards[entryIndex] && c.cards[entryIndex].step) per += 0.06;
     if (this.adaptOn('long_chain') && entryIndex >= 4) per *= 0.5;
     const amt = Math.min(per * times, RULES.FLOW_REFUND_MAX - c.refundUsed);
     if (amt <= 0) return 0;
@@ -472,6 +591,7 @@ export class Combat {
     const before = this.momentum;
     this.momentum = Math.min(max, this.momentum + n);
     const over = before + n - this.momentum;
+    this.stats.momentumGained += this.momentum - before;
     if (this.momentum !== before) this.emit({ type: 'momentum', delta: this.momentum - before, why });
     if (over > 0 && this.relics.has('overflow_valve')) {
       const tgt = this.currentTarget();
@@ -489,39 +609,45 @@ export class Combat {
     if (!silent) this.emit({ type: 'guard', amount: n });
   }
 
-  resolveCard(uid, chk) {
+  // Hessa's Guard cards make her cover the party (docs/COMBAT_SPEC.md §4.5).
+  coverCheck(d) {
+    if (d.owner === 'V' && (d.tags || []).includes('guard')) {
+      this.coverUntil = this.t + RULES.COVER_SECONDS;
+      this.emit({ type: 'cover', until: this.coverUntil });
+    }
+  }
+
+  // A basic attack or arte executing as the next card of the combo (starting one if none is running).
+  resolveCard(cmd) {
+    const uid = cmd.uid;
     const inst = this.cards.get(uid);
     const d = CARDS[inst.id];
-    const fromReserve = chk.zone === 'reserve';
+    const fromReserve = cmd.zone === 'reserve';
     const rank = this.effRank(uid);
     const variant = this.effVariant(uid);
     const wasLocked = this.wasLocked.has(uid);
     this.wasLocked.delete(uid);
     const disruptedAtPlay = this.disruptedCount() > 0;
     const scrambledAtPlay = this.isScrambled(uid);
-    // remove from its zone
-    if (fromReserve) this.reserve.splice(this.reserve.indexOf(uid), 1);
-    else this.hand[this.hand.indexOf(uid)] = null;
 
-    const isOpen = this.phase === 'PRE';
-    if (isOpen) this.startCombo();
+    const isOpen = !this.combo;
+    if (isOpen) this.startCombo(cmd.hero);
     const c = this.combo;
-    const owner = d.owner;
-    const relay = c.owner !== null && c.owner !== owner;
-    const kind = isOpen ? 'open' : chk.kind;
+    const hero = c.hero;
+    const first = c.cards.length === 0;
+    const seq = first ? { step: false, cross: false, kind: 'open' } : seqCheck(c.rank, c.variant, rank, variant, this.crossIsStep());
     const entry = {
-      uid, id: d.id, name: d.name, owner, role: d.role, rank, variant, kind, relay, fromReserve,
-      dmg: 0, spent: 0, wasLocked, index: c.cards.length,
+      uid, id: d.id, name: d.name, owner: hero, cardOwner: d.owner, category: d.category, rank, variant,
+      kind: seq.kind, step: !!seq.step, cross: !!seq.cross, relay: false, fromReserve, dmg: 0, spent: cmd.cost, wasLocked, index: c.cards.length,
     };
     c.cards.push(entry);
     c.len = c.cards.length;
-    if (!c.owners.includes(owner)) c.owners.push(owner);
     if (!c.suits.includes(variant)) c.suits.push(variant);
-    if (kind === 'step') { c.steps++; this.stats.steps++; }
-    if (kind === 'cross') { c.crosses++; this.stats.crosses++; }
-    if (kind === 'climb') c.climbs++;
-    if (relay) { c.relays++; this.stats.relays++; }
-    if (d.role === 'conv') c.convCount++;
+    if (entry.step) { c.steps++; this.stats.steps++; }
+    if (entry.cross) { c.crosses++; this.stats.crosses++; }
+    if (!entry.step && !entry.cross && !first) c.climbs++;
+    if (d.category === 'basic') { c.hasBasic = true; this.stats.basics++; } else { c.artes++; this.stats.artes++; }
+    this.stats.byHero[hero]++;
     this.stats.cardsPlayed++;
     this.stats.variantPlays[variant] = (this.stats.variantPlays[variant] || 0) + 1;
     if (fromReserve) { this.stats.reservePlays++; if (this.adaptOn('reserve_seal')) this.adaptProgress(1); }
@@ -534,27 +660,14 @@ export class Combat {
     // sequence state set before fx so effects may override it (rewind, suit change)
     c.rank = rank;
     c.variant = variant;
-    c.owner = owner;
-    if (!isOpen) this.naturalRefund(entry.index);
-
-    // sequencing momentum
-    if (relay) {
-      if (!this.adaptOn('relay_jam')) this.gainMomentum(1, 'Relay');
-      this.emit({ type: 'relay', to: owner });
-    }
-    if (kind === 'cross') {
-      let m = 1 + (this.relics.has('twin_dials') ? 1 : 0) + (this.mutations.has('duality_engine') ? 1 : 0);
-      this.gainMomentum(m, 'Cross');
-    }
+    if (!first) this.naturalRefund(entry.index);
 
     const pendingBonus = c.pendingBonus;
     c.pendingBonus = 0;
-    const pendingRelayEcho = c.nextRelayEcho;
-    c.nextRelayEcho = 0;
 
     this.emit({
-      type: 'act', who: owner, anim: d.anim, card: d.name, id: d.id, role: d.role, rank, variant, kind, relay,
-      big: d.role === 'close', all: false, fromReserve,
+      type: 'act', who: hero, anim: d.owner ? d.anim : HERO_ANIM[hero], card: d.name, id: d.id, category: d.category, rank, variant,
+      kind: entry.kind, step: entry.step, cross: entry.cross, relay: false, big: d.category === 'arte', all: false, fromReserve,
     });
 
     // first-hit bonuses
@@ -563,9 +676,8 @@ export class Combat {
     if (variant === 'EX' && this.relics.has('prism_lens')) bonus += 3;
     if (fromReserve && this.relics.has('spare_pockets')) bonus += 3;
     if (fromReserve && this.mutations.has('deep_pockets')) bonus += 4;
-    if (kind === 'cross' && this.mutations.has('duality_engine')) bonus += 4;
+    if (entry.cross && this.mutations.has('duality_engine')) bonus += 4;
     if (scrambledAtPlay && this.relics.has('root_key')) bonus += 4;
-    bonus += c.harness * 2;
 
     let mult = 1;
     if (fromReserve && inst.graft === 'cached') mult *= 1.5;
@@ -573,58 +685,106 @@ export class Combat {
 
     const api = this.makeApi(entry, inst, d, { mult, bonus, echoing: false, disruptedAtPlay, ctx: c });
     d.fx(api);
-    // Hessa's Guard cards: she covers the party, taking single-target hits aimed at the others
-    if (d.owner === 'V' && (d.tags || []).includes('guard')) {
-      this.coverUntil = this.t + RULES.COVER_SECONDS;
-      this.emit({ type: 'cover', until: this.coverUntil });
-    }
+    this.coverCheck(d);
 
-    // grafts
+    // gains on resolution (docs/COMBAT_SPEC.md §11.1): basic attacks by strength, Crosses, grafts
+    if (d.category === 'basic') this.gainMomentum(d.gain || 0, 'Basic');
+    if (entry.cross) this.gainMomentum(1 + (this.relics.has('twin_dials') ? 1 : 0) + (this.mutations.has('duality_engine') ? 1 : 0), 'Cross');
     if (inst.graft === 'spark') this.gainMomentum(1, 'Spark');
-    if (inst.graft === 'quick') this.addFlow(0.2);
+    if (inst.graft === 'quick') this.addFlow(0.5);
     if (inst.graft === 'plated') this.addGuard(3);
-    if (inst.graft === 'echoing' && relay) this.echo(entry.index, 0.3, entry);
     if (fromReserve && this.mutations.has('deep_pockets')) this.gainMomentum(1, 'Reserve');
+    if (d.category === 'basic' && this.relics.has('iron_filings')) this.addGuard(1);
 
     // step payoffs
-    if (kind === 'step') {
-      let sb = c.stepBonus + (this.relics.has('ladder_rungs') ? 3 : 0) + (this.mutations.has('ascendant_ladder') ? 3 : 0);
+    if (entry.step) {
+      const sb = c.stepBonus + (this.relics.has('ladder_rungs') ? 3 : 0) + (this.mutations.has('ascendant_ladder') ? 3 : 0);
       const tgt = this.currentTarget();
-      if (sb > 0 && tgt) this.dealDamage(tgt, sb, { src: owner, entry, tag: 'step' });
+      if (sb > 0 && tgt) this.dealDamage(tgt, sb, { src: hero, entry, tag: 'step' });
     }
-    // relay echoes
-    if (relay && entry.index > 0) {
-      const prev = entry.index - 1;
-      if (!c.relayEchoUsed) {
-        let p = 0;
-        if (this.relics.has('echo_splice')) p = Math.max(p, 0.4);
-        if (c.relayEcho) p = Math.max(p, c.relayEcho);
-        if (p > 0) { c.relayEchoUsed = true; this.echo(prev, p, entry); }
-      }
-      if (pendingRelayEcho > 0) this.echo(prev, pendingRelayEcho, entry);
-      if (this.mutations.has('relay_resonance')) this.echo(prev, 0.25, entry);
-      if (this.relics.has('relay_harness')) c.harness++;
-    }
-    if (d.role === 'conv' && this.relics.has('iron_filings')) this.addGuard(1);
 
     // card to discard (temp cards are deleted)
     if (d.temp) this.exhaust.push(uid);
     else this.discard.push(uid);
 
-    if (this.phase === 'END') return; // fx may have ended the battle
-    if (isOpen) {
-      this.transitionHand('chain');
-      // the hand has just changed: Flow holds while the player reads it
+    if (this.phase === 'END' || this.combo !== c) return; // fx may have ended the battle or the combo
+    this.refill();
+    // the first card: Flow holds while the next one is chosen; later cards: while each plays out
+    if (first) {
       c.graceUntil = this.t + RULES.FLOW_READ_GRACE;
       this.emit({ type: 'flowHold', until: c.graceUntil });
-    } else {
-      this.refill();
-      // watching a committed card play out is not decision time
-      if (d.role !== 'close') c.graceUntil = Math.max(c.graceUntil, this.t + RULES.FLOW_CARD_HOLD);
-    }
+    } else c.graceUntil = Math.max(c.graceUntil, this.t + RULES.FLOW_CARD_HOLD);
 
-    if (d.role === 'close') this.finishCombo(c.closeAsCashOut ? 'cashout' : 'perfect');
-    else if (c.deadline <= this.t) this.finishCombo('forced');
+    // endings (docs/COMBAT_SPEC.md §12): an arte ends the combo as a Perfect unless the hero can still
+    // add a higher card (then FINISH, the clock, or that card decide)
+    if (d.category === 'arte') {
+      if (c.closeAsCashOut) { this.payout(1); if (this.phase !== 'END') this.finishCombo('cashout'); }
+      else if (!this.hasContinuation()) this.finishCombo('perfect');
+    } else if (c.deadline <= this.t) this.finishCombo('forced');
+  }
+
+  // A support card: not part of any combo (it neither starts, extends, ends nor pauses one).
+  // Phase 4 bridge (docs/COMBAT_SPEC.md §10): it executes at once, performed by its owner or the
+  // selected hero; Phase 5 adds the performer's Recovery and the queue.
+  resolveSupport(cmd) {
+    const uid = cmd.uid;
+    const inst = this.cards.get(uid);
+    const d = CARDS[inst.id];
+    const fromReserve = cmd.zone === 'reserve';
+    const hero = cmd.hero;
+    const ctx = this.combo || { cards: [], len: 0, damage: 0, rank: 0, variant: null, owners: [hero], suits: [], stored: [], steps: 0, crosses: 0, relays: 0 };
+    const entry = { uid, id: d.id, name: d.name, owner: hero, cardOwner: d.owner, category: 'support', rank: 0, variant: null, kind: 'support', step: false, cross: false, relay: false, fromReserve, dmg: 0, spent: cmd.cost, index: -1 };
+    this.stats.supports++;
+    this.stats.byHero[hero]++;
+    this.stats.cardsPlayed++;
+    if (fromReserve) this.stats.reservePlays++;
+    this.emit({ type: 'act', who: hero, anim: d.anim, card: d.name, id: d.id, category: 'support', big: false, all: false, fromReserve });
+    let mult = 1;
+    if (fromReserve && inst.graft === 'cached') mult *= 1.5;
+    const api = this.makeApi(entry, inst, d, { mult, bonus: 0, echoing: false, ctx });
+    d.fx(api);
+    this.coverCheck(d);
+    if (inst.graft === 'spark') this.gainMomentum(1, 'Spark');
+    if (inst.graft === 'quick') this.addFlow(0.5);
+    if (inst.graft === 'plated') this.addGuard(3);
+    if (d.temp) this.exhaust.push(uid);
+    else this.discard.push(uid);
+    if (this.phase === 'END') return;
+    this.refill();
+  }
+
+  // Finish the combo after an arte (the FINISH button): a Perfect.
+  finishChain() {
+    if (!this.canFinish()) {
+      this.emit({ type: 'reject', reason: 'finish', text: this.phase === 'ACTIVE' ? 'Play an arte to finish' : 'No combo running' });
+      return { ok: false };
+    }
+    this.finishCombo('perfect');
+    this.checkEnd();
+    return { ok: true };
+  }
+  // the end-of-combo button: FINISH after an arte, CASH OUT otherwise
+  finishOrCashOut() {
+    return this.canFinish() ? this.finishChain() : this.cashOut();
+  }
+
+  // Braced (docs/COMBAT_SPEC.md §4.5): the hero the most imminent single-target enemy attack will
+  // land on (after Cover), else the hero last hit, else the performer.
+  braceTarget() {
+    let best = null;
+    for (const e of this.aliveEnemies()) {
+      const it = e.intent;
+      if (it && it.dmg > 0 && it.target && it.kind !== 'aoe' && (!best || e.atb > best.atb)) best = e;
+    }
+    if (best) return this.hitTarget(best.intent.target);
+    return this.member(this.lastHitHero) || this.member(this.performer());
+  }
+  brace(sec) {
+    const p = this.braceTarget();
+    if (!p) return null;
+    p.st.braced = Math.max(p.st.braced || 0, this.t + sec);
+    this.emit({ type: 'partyStatus', who: p.id, kind: 'braced', dur: sec });
+    return p.id;
   }
 
   echo(idx, mult, creditEntry) {
@@ -635,7 +795,7 @@ export class Combat {
     const inst = this.cards.get(e.uid);
     const d = CARDS[e.id];
     if (this.relics.has('mirror_lens')) mult *= 1.25;
-    this.emit({ type: 'echo', who: e.owner, card: e.name, id: e.id, anim: d.anim, mult });
+    this.emit({ type: 'echo', who: e.owner, card: e.name, id: e.id, anim: d.owner ? d.anim : HERO_ANIM[e.owner], mult });
     const api = this.makeApi(e, inst, d, { mult, bonus: 0, echoing: true, creditEntry: creditEntry || null, ctx: c });
     d.fx(api);
   }
@@ -652,7 +812,7 @@ export class Combat {
     const scale = (n) => Math.max(0, Math.round(n * mult));
     const api = {
       c: self, ctx: c, entry, def, up: !!inst.up, mult, echoing,
-      kind: entry.kind, relay: entry.relay, fromReserve: entry.fromReserve,
+      kind: entry.kind, step: !!entry.step, cross: !!entry.cross, relay: entry.relay, fromReserve: entry.fromReserve,
       get target() { return self.currentTarget(); },
       v: (key) => cardValue(def, inst.up, key),
       disruptedCount: () => (echoing ? 0 : self.disruptedCount()),
@@ -667,7 +827,7 @@ export class Combat {
           const targets = opt.all ? self.aliveEnemies() : opt.rand ? [self.rng.pick(self.aliveEnemies())] : [self.currentTarget()];
           for (const t of targets) {
             if (!t) continue;
-            total += self.dealDamage(t, amt, { src: entry.owner, entry: credit, pierce, closer: def.role === 'close', echo: echoing, hit: h, all: !!opt.all });
+            total += self.dealDamage(t, amt, { src: entry.owner, entry: credit, pierce, arte: def.category === 'arte', echo: echoing, hit: h, all: !!opt.all });
           }
           if (opt.all && h === 0) self.emit({ type: 'aoe', who: entry.owner });
         }
@@ -692,10 +852,12 @@ export class Combat {
       nextBonus: (n) => { if (!echoing) c.pendingBonus += n; },
       ctxAdd: (k, n) => { if (!echoing) c[k] = (c[k] || 0) + n; },
       ctxSet: (k, n) => { if (!echoing) c[k] = n; },
+      // spends what is left after this card's own cost (reserved Momentum is never touched)
       spendMomentum() {
-        if (echoing) return entry.spent || 0;
-        const n = self.momentum;
-        self.momentum = 0;
+        if (echoing) return entry.spentAll || 0;
+        const n = self.available();
+        self.momentum -= n;
+        entry.spentAll = n;
         entry.spent = n;
         self.stats.momentumSpent += n;
         if (self.adaptOn('momentum_drain')) self.adaptProgress(n);
@@ -716,26 +878,27 @@ export class Combat {
         self.unlock(u);
         return true;
       },
+      // replaces every hand card that cannot be played right now (Glitch is deleted), using the same
+      // legality check as the hand
       recycleIllegal() {
         if (echoing) return 0;
         let n = 0;
-        // evaluated after this card resolves sequence state; cards illegal for the next play are replaced
         for (let i = 0; i < RULES.HAND; i++) {
           const u = self.hand[i];
           if (!u || self.isLocked(u)) continue;
-          if (self.roleOf(u) === 'junk') { self.hand[i] = null; self.exhaust.push(u); n++; continue; }
-          const r = seqCheck(c.rank, c.variant, self.effRank(u), self.effVariant(u), self.crossGap());
-          if (!r.ok) { self.hand[i] = null; self.discard.push(u); self.emit({ type: 'churn', uid: u, slot: i, free: true }); n++; }
+          if (self.categoryOf(u) === 'junk') { self.hand[i] = null; self.exhaust.push(u); self.emit({ type: 'churn', uid: u, slot: i, free: true, junk: true }); n++; continue; }
+          if (!self.check(u).ok) { self.hand[i] = null; self.discard.push(u); self.emit({ type: 'churn', uid: u, slot: i, free: true }); n++; }
         }
         self.refill();
         return n;
       },
-      stashBestCloser() {
+      brace: (sec) => (echoing ? null : self.brace(sec)),
+      stashBestArte() {
         if (echoing) return false;
         if (self.reserve.length >= self.reserveMax() || self.reserveLatchUntil > self.t) return false;
         let best = -1, bestRank = -1;
         self.hand.forEach((u, i) => {
-          if (u && self.roleOf(u) === 'close' && !self.isLocked(u) && self.effRank(u) > bestRank) { best = i; bestRank = self.effRank(u); }
+          if (u && self.categoryOf(u) === 'arte' && !self.isLocked(u) && self.effRank(u) > bestRank) { best = i; bestRank = self.effRank(u); }
         });
         if (best < 0) return false;
         const u = self.hand[best];
@@ -752,7 +915,7 @@ export class Combat {
           const s = e.st.scorch || 0;
           if (s > 0) {
             if (!echoing) e.st.scorch = 0;
-            self.dealDamage(e, s * p * mult, { src: entry.owner, entry: credit, pierce: true, closer: true, echo: echoing });
+            self.dealDamage(e, s * p * mult, { src: entry.owner, entry: credit, pierce: true, arte: true, echo: echoing });
           }
         }
       },
@@ -768,12 +931,14 @@ export class Combat {
     if (slot < 0) return { ok: false, text: 'Not in hand' };
     if (this.phase === 'END') return { ok: false, text: 'Battle over' };
     const d = this.def(uid);
-    const junk = d.role === 'junk';
+    const junk = d.category === 'junk';
     if (this.isLocked(uid)) { this.emit({ type: 'reject', uid, reason: 'locked', text: 'Locked' }); return { ok: false, text: 'Locked' }; }
     if (!junk && this.churnJamUntil > this.t) { this.emit({ type: 'reject', uid, reason: 'snared', text: 'Churn snared' }); return { ok: false, text: 'Churn snared' }; }
-    const free = junk || (this.relics.has('beta_badge') && !this.churn.freeUsed);
+    const stranded = !junk && this.stranded();
+    const free = junk || stranded || (this.relics.has('beta_badge') && !this.churn.freeUsed);
     if (!free && this.churn.charges < 1) { this.emit({ type: 'reject', uid, reason: 'nocharge', text: 'No Churn charges' }); return { ok: false, text: 'No Churn charges' }; }
-    if (!junk && this.relics.has('beta_badge') && !this.churn.freeUsed) this.churn.freeUsed = true;
+    if (stranded) this.stats.strandedChurns++;
+    else if (!junk && this.relics.has('beta_badge') && !this.churn.freeUsed) this.churn.freeUsed = true;
     else if (!junk) this.churn.charges -= 1;
     this.hand[slot] = null;
     if (junk || d.temp) this.exhaust.push(uid);
@@ -808,7 +973,7 @@ export class Combat {
   canStash(uid) {
     if (this.phase === 'END') return false;
     return this.hand.includes(uid) && this.reserve.length < this.reserveMax() && this.reserveLatchUntil <= this.t
-      && !this.isLocked(uid) && this.roleOf(uid) !== 'junk';
+      && !this.isLocked(uid) && this.categoryOf(uid) !== 'junk';
   }
 
   stash(uid) {
@@ -822,6 +987,7 @@ export class Combat {
     this.reserve.push(uid);
     this.stats.stashes++;
     this.emit({ type: 'stash', uid, slot });
+    this.refill(uid); // the hand keeps six cards: the slot refills from the draw pile
     return { ok: true };
   }
 
@@ -833,7 +999,7 @@ export class Combat {
 
   spendMomentumFlow() {
     const cost = this.momentumCostFlow();
-    if (this.phase !== 'ACTIVE' || this.momentum < cost) return { ok: false, text: this.phase !== 'ACTIVE' ? 'No combo running' : 'Not enough Momentum' };
+    if (this.phase !== 'ACTIVE' || this.available() < cost) return { ok: false, text: this.phase !== 'ACTIVE' ? 'No combo running' : 'Not enough Momentum' };
     if (this.combo.deadline >= this.flowCap() - 0.01) return { ok: false, text: 'At the combo cap' };
     this.momentum -= cost;
     this.stats.momentumSpent += cost;
@@ -845,7 +1011,7 @@ export class Combat {
 
   spendMomentumGuard() {
     if (this.phase === 'END') return { ok: false, text: 'Battle over' };
-    if (this.momentum < RULES.MOMENTUM_COST) return { ok: false, text: 'Not enough Momentum' };
+    if (this.available() < RULES.MOMENTUM_COST) return { ok: false, text: 'Not enough Momentum' };
     this.momentum -= RULES.MOMENTUM_COST;
     this.stats.momentumSpent += RULES.MOMENTUM_COST;
     if (this.adaptOn('momentum_drain')) this.adaptProgress(RULES.MOMENTUM_COST);
@@ -857,7 +1023,7 @@ export class Combat {
 
   cashOut() {
     if (!this.canCashOut()) {
-      this.emit({ type: 'reject', reason: 'cashout', text: this.phase === 'ACTIVE' ? 'Needs 2+ cards' : 'No combo running' });
+      this.emit({ type: 'reject', reason: 'cashout', text: this.phase === 'ACTIVE' ? (this.lastIsArte() ? 'Play an arte to finish' : 'Needs 2+ cards') : 'No combo running' });
       return { ok: false };
     }
     this.payout(1);
@@ -900,7 +1066,8 @@ export class Combat {
   finishCombo(type) {
     const c = this.combo;
     if (!c) return;
-    // Dead Drop stored echoes release on Closer or Cash Out
+    this.cancelAll(); // commands that have not started are cancelled (docs/COMBAT_SPEC.md §16)
+    // Dead Drop stored echoes release on a Perfect or Cash Out
     if (type !== 'forced' && c.stored.length) {
       const idx = c.cards.map((e, i) => [e.dmg, i]).sort((a, b) => b[0] - a[0])[0];
       for (const s of c.stored) if (idx && idx[0] > 0) this.echo(idx[1], s.mult, null);
@@ -919,7 +1086,8 @@ export class Combat {
       if (this.mutations.has('perfect_pitch')) this.addGuard(6);
       this.gainChurn(1);
       if (this.relics.has('tuning_fork')) this.healParty(3);
-      finisher = c.cards.length >= 5 || c.cards[c.cards.length - 1].rank >= 9;
+      const last = c.cards[c.cards.length - 1];
+      finisher = c.cards.length >= 5 || (last && last.category === 'arte' && last.rank >= 6);
       if (finisher) { this.stats.finishers++; this.hold = RULES.FINISHER_HOLD; }
     } else if (type === 'cashout') {
       this.stats.cashouts++;
@@ -930,25 +1098,26 @@ export class Combat {
     } else {
       this.stats.forced++;
       if (this.relics.has('long_fuse')) this.payout(0.5);
-      else if (this.momentum > 0) {
-        const loss = Math.min(2, this.momentum);
+      else if (this.available() > 0) {
+        const loss = Math.min(2, this.available());
         this.momentum -= loss;
         this.emit({ type: 'momentum', delta: -loss, why: 'Dropped' });
       }
     }
     const summary = {
       type, len: c.cards.length, relays: c.relays, crosses: c.crosses, steps: c.steps, damage: c.damage,
-      openerSuit: c.cards[0] ? c.cards[0].variant : null, closerId: type === 'perfect' ? c.cards[c.cards.length - 1].id : null,
+      openerSuit: c.cards[0] ? c.cards[0].variant : null,
+      openerStrength: c.cards[0] && c.cards[0].category === 'basic' ? CARDS[c.cards[0].id].rank : null,
+      closerId: type === 'perfect' && this.lastIsArte() ? c.cards[c.cards.length - 1].id : null,
       owners: c.owners.length, duration, churned: c.churned, maxRank: Math.max(...c.cards.map((e) => e.rank)),
       strongest: Math.max(0, ...c.cards.map((e) => e.dmg)),
     };
     this.history.push(summary);
     this.trackAdaptation(summary);
     this.updateCitation(summary);
-    this.emit({ type: 'comboEnd', kind: type, len: summary.len, damage: c.damage, finisher, quick: !!c.quick, relays: c.relays, owners: c.owners.slice() });
+    this.emit({ type: 'comboEnd', kind: type, len: summary.len, damage: c.damage, finisher, quick: !!c.quick, relays: c.relays, owners: c.owners.slice(), hero: c.hero });
     this.combo = null;
     if (this.phase === 'END') return;
-    this.transitionHand('open');
     this.phase = 'RECOVER';
     this.recoverUntil = this.t + RULES.RECOVER[type];
   }
@@ -973,18 +1142,19 @@ export class Combat {
     if (h.length < 2) { this.emit({ type: 'banner', text: 'AUDIT: INSUFFICIENT DATA', sub: 'No citation issued', tone: 'info' }); return; }
     const a = h[h.length - 1], b = h[h.length - 2];
     let reason = null;
-    if (a.openerSuit && a.openerSuit === b.openerSuit) reason = { kind: 'suit', value: a.openerSuit };
+    if (a.openerStrength && a.openerStrength === b.openerStrength) reason = { kind: 'strength', value: a.openerStrength };
     else if (a.closerId && a.closerId === b.closerId) reason = { kind: 'closer', value: a.closerId };
     if (!reason) { this.emit({ type: 'banner', text: 'AUDIT PASSED', sub: 'Your patterns varied', tone: 'good' }); return; }
     this.citation = reason;
     this.stats.interference++;
-    this.emit({ type: 'banner', text: 'CITATION ISSUED', sub: reason.kind === 'suit' ? { k: 'Opened with suit {s} twice: -40% damage until you vary', p: { s: reason.value } } : 'Same Closer twice: -40% damage until you vary', tone: 'bad' });
+    const sub = reason.kind === 'strength' ? { 1: 'Started with a Weak attack twice: -40% damage until you vary', 2: 'Started with a Medium attack twice: -40% damage until you vary', 3: 'Started with a Strong attack twice: -40% damage until you vary' }[reason.value] : 'Same arte finished twice: -40% damage until you vary';
+    this.emit({ type: 'banner', text: 'CITATION ISSUED', sub, tone: 'bad' });
     if (e.flags.strict) this.hitAll(e, this.edmg(e, 10));
   }
   updateCitation(s) {
     if (!this.citation) return;
     const r = this.citation;
-    const varied = r.kind === 'suit' ? s.openerSuit !== r.value : s.closerId !== r.value;
+    const varied = r.kind === 'strength' ? s.openerStrength !== r.value : s.closerId !== r.value;
     if (varied) {
       this.citation = null;
       this.emit({ type: 'banner', text: 'CITATION CLEARED', sub: 'Pattern varied', tone: 'good' });
@@ -1013,14 +1183,14 @@ export class Combat {
     if (this.mutations.has('glass_cannon')) a *= 1.25;
     if (this.mutations.has('overpressure_valve') && this.momentum >= 10) a *= 1.25;
     if (this.prep.dmgMult) a *= this.prep.dmgMult;
-    if (o.closer && this.relics.has('kettle_drum') && this.combo && this.combo.cards.length >= 5) a *= 1.25;
+    if (o.arte && this.relics.has('kettle_drum') && this.combo && this.combo.cards.length >= 5) a *= 1.25;
     if (this.citation && !o.cashout) a *= 0.6;
     if (o.entry && this.adapt && !this.adapt.broken) {
       if (this.adaptOn('suit_filter_A') && o.entry.variant === 'A') a *= 0.7;
       if (this.adaptOn('suit_filter_B') && o.entry.variant === 'B') a *= 0.7;
     }
     if ((e.st.exposed || 0) > 0) a *= 1.3;
-    if (o.closer && e.st.mark > 0) { a *= 1.5; e.st.mark = 0; }
+    if (o.arte && e.st.mark > 0) { a *= 1.5; e.st.mark = 0; }
     if (o.pierce && e.flags.pierceVuln) a *= 2;
     a = Math.max(0, Math.round(a));
     let blocked = 0;
@@ -1036,8 +1206,8 @@ export class Combat {
     this.stats.damage += a;
     this.stats.maxHit = Math.max(this.stats.maxHit, total);
     if (this.disruptedCount() > 0 && this.adaptOn('lock_harden')) this.adaptProgress(total);
-    if (o.closer && this.adaptOn('guard_pierce') && !o.echo) this.adaptProgress(total);
-    this.emit({ type: 'hit', uid: e.uid, amount: a, blocked, by: o.src || null, big: !!o.closer, echo: !!o.echo, tag: o.tag || null, all: !!o.all, hit: o.hit || 0, pierce: !!o.pierce });
+    if (o.arte && this.adaptOn('guard_pierce') && !o.echo) this.adaptProgress(total);
+    this.emit({ type: 'hit', uid: e.uid, amount: a, blocked, by: o.src || null, big: !!o.arte, echo: !!o.echo, tag: o.tag || null, all: !!o.all, hit: o.hit || 0, pierce: !!o.pierce });
     // parry reflection
     if ((e.st.parry || 0) > 0 && o.src && this.member(o.src) && !o.counter && total > 0) {
       const ref = Math.round(total * (e.st.parryPct || 0.5));
@@ -1098,7 +1268,7 @@ export class Combat {
 
   // ───────────────────────── party damage ─────────────────────────
   defenseOf(p) {
-    return p ? Math.min(0.6, p.def + (p.st.braced > this.t ? 0.2 : 0)) : 0;
+    return p ? Math.min(RULES.DEFENSE_CAP, p.def + (p.st.braced > this.t ? RULES.BRACED_BONUS : 0)) : 0;
   }
   coverActive() {
     return this.coverUntil > this.t;
@@ -1155,6 +1325,7 @@ export class Combat {
     if (!intended) return 0;
     const p = o.reflect || o.self ? intended : this.hitTarget(intended.id);
     if (p !== intended) this.emit({ type: 'covered', who: p.id, from: intended.id });
+    if (!o.reflect) this.lastHitHero = p.id;
     const afterDef = this.mitigate(e, amount, p, o);
     const blocked = this.absorb(e, afterDef, o);
     const a = afterDef - blocked;
@@ -1285,10 +1456,10 @@ export class Combat {
     if (this.relics.has('breach_clamp')) dur -= 1;
     if (this.relics.has('regent_mainspring')) dur -= 1;
     dur = Math.max(1, dur);
-    const pri = { close: 3, conv: 2, open: 1 };
+    const pri = { arte: 3, basic: 2, support: 1 };
     const cands = this.hand
-      .filter((u) => u && !this.isLocked(u) && this.roleOf(u) !== 'junk' && this.cards.get(u).graft !== 'anchored' && (!filter || filter(u)))
-      .map((u) => ({ u, s: pri[this.roleOf(u)] * 10 + this.effRank(u) + this.rng.next() }))
+      .filter((u) => u && !this.isLocked(u) && this.categoryOf(u) !== 'junk' && this.cards.get(u).graft !== 'anchored' && (!filter || filter(u)))
+      .map((u) => ({ u, s: pri[this.categoryOf(u)] * 10 + this.effRank(u) + this.rng.next() }))
       .sort((a, b) => b.s - a.s)
       .slice(0, n);
     if (!cands.length) return 0;
@@ -1309,7 +1480,8 @@ export class Combat {
   }
 
   scrambleCards(e, n, mode) {
-    const cands = this.rng.shuffle(this.hand.filter((u) => u && this.roleOf(u) !== 'junk' && this.cards.get(u).graft !== 'anchored')).slice(0, n);
+    // only basic attacks and artes have a rank and suit to scramble
+    const cands = this.rng.shuffle(this.hand.filter((u) => u && isOffensive(this.def(u)) && this.cards.get(u).graft !== 'anchored')).slice(0, n);
     if (!cands.length) return 0;
     for (const u of cands) {
       const m = { until: this.t + RULES.SCRAMBLE_DURATION, flip: false, rankDelta: 0, source: e ? e.id : null };
@@ -1325,7 +1497,7 @@ export class Combat {
 
   jamSlot(e, dur) {
     const free = [];
-    for (let i = 0; i < RULES.HAND; i++) if (!this.slotJammed(i) && !(this.hand[i] && this.isLocked(this.hand[i]))) free.push(i);
+    for (let i = 0; i < RULES.HAND; i++) if (!this.slotJammed(i) && !this.heldSlots.has(i) && !(this.hand[i] && this.isLocked(this.hand[i]))) free.push(i);
     if (!free.length) return;
     const i = this.rng.pick(free);
     if (this.hand[i]) this.tuck(i);
@@ -1392,7 +1564,7 @@ export class Combat {
       case 'churn': this.snareChurn(e, 5, 2); this.hitParty(e, tgt, this.edmg(e, 8)); break;
       case 'variantA': case 'variantB': this.scrambleCards(e, 3, 'suit'); this.hitParty(e, tgt, this.edmg(e, 6)); break;
       case 'relay': this.lockCards(e, 2); this.hitParty(e, tgt, this.edmg(e, 6)); break;
-      case 'momentum': { const n = this.momentum; this.momentum = 0; this.emit({ type: 'momentum', delta: -n, why: 'Siphoned' }); this.hitAll(e, this.edmg(e, 4 + n)); break; }
+      case 'momentum': { const n = this.available(); this.momentum -= n; this.emit({ type: 'momentum', delta: -n, why: 'Siphoned' }); this.hitAll(e, this.edmg(e, 4 + n)); break; }
       case 'flow': if (this.combo) this.drainFlow(e, 1.5); else this.hitAll(e, this.edmg(e, 8)); break;
       case 'reserve': this.latchReserve(e); this.latchReserve(e); break;
       case 'interference': this.lockCards(e, 2); this.scrambleCards(e, 2, 'both'); break;
@@ -1409,8 +1581,8 @@ export class Combat {
     if (e.flags.rootAccess && this.phase !== 'END') this.addGlitch(e, 1);
     if (this.trait === 'STATIC' && this.phase !== 'END' && it.kind !== 'lock' && this.rng.chance(0.25)) this.lockCards(e, 1);
     if (e.tier === 'boss' && this.phase !== 'END') {
-      if (this.adaptOn('momentum_drain') && this.momentum > 0) {
-        const n = Math.min(2, this.momentum);
+      if (this.adaptOn('momentum_drain') && this.available() > 0) {
+        const n = Math.min(2, this.available());
         this.momentum -= n;
         this.emit({ type: 'momentum', delta: -n, why: 'Siphon' });
       }
@@ -1457,7 +1629,7 @@ export class Combat {
       this.combo.deadline += held;
       this.combo.graceUsed += held;
     }
-    if (this.phase === 'ACTIVE' && this.combo && t >= this.combo.deadline) this.finishCombo('forced');
+    if (this.phase === 'ACTIVE' && this.combo && t >= this.combo.deadline) this.finishCombo(this.lastIsArte() ? 'perfect' : 'forced');
     if (this.phase === 'RECOVER' && t >= this.recoverUntil) {
       this.phase = 'PRE';
       this.emit({ type: 'ready' });
