@@ -45,7 +45,11 @@ const instrument = () => p.evaluate(() => {
   const c = bs.combat;
   if (c.__probe) return;
   const P = (c.__probe = { states: {}, acts: [], plays: [], combos: [], t0: performance.now(), hpStart: c.hp, dmg: { atk: 0, aoe: 0 }, interference: 0 });
-  const state = () => (c.hold > 0 ? 'finisher' : c.phase === 'ACTIVE' ? (c.flowHeld() ? 'hold' : 'active') : c.phase === 'PRE' ? 'pre' : c.phase === 'RECOVER' ? 'recover' : c.phase);
+  // Phase 5 player states (combat.playerState): idle (no chain, a hero Ready), wait (every hero
+  // recovering), decide (chain open, choosing), execute (a command playing out), grace (the hold after
+  // the first card or a Relay), breather (after a chain), finisher (cut-in hold)
+  const state = () => (c.hold > 0 ? 'finisher' : c.playerState());
+  P.recover = 0;
   const upd = c.update.bind(c);
   c.update = (dt) => {
     const s = state();
@@ -58,6 +62,7 @@ const instrument = () => p.evaluate(() => {
     st.combat += c.t - t0;
     c.enemies.forEach((e, i) => { if (atb[i] !== null && e.alive && e.atb >= atb[i]) st.atb += e.atb - atb[i]; });
     st.enemyActs += P.acts.length - acts0;
+    P.recover += (c.t - t0) * c.party.filter((m) => c.heroState(m.id) === 'RECOVERING').length;
   };
   const em = c.emit.bind(c);
   c.emit = (ev) => {
@@ -65,12 +70,12 @@ const instrument = () => p.evaluate(() => {
     if (ev.type === 'enemyAct') {
       const e = c.enemies.find((x) => x.uid === ev.uid);
       const legal = [...c.hand, ...c.reserve].filter((u) => u && c.check(u).ok).length;
-      P.acts.push({ t: c.t, id: ev.id, kind: ev.kind, state: state(), legal });
+      P.acts.push({ t: c.t, id: ev.id, kind: ev.kind, state: state(), legal, recovering: c.party.filter((m) => c.heroState(m.id) === 'RECOVERING').length });
       if (['lock', 'scramble', 'jam', 'snare', 'latch', 'drain', 'glitch'].includes(ev.kind)) P.interference++;
       void e;
     }
     if (ev.type === 'partyHit') P.dmg.atk += ev.amount || 0;
-    if (ev.type === 'comboEnd') P.combos.push({ kind: ev.kind, len: ev.len });
+    if (ev.type === 'comboEnd') P.combos.push({ kind: ev.kind, len: ev.len, heroes: (ev.owners || []).length });
   };
 });
 
@@ -140,7 +145,7 @@ async function playFight(f) {
     const c = window.__sb.battle ? window.__sb.battle.combat : null;
     const P = c && c.__probe;
     if (!P) return null;
-    return { states: P.states, acts: P.acts, combos: P.combos, t: c.t, result: c.result, hpLost: P.hpStart - Math.max(0, c.hp), hpStart: P.hpStart, dmg: P.dmg, interference: P.interference, stats: { basics: c.stats.basics, artes: c.stats.artes, supports: c.stats.supports, perfect: c.stats.perfect, cashouts: c.stats.cashouts, forced: c.stats.forced, rejected: c.stats.rejected } };
+    return { states: P.states, acts: P.acts, combos: P.combos, recover: P.recover, t: c.t, result: c.result, hpLost: P.hpStart - Math.max(0, c.hp), hpStart: P.hpStart, dmg: P.dmg, interference: P.interference, stats: { basics: c.stats.basics, artes: c.stats.artes, supports: c.stats.supports, perfect: c.stats.perfect, cashouts: c.stats.cashouts, forced: c.stats.forced, rejected: c.stats.rejected } };
   });
   return { fight: f.name, enemies, ...r };
 }
@@ -171,13 +176,14 @@ for (const r of results) {
   // by the state when the enemy acted (a frame that began in the breather and acted after it ended
   // counts where the action happened)
   const actsIn = (s) => r.acts.filter((x) => x.state === s).length;
-  const noLegal = r.acts.filter((a) => a.state === 'pre' && a.legal === 0).length;
+  const noLegal = r.acts.filter((a) => (a.state === 'idle' || a.state === 'wait') && a.legal === 0).length;
+  const ST = ['idle', 'wait', 'decide', 'execute', 'grace', 'breather', 'finisher'];
   lines.push(`${r.fight} [${r.enemies.join('+')}] → ${r.result && r.result.victory ? 'victory' : 'defeat'} in ${r.t.toFixed(0)}s, then ${r.after}; HP lost ${r.hpLost}/${r.hpStart}; cards: basic ${r.stats.basics}, arte ${r.stats.artes}, support ${r.stats.supports}; endings: Perfect ${r.stats.perfect}, Cash Out ${r.stats.cashouts}, Dropped ${r.stats.forced}; illegal taps ${r.stats.rejected}`);
   lines.push(`  first enemy action ${r.acts[0] ? r.acts[0].t.toFixed(1) + 's' : '-'}; enemy actions ${r.acts.length} (${Object.entries(per).map(([k, v]) => `${k} ${v}`).join(', ')}); gaps median ${med(gaps) ? med(gaps).toFixed(2) : '-'}s, min ${gaps.length ? Math.min(...gaps).toFixed(2) : '-'}s`);
-  lines.push(`  combat time by state: deciding (pre) ${time('pre')}s, Flow held ${time('hold')}s, combo ${time('active')}s, breather ${time('recover')}s, finisher ${time('finisher')}s`);
-  lines.push(`  ATB per enemy-second by state: pre ${rate('pre')}, held ${rate('hold')}, combo ${rate('active')}, breather ${rate('recover')}, finisher ${rate('finisher')}`);
-  lines.push(`  enemy actions by state: pre ${actsIn('pre')}, held ${actsIn('hold')}, combo ${actsIn('active')}, breather ${actsIn('recover')}, finisher ${actsIn('finisher')}; while no card was playable: ${noLegal}; interference actions ${r.interference}`);
-  lines.push(`  combos: ${r.combos.map((c) => `${c.kind}:${c.len}`).join(' ')}`);
+  lines.push(`  combat time by state: ${ST.map((x) => `${x} ${time(x)}s`).join(', ')}; hero Recovery ${r.recover.toFixed(1)} hero-s`);
+  lines.push(`  ATB per enemy-second by state: ${ST.map((x) => `${x} ${rate(x)}`).join(', ')}`);
+  lines.push(`  enemy actions by state: ${ST.map((x) => `${x} ${actsIn(x)}`).join(', ')}; while a hero recovered: ${r.acts.filter((a) => a.recovering > 0).length}; while no card was playable: ${noLegal}; interference actions ${r.interference}`);
+  lines.push(`  combos (ending:cards/heroes): ${r.combos.map((c) => `${c.kind}:${c.len}/${c.heroes}`).join(' ')}`);
 }
 lines.push(`page errors: ${errors.length}`);
 console.log(lines.join('\n'));

@@ -287,6 +287,66 @@ Specification: `docs/COMBAT_SPEC.md` §5 (card categories), §6 (hand and draw),
 
 **Open for the Phase 5 design review** (recorded, not changed): whether a standard Relay requires an arte in the outgoing segment (spec §9 now: any segment); whether a queued attack locks its target at commit or uses the target selected at execution (spec §14 now: at execution).
 
+## Revised roadmap, Phase 5: action scheduling, command queue, hero Recovery and deliberate Relays (0.2.5, 2026-11-19)
+
+Specification: `docs/COMBAT_SPEC.md` §7, §7.1, §9, §10, §11.3, §12, §13, §14, §16, §17; what was built: §26. Reference build for regressions: 0.2.4 (source `e6a43d1`, build `d5d18c7`; `git checkout d5d18c7` restores it). Status words as in the Phase 1 section. This is the roadmap's human checkpoint: nothing here has been judged by human players yet (`docs/PLAYTEST.md` is the test plan).
+
+**Implemented**
+- *Hero states.* READY / ACTIVE / COMMITTED / ACTING / RECOVERING, derived from the executing command, Recovery timers, the active segment and the queue (`combat.heroState`). Recovery: 1.5s + 0.3s per card after a segment, 2.0s after support, in combat time; it never pauses enemies. The next chain starts with the selected hero if Ready, otherwise the first Ready hero.
+- *Command queue.* Card, support, Relay and finish commands in one queue, up to 3 waiting behind the executing one, executed in order. Commit (validated on the projected chain, card to the queue, slot held, rank and suit frozen, cost reserved) → start (revalidated, cost spent, animation) → resolution at the animation's impact frame (effects, gains, refund, slot refill) → completion (support Recovery, decision-window holds, pending endings). Cards execute for 0.6s, Relays for 0.5s. Players keep choosing while commands execute.
+- *Cancellation.* Tap a waiting chip, its hand placeholder, or Backspace: the card returns to its slot or Reserve place, the reservation is released, later commands are revalidated (a cancelled Relay takes the incoming hero's cards with it). Started commands always complete. Timeouts, third Stumbles, Cash Out and Clean Exit return unstarted chain commands; victory or defeat clears the queue without effects.
+- *Relay.* An explicit command (hero buttons, a hero on the field, Q/W/E), eligible after one executed or queued card of the segment, to a Ready hero who has not joined the chain, with queue room (`relayCheck`; `RULES.RELAY_NEEDS_ARTE` isolates open decision A). On resolution: outgoing hero recovers, incoming hero active at rank 0 (basic attack first), chain history kept, +1 Momentum (not under Relay Jammer), +10% on the incoming first card per Relay, 1.2s hold. Each hero once per chain. Chains no longer end automatically after an arte while a Relay is still possible.
+- *Support.* Through the queue, performer Ready required (owner, or the selected / first Ready hero when neutral), 2.0s Recovery afterwards, cannot double-book a Relay destination. Braced asks for its hero (picker on the hero buttons; ✕ cancels without spending the card). Support costs were not changed.
+- *Decision window.* Holds while any command executes, 1.2s after the first card and after each Relay; refunds arrive on resolution; cancelled cards refund nothing; 14s counted-time cap unchanged.
+- *Enemies.* ATB runs during selection, execution and Recovery; waits in the breather and Finisher. Optional Tactical timing (Settings, off by default): ×0.25 while a chain is open and nothing is executing or queued.
+- *Targets.* Resolved when an attack executes (spec default for open decision B), only in `currentTarget()`; a dead target is replaced and labeled NEW TARGET before waiting attacks land.
+- *Interference.* Locks/Scrambles never touch committed cards; frozen rank and suit; jams skip held slots; drains take unreserved Momentum; the queue is revalidated after every enemy action and every resolution (The Corruptor's Context Bleed can make a waiting card illegal; it is returned at once).
+- *Stranded hands.* Free Churn is judged on cards and Momentum only; busy heroes are a wait.
+- *Content.* Restored: Echo Splice (again the win unlock), Relay Harness, Relay Resonance, the Echoing graft, Mirror Wire, Hand Off, Relay Baton, Chorus Break, Grand Relay (texts adjusted: Relay Echoes repeat the last attack; "Relay cards" are the first cards after a Relay). Pressure Valve stays withheld (not a Relay card; repeats Overpressure). The save-version-5 migration table is frozen as shipped in 0.2.4. Playable: 80 cards (25 basic attacks, 42 artes, 13 support).
+- *Interface.* Hero buttons with live state (▶ acting, countdown and bar while recovering, … committed, ⇄ can take a Relay); one strip row for executed cards, ⇄ hand-over marks, the executing command (glow, progress) and waiting commands (dashed, ↩ to take back), folding older cards into "+n"; hand placeholders (QUEUED #n / ACTING); a Recovery bar under each hero plate; the Relay hand-off arc and "RELAY n · +b%"; Flow reads EXECUTING / HOLDING; tutorial, How to Play and all new texts in English and Russian; Tactical timing setting.
+- *Saves.* No new save version: combat scheduling is never saved, and Continue restarts the encounter with every hero Ready and an empty queue (unit test).
+
+**Tested** (all on the final build unless noted)
+- Unit tests 127/127 (`npm test`): the Phase 4 suites adapted to timed execution, and `tests/scheduler.test.mjs` (24 tests): commit does not resolve, effects at the impact frame, order, capacity, projected legality, cancel and dependent revalidation, stale commands after victory/defeat, hero states and Recovery lengths, pausing, all-heroes-recovering, Relay eligibility/execution/rewards/history/participation, three-hero chains, Relay content (Jammer, Echoing, Mirror Wire, Hand Off, Chorus Break, Grand Relay, Relay Baton), Braced targeting, refunds and caps, frame-rate independence (30/60/144 fps give identical results), ATB in each state and Tactical timing, Stumble endings with pending commands, queued FINISH/CASH OUT, interference on queued cards, Reserve latch and jams, and a randomized soak (40 battles × 1500 actions with commits, Relays, support, cancels, Churn, Reserve, interference, victory and defeat; zones, Momentum, queue size, hero states and the participation limit checked after every action). Plus the save test above.
+- Acceptance scenario (`tools/accept5.mjs`, 31 steps through taps after a disclosed fixture: stacked deck, Foundry Warden encounter): English 844×390 33/33, Russian 667×375 33/33.
+- Full runs through the UI only, with reload and Continue at every checkpoint: English 1024×768 42/42 (three acts won against Scrap Tyrant, Protocol Auditor and Signalbreak Core; a shop; an elite; Volatile preparation; credits; Museum unlock); Russian 732×510 49/49 (three acts won, credits, restarted fight, a shop, a run lost at the Act I boss with the defeat dialogue, a new run to its first victory; 0 untranslated texts; its 2 layout findings — a clipped ⇄ chip and a long Russian reason — were fixed afterwards and covered by the final layout sweep).
+- Typical encounters (`tools/encounter.mjs`, English 844×390, touch, learner policy; before the last text fixes): 5/5 won, HP lost 9–24 of 130 (0.2.4: 5–13), enemy actions at least 1.20s apart, none during a breather, chains of up to 7 cards and 3 heroes.
+- Targeting (`tools/targeting.mjs`, 4 sizes, both languages): 36/36 — the 32 earlier checks plus "a queued attack lands on the target selected when it executes" at each size.
+- Layout (`tools/i18n-layout.mjs`, 7 viewports, now including the queue, Relay and Braced-picker states): Russian 1827 screens, English 1822 screens, 0 issues (the first Phase 5 sweeps found 35 and 14; fixes listed below).
+- Readability (`tools/readability.mjs`, smallest/median effect text): English 667×375 7.6/9.4px, 732×510 7.6/10.0, 844×390 7.6/10.0, 1194×834 11.6/12.4; Russian 7.0/9.4, 7.6/10.0, 7.6/10.0, 12.4/12.4 — unchanged from 0.2.4 after three restored or rewritten card texts were shortened (they had brought it down to 6.4px).
+- Offline web app (`tools/pwa.mjs`, the built game): 16/16 under the GitHub Pages path and 15/15 at the site root as on the storage mirror (offline launch from every start URL, the saved run offered, a battle and a card played offline, nothing requested from the network, update to a new build).
+
+**Measurements** (`tools/pacing.mjs 30 --act1 --pace=2.5`; `tools/simulate.mjs 30`; bots differ between builds, so differences are observations, not isolated causes)
+- *Learner, Act I* (2s per hand, 1.3s per card, waits for each command): every fight won, as in 0.2.4; HP lost higher: two hounds 7% → 10%, snare + hound + jammer 13% → 19%, Foundry Warden 5% → 14%, Hound Mother 38% → 48%, Scrap Tyrant 40% → 49%, Clockwork Regent 29% → 48%. The learner relays in every fight (1.6–12 Relays per battle).
+- *Very slow player (2.5s per card), opening fights:* combos dropped by time pressure 0–4% when the player checks the Flow bar before a Relay (0.2.4: 8–14%); 11–31% when the player relays regardless (tutorial fight 31%, two hounds 26%). Elites and bosses got harder for this player: Hound Mother 17% → 0% won, Scrap Tyrant 100% → 80%, Clockwork Regent 70% → 47%.
+- *Full runs:* quick player (0.55s, up to 3 queued) 26/30 won, 4.6 HP lost per battle (0.2.4: 30/30, 1.2), 36s per battle; ordinary player (1.0s, up to 2 queued) 19/30, 9.0 HP (0.2.4: 19/30, 7.3), 53s. Quick player per battle: 17.7 basic attacks, 8.6 artes, 6.0 support, 7.1 Relays, Momentum +36.5/−27.1; chains of 1/2/3 heroes 35%/32%/33%, 3.7 cards per chain (longest 9), 1.2 artes per chain, 51 damage per chain; endings Perfect 61%, Cash Out 36%, Dropped 2%; time deciding 2.6s, executing 22.6s, holds 1.7s, breathers 6.0s, idle 3.3s, all heroes recovering 0.3s; 0 illegal actions; card-zone and Momentum integrity checked after every action: 0 failures. Ordinary player: 1/2/3 heroes 54%/34%/12%, 3.2 cards per chain, Perfect 76%, Dropped 5%, deciding 9.2s.
+- *Enemy pressure:* actions per minute rose back towards 0.2.3 levels (two hounds, learner: 12.8 in 0.2.4 → 15.7) because longer chains bring breathers less often; no two enemy actions under 1s apart in any measured fight.
+
+**Regression requirements R1–R7**
+| | Requirement | Result |
+|---|---|---|
+| R1 | Enemy pressure | Act multipliers unchanged (unit test); ≥1.2s spacing in every measured fight (pacing: 0% under 1s; encounter minimum 1.20s); enemy actions recorded during deciding, executing and holds, none in breathers; ATB keeps filling during hero Recovery (unit test, acceptance step 26) |
+| R2 | ≤25% dropped at ~2.5s per card, opening fights | Passed for a player who looks at the Flow bar before relaying (0–4%); failed for one who relays regardless (31% and 26% in two of eight fights). Decision time is now counted only while the player chooses; execution and holds are separate (stats.time) |
+| R3 | Real downtime | Breathers after every chain freeze enemy ATB (unit test, acceptance step 27); Recovery does not; the Flow bar and hero buttons show executing, holding, recovering |
+| R4 | Targeting | 36/36 including queued attacks |
+| R5 | Early survivability | Learner wins every Act I fight; no stranding (free Churn unchanged, not triggered by busy heroes); no extra permanent HP |
+| R6 | Readability and layout | Smallest effect text unchanged (7.0–7.6px); layout sweep above; hold-to-read still pauses |
+| R7 | Saves, languages, offline | Unit, migration and save tests; English and Russian full runs; offline check above |
+
+**Open design decisions (evidence, defaults unchanged)**
+- *A. Relays without an arte.* Under the current rule, 43% of the quick bot's Relays came from a segment with no arte (3.0 per battle, worth 1.7 Momentum). With `RELAY_NEEDS_ARTE` the same bot won 29/30 runs with 3.0 HP lost per battle (current rule: 26/30, 4.6), relayed less (4.6 per battle), Cashed Out more (50% of chains) and dropped more (7%). The bot's no-arte Relays did not make it stronger, so this does not demonstrate a degenerate incentive; a human player optimising Momentum might use them differently, which only a playtest can show.
+- *B. Target at execution.* Attacks waited in the queue 16–20 times per battle in the full runs; their target changed while they waited only when it died (0.3 per battle, quick player; labeled NEW TARGET). The bots never retarget mid-queue; in the UI targeting check a retarget during the wait moved the queued attack to the new target at every size. No unintended retargeting was observed; whether players find the rule clear is a playtest question.
+
+**Bugs found and fixed during the phase**
+- The full-run simulation (quick player, 1 of 30 runs) stopped on "illegal queued command": The Corruptor's Context Bleed raised the chain's rank while a card waited. The queue is now revalidated after every enemy action and every resolution (regression test in `tests/scheduler.test.mjs`).
+- Hand reason lines kept stale text when the reason was a structured message (the state signature compared "[object Object]"); they now compare the rendered text.
+- The queue's cancel mark (✕) looked like the Cross mark on executed chips; cancel is now ↩.
+- Layout: the strip hint ran out of room beside the queue chips (shortened, and it steps aside at 3+ chips); the Braced prompt hid behind the chips (the chips step aside while picking); a two-line card name squeezed the cost badge out of the art band (the cost moves into the top tag); Russian Recovery reasons on cards were too long ("Ready in 0.8s" instead); an overflowing strip clipped the last chip (older cards fold into "+n" until it fits).
+- Readability: three restored or rewritten card texts (Hold the Line, Hand Off, Mirror Wire) brought the smallest text to 6.4px; shortened back to 7.0/7.6px.
+- Tools: the targeting check waited 0.15s for an attack that now takes 0.27–0.38s to land, and compared the ⌖ cycle against a stale target; both fixed.
+
+**Still for human judgment:** whether the queue and the hero states are understood without explanation; whether Recovery feels like tactical downtime or like waiting; whether Relays are recognised and worth their risk (a Relay late in the decision window can turn a Perfect into a Dropped combo); whether very slow players can use Relays at all (they mostly cannot within the current window) and whether Tactical timing helps them; whether support's Recovery cost makes support too weak or right; whether the game is now too hard for fast players (Act I retuning belongs to Phase 6).
+
 ## Version
 
 Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exit gate has passed with evidence here; the patch number counts published builds with changes since that gate; `1.0.0` is the Phase 9 release. The title tagline, the "Patch Notes" event, `package.json` and the iOS project all show the same number (enforced by a test).
@@ -300,7 +360,7 @@ Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exi
 
 The table above follows the earlier roadmap. From 2026-11-13 the revised roadmap applies: the number keeps counting from 0.2, the minor number advances when one of the revised roadmap's phase gates is accepted (Phase 1 needs human playtesting for that), and the patch number counts published builds in between.
 
-Current version: **0.2.4** (the beta-feedback patch and its follow-up, plus revised-roadmap Phase 3, shared party HP and individual Defense, and Phase 4, basic attacks, artes, support and a persistent hand; Phase 1 still waits for human playtesting, so the minor number stays at 2; earlier 0.2.0 passed the old Phase 2 gate). The previous build, 0.2.3, is commit `fd8f3e4`.
+Current version: **0.2.5** (the beta-feedback patch and its follow-up, plus revised-roadmap Phase 3, shared party HP and individual Defense, Phase 4, basic attacks, artes, support and a persistent hand, and Phase 5, the command queue, hero Recovery and Relays; Phase 1 still waits for human playtesting, so the minor number stays at 2; earlier 0.2.0 passed the old Phase 2 gate). The previous build, 0.2.4, is commit `d5d18c7` (source `e6a43d1`).
 
 ## Not present in this build
 
@@ -319,7 +379,7 @@ These roadmap references have no counterpart in this repository:
 | Normal enemies | 12–18 | 12 (+1 summon) |
 | Elites | 6 | 6 |
 | Bosses | 3 + up to 3 alternatives | 6 (2 per act, one chosen per run) |
-| Playable cards | 75–100 | 75 offered or compatible (24 basic attacks, 38 artes, 13 support) + 6 withheld until Relays |
+| Playable cards | 75–100 | 80 (25 basic attacks, 42 artes, 13 support; 4 of them kept for older decks but not offered) + 1 withheld (Pressure Valve) |
 | Relics | 30–45 | 39 (incl. 5 boss trophies) |
 | Events | 12–18 | 21 |
 | Build families | ≥ 4 | 10 (each with a passing signature test) |

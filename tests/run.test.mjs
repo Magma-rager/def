@@ -158,6 +158,30 @@ test('restarting or continuing a battle reuses the same encounter', () => {
   assert.equal(a.seed, c.seed);
 });
 
+test('saving during a battle never keeps the action queue: Continue restarts the fight with Ready heroes and nothing pending', async () => {
+  const { Combat } = await import('../src/engine/combat.js');
+  const run = Run.create({ seed: 77 });
+  run.d.pending = null;
+  run.enterNode(run.availableNodes()[0]);
+  const setup = run.battleSetup();
+  const c = new Combat(setup);
+  for (const e of c.enemies) e.atb = -100;
+  const basics = c.hand.filter((u) => u && c.categoryOf(u) === 'basic').sort((a, b) => c.effRank(a) - c.effRank(b));
+  for (const u of basics) c.commit(u);
+  c.selectHero(['V', 'C', 'S'].find((h) => h !== c.combo.hero));
+  assert.ok(c.executing && c.queue.length >= 1, 'commands in flight when the game is saved');
+  const saved = JSON.parse(JSON.stringify(run.serialize()));
+  assert.ok(!JSON.stringify(saved).includes('"queue"') && !JSON.stringify(saved).includes('recoverUntil'), 'no combat scheduling state in the save');
+  const re = Run.load(saved);
+  assert.equal(re.d.version, 5, 'the save version is unchanged (5)');
+  const again = new Combat(re.battleSetup());
+  assert.deepEqual(['V', 'C', 'S'].map((h) => again.heroState(h)), ['READY', 'READY', 'READY']);
+  assert.deepEqual([again.queue.length, again.executing, again.reserved, again.combo, again.momentum], [0, null, 0, null, c.opts.relics && c.opts.relics.includes('pressure_gauge') ? 2 : 0]);
+  assert.deepEqual(again.enemies.map((e) => e.id), c.enemies.map((e) => e.id), 'the same encounter');
+  assert.deepEqual([...again.cards.keys()].sort(), [...c.cards.keys()].sort(), 'the same deck, every card present');
+  assert.deepEqual(again.verifyZones(), { ok: true });
+});
+
 test('each boss offers its own trophy relic, and trophies never appear in normal pools', () => {
   for (const [boss, trophy] of [['clockwork_regent', 'regent_mainspring'], ['scrap_tyrant', 'scrap_heart']]) {
     const run = Run.create({ seed: 5 });

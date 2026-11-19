@@ -1,6 +1,6 @@
 # SIGNAL//BREAK — Combat Architecture Specification (Roadmap Phase 2)
 
-Status: specification for Phases 3–8. Written 2026-11-15 against the reference build **0.2.2** (commit `46d01a5`; `git checkout 46d01a5` restores it). Phase 3 shipped in 0.2.3 (`338184c`), Phase 4 in 0.2.4 (§25 lists its interim bridges).
+Status: specification for Phases 3–8. Written 2026-11-15 against the reference build **0.2.2** (commit `46d01a5`; `git checkout 46d01a5` restores it). Phase 3 shipped in 0.2.3 (`338184c`), Phase 4 in 0.2.4 (`e6a43d1`; §25 lists its interim bridges), Phase 5 in 0.2.5 (§26 describes what was built and replaces most of §25's bridges).
 Numbers marked *(prototype)* are starting values kept in one configuration table (`RULES` in `src/engine/combat.js`), not approved balance.
 
 Contents: 1 Goals · 2 Regression requirements · 3 Entities · 4 Party and shared resources · 5 Cards · 6 Hand and zones · 7 Hero states and scheduling · 8 Offensive sequences · 9 Relay · 10 Support · 11 Momentum · 12 Chain endings · 13 Timing · 14 Targeting · 15 Damage and mitigation · 16 Cancellation and interruption · 17 Enemy interference · 18 Content migration · 19 Saves · 20 Interface · 21 Prototype values · 22 Dependencies and phase plan · 23 Regression risks · 24 Decisions taken here
@@ -447,6 +447,8 @@ Each is reversible; listed so they can be challenged.
 
 ## 25. Phase 4 as built (0.2.4) — interim bridges and open questions
 
+*Phase 5 (0.2.5) replaced the command, hero-selector, support, Braced and ending bridges below; §26 records what changed. The two open questions remain open.*
+
 Phase 4 implements §5, §6, §8.2, §10 (effects), §11 and §12 and the save migration of §19. Phase 5 has not started, so a few rules run through deliberate, replaceable bridges. Each is listed here so Phase 5 can remove it without touching card effects.
 
 **Bridges (to be replaced in Phase 5)**
@@ -472,3 +474,52 @@ Phase 4 implements §5, §6, §8.2, §10 (effects), §11 and §12 and the save m
 **Open questions for the Phase 5 design review** (the provisional §9/§14 decisions stand until then)
 1. Whether a standard Relay requires an arte in the outgoing segment, or may follow any qualifying segment (§9 currently: any segment with at least one card).
 2. Whether a queued attack locks its target when committed or uses the target selected when it executes (§14 currently: at execution).
+
+## 26. Phase 5 as built (0.2.5) — scheduling, queue, Recovery, Relay
+
+Phase 5 implements §7, §7.1, §9, §10 (scheduling), §11.3, §12, §13, §14 (timing of targets) and §16, and restores the Relay content of §18. All values are *(prototype)* entries in `RULES`.
+
+**Hero states (§7).** Each hero's state is derived from authoritative facts, so two states never disagree (`combat.heroState`):
+
+| State | Holds when | May |
+|---|---|---|
+| ACTING | the executing command is this hero's | nothing new |
+| RECOVERING | `heroes[id].recoverUntil` is in the future | nothing |
+| ACTIVE | the hero runs the chain's current (executed) segment; more of its cards may wait in the queue | add basic attacks and own artes; Relay out; FINISH / CASH OUT |
+| COMMITTED | it has a queued support command, or is the destination of a queued Relay | nothing new |
+| READY | none of the above | start a chain, receive a Relay, perform support |
+
+Transitions: READY → (commits the chain's first card) ACTIVE/ACTING → (Relay resolves) RECOVERING for the outgoing hero, COMMITTED → ACTIVE for the incoming one → … → (chain ends) RECOVERING → READY. Support: READY → COMMITTED → ACTING → RECOVERING (2.0s) → READY. Recovery after a segment is 1.5s + 0.3s per card the hero played in it, starting when the segment closes (the Relay resolves, or the chain ends). Recovery runs in combat time, so pausing freezes it; it never pauses enemies. The next chain starts with the selected hero if Ready, otherwise the first Ready hero in party order; with every hero recovering the player waits (at most a few seconds) and enemies keep acting.
+
+**Commands (§7.1, §11.3, §16).** One queue for the party; up to `QUEUE_AHEAD` = 3 commands wait behind the executing one; they execute strictly in order. Kinds: card (basic attack or arte), support, Relay, finish (FINISH or CASH OUT). Each command has four moments:
+1. *Commit*: validated against the **projected chain** (the executed chain plus every command still to execute) by `check()`, `relayCheck()` or `finishable()`; a card leaves its slot (the slot shows a placeholder and does not refill) or its Reserve place (kept for it); its rank and suit are frozen into the command; its Momentum cost is reserved.
+2. *Start*: the queue's head is revalidated against what has executed; the reservation becomes a spend; the hero's animation starts (`act`). Card and support commands execute for `ACTION_TIME` = 0.6s, a Relay for `RELAY_TIME` = 0.5s, a finish at once.
+3. *Resolution*: at the impact frame of the hero's animation (`RESOLVE_AT`: melee 0.27s, cast 0.38s, shoot 0.25s, guard 0.15s, buff 0.2s, Relay 0.25s): damage, healing, Guard, statuses, Momentum gains and refunds happen now; the card goes to the discard pile and its slot refills.
+4. *Completion*: support starts its performer's Recovery; the chain's first card and each Relay open their decision-window hold; a requested ending happens; otherwise a chain that cannot continue at all ends as a Perfect (below).
+
+Momentum is never projected: an arte needs Momentum the party already has, unreserved. A waiting command can be cancelled (tap its chip or its placeholder, or Backspace): its card returns to its slot or Reserve place, its reservation is released, nothing else happens; every later command is revalidated in order and those that no longer fit (for example the cards of a cancelled Relay's incoming hero) are returned too. A started command cannot be cancelled. When a chain ends early (timeout, third Stumble, Cash Out, Clean Exit) its unstarted commands return; a command already executing finishes first, and the ending is judged on what executed. Support commands are not part of a chain and stay queued. Victory or defeat clears the queue: waiting cards return, an executing card that has not resolved goes to the discard pile without effect. `verifyZones()` checks one zone per card (draw, hand, Reserve, queue, executing, discard, exhaust), held slots against queued cards, reservations against the queue, that no queued command is illegal, and that Momentum is not negative.
+
+**Relay (§9).** "Relay to X" is a command, requested by tapping another hero's button (or the hero on the field, or Q/W/E) while a chain runs; heroes who can take it show ⇄, others explain why not. Eligibility (`relayCheck`, one function): a chain is open; the current segment has at least one executed or queued card; X is Ready and has not joined this chain; the queue has room. `RULES.RELAY_NEEDS_ARTE` (default false) is open decision A's alternative. On resolution the outgoing hero's segment closes and its Recovery starts; X becomes active with segment rank 0 and must open with a basic attack; the chain's history (cards, damage, Relays, Steps, Crosses, heroes, segments) carries on. Rewards, once, on resolution: +1 Momentum (none under Relay Jammer, which still allows the Relay); X's first card +10% damage per Relay so far; the decision window holds 1.2s after it. Each hero joins a chain once: at most three segments and two Relays. Playing another hero's card never creates a Relay. Relay Echoes repeat the outgoing segment's **last attack** (the last card that dealt damage).
+
+**Support (§10).** Performed by its owner, or — when neutral — by the selected hero if Ready, otherwise the first Ready hero in party order. It needs its performer Ready (an attacking, acting, committed or recovering hero cannot), enters the shared queue behind the commands already there, never touches the chain's rank, cards or ending, and costs its performer a 2.0s Recovery. A hero committed to support cannot take a Relay. Braced (Hold the Line) asks for its hero: the first tap opens the hero picker (default: the hero the most imminent single-target enemy attack will land on); a hero button, a hero on the field or Q/W/E commits it; ✕, Escape or a tap elsewhere cancels without spending the card; tapping the card again uses the default. Support costs were not changed in Phase 5.
+
+**Endings (§12).** FINISH and CASH OUT are queued behind waiting commands and judged when they execute. FINISH needs the chain's last card (projected) to be an arte; CASH OUT 2+ cards ending on a basic attack; neither while a Relay is the last thing queued. A chain no longer ends automatically after an arte while a Relay is still possible: it ends by itself only when the last executed card is an arte, nothing higher is playable and every hero has already joined it. A timeout or a third Stumble while a command executes waits for that command, then ends; after an arte it counts as a Perfect. A Finisher triggers once per chain (5+ cards or a rank-6 arte).
+
+**Decision window (§13.2).** Opens at the chain's first commit (5.0s; Stopwatch Gear +1.0s on the first chain). Holds while any command executes, for 1.2s after the chain's first card completes, for 1.2s after each Relay completes, and while paused. Refunds (1.0s per card after the first, cap 5s per chain) arrive when a card resolves; cancelled cards refund nothing. The counted time stays capped at 14s (holds excluded), so queueing cannot extend a chain without limit. Flow drain leaves at least 0.5s.
+
+**Enemies and time (§13.3–13.5).** Enemy ATB fills during selection, execution and hero Recovery; it waits during the post-chain breather (Perfect 1.0s, Cash Out 0.8s, Dropped 1.2s) and the Finisher cut-in, and freezes while paused. During the breather no new command can be committed (it stays a short party pause; Churn and Reserve still work). Optional **Tactical timing** (Settings, off unless chosen): while a chain is open and nothing is executing or queued, enemy ATB runs at 25% speed; nothing else changes. Everything advances in fixed steps of at most 1/60s, so outcomes do not depend on frame rate beyond one step.
+
+**Targets (§14).** Attacks use the enemy selected when they resolve (open decision B keeps the specification's default). `currentTarget()` is the only resolution point, so a lock-at-commit alternative would change one function. If the selected enemy dies while a command waits, the next living enemy is chosen and labeled NEW TARGET before the command resolves.
+
+**Interference (§17).** Locks and Scrambles only affect cards in the hand or Reserve; a committed card keeps the rank and suit it was committed with. Jams never pick a held slot. Momentum Drain and every Momentum loss take unreserved Momentum only. An effect that raises the chain's rank (The Corruptor's Context Bleed) makes a waiting card illegal: it is returned at once (the queue is revalidated after every enemy action and every resolution), never executed. A Reserve card that is queued keeps its Reserve place, so cancelling it always fits; Reserve latch steals stored cards only.
+
+**Stranded hands (§25).** Free Churn is judged on the cards and Momentum alone: heroes recovering, a full queue or a command executing are a wait, not a stranded hand. The reward rule (a basic attack first under 40% basic attacks) is unchanged.
+
+**Interface (§20).** Hero buttons show each hero's state from the engine (▶ acting, a countdown and bar while recovering, … committed, ⇄ can take a Relay); the strip shows the executed cards, a ⇄ where a Relay handed over, the executing command (glow and progress) and the waiting commands (dashed; tap to take back, ↩); held hand slots show the queued card with QUEUED #n or ACTING; the battlefield shows Recovery as a thin bar under the hero plate, the hand-off as an arc between heroes and "RELAY n · +b%" over the incoming hero; the Flow bar reads EXECUTING, HOLDING or the time left, and ALL HEROES RECOVERING with the shortest wait.
+
+**Content (§18).** Restored: the relics Echo Splice (back as the win unlock) and Relay Harness, the mutation Relay Resonance, the graft Echoing ("as the first card after a Relay, Echoes itself at 30%") and the cards Mirror Wire, Hand Off (its Relay Echo targets the last attack), Relay Baton, Chorus Break ("each first card after a Relay") and Grand Relay. Pressure Valve stays withheld: it is not a Relay card and repeats Overpressure at a lower value (Phase 8 content pass). The save-version-5 migration table is fixed as shipped in 0.2.4, so older saves convert exactly as before; no new save version (combat scheduling is never saved; Continue restarts the encounter).
+
+**Open design decisions** (unchanged; evidence in `docs/AUDIT.md`, Phase 5)
+- A. Whether a Relay requires an arte in the outgoing segment (implemented: no; `RULES.RELAY_NEEDS_ARTE`).
+- B. Whether a queued attack locks its target at commit (implemented: target at execution; `currentTarget()`).
+

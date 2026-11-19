@@ -1,7 +1,9 @@
-// UI driver for the Phase 4 player policy (tools/lib/bot.mjs). The decision is computed in the page
+// UI driver for the Phase 5 player policy (tools/lib/bot.mjs). The decision is computed in the page
 // from the live engine (read-only); the action is then performed with real input — a tap on the
-// card, a tap on a hero button or FINISH / CASH OUT, a swipe for Churn and Reserve — never by
-// calling the engine. Used by milestone.mjs, encounter.mjs and uiplay.mjs.
+// card (and on the hero for a Braced support), a tap on a hero button (start hero, or a Relay during
+// a chain), FINISH / CASH OUT, a tap on a waiting queue chip to cancel it, a swipe for Churn and
+// Reserve — never by calling the engine. Used by milestone.mjs, encounter.mjs, uiplay.mjs and
+// accept5.mjs.
 
 export async function uiDecision(p, profile = 'regular') {
   return p.evaluate(async (prof) => {
@@ -49,8 +51,15 @@ export async function uiPerform(p, a, { touch = false } = {}) {
   };
   const cardSel = (uid, zone) => (zone === 'reserve' ? `.reserve .res-card[data-uid="${uid}"]` : `.hand .card[data-uid="${uid}"]`);
   switch (a.type) {
-    case 'play': return tap(cardSel(a.uid, a.zone));
+    case 'play': {
+      const ok = await tap(cardSel(a.uid, a.zone));
+      // a hero-targeted support opens the hero picker: tap the chosen hero, or the card again (default)
+      const picking = await p.evaluate(() => { const b = document.querySelector('.pick-cancel'); return !!(b && !b.hidden); });
+      if (ok && picking) return a.target ? tap(`.hero-btn[data-hero="${a.target}"]`) : tap(cardSel(a.uid, a.zone));
+      return ok;
+    }
     case 'select': return tap(`.hero-btn[data-hero="${a.hero}"]`);
+    case 'cancel': return tap(`.chip.q.wait[data-cmd="${a.id}"]`);
     case 'finish': return tap('.ctl.cash');
     case 'spend': return tap(a.what === 'guard' ? '.ctl.mom:nth-of-type(2)' : '.ctl.mom:nth-of-type(1)');
     case 'churn': return swipe(p, cardSel(a.uid, 'hand'), 60);

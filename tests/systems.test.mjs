@@ -16,6 +16,8 @@ function mk(ids = STARTER_DECK, enemies = ['foundry_warden'], extra = {}) {
   return c;
 }
 const legal = (c, cat) => [...c.hand, ...c.reserve].find((u) => u && c.check(u).ok && (!cat || c.categoryOf(u) === cat));
+// commands execute over time (Phase 5)
+const settle = (c) => { for (let i = 0; i < 1200 && (c.executing || c.queue.length); i++) c.update(1 / 60); };
 
 test('Momentum: 3 buys Flow (within cap) and 3 buys +8 Guard', () => {
   const c = mk();
@@ -36,8 +38,10 @@ test('No automatic Relay: a basic attack is performed by the combo\'s hero, whoe
   c.selectHero('V');
   const byId = (id) => c.hand.find((u) => u && c.def(u).id === id);
   c.playCard(byId('scrapline'));
+  settle(c);
   const m0 = c.momentum;
   c.playCard(byId('hotwire'));
+  settle(c);
   assert.equal(c.combo.relays, 0);
   assert.deepEqual(c.combo.owners, ['V']);
   assert.ok(c.combo.cards.every((e) => e.owner === 'V'));

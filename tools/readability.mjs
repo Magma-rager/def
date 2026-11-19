@@ -40,6 +40,7 @@ for (const vp of SIZES.split(',')) {
     const ids = CARD_LIST.filter((x) => x.p4 !== 'withheld').map((x) => x.id);
     const acc = {};
     for (const k of Object.keys(parts)) acc[k] = [];
+    const textById = {};
     let cardW = 0;
     for (let i = 0; i < ids.length; i += 6) {
       ids.slice(i, i + 6).forEach((id, k) => { const uid = `rd_${id}`; if (!c.cards.has(uid)) c.cards.set(uid, { uid, id, up: false }); c.hand[k] = uid; });
@@ -52,17 +53,21 @@ for (const vp of SIZES.split(',')) {
           if (!n || !n.getClientRects().length) continue;
           if (k === 'reason' && !n.textContent.trim()) continue;
           acc[k].push(parseFloat(getComputedStyle(n).fontSize));
+          if (k === 'text') { const id = c.def(el.dataset.uid).id; textById[id] = Math.min(textById[id] || 99, parseFloat(getComputedStyle(n).fontSize)); }
         }
       }
     }
     const legal = document.querySelector('.hand .card.legal .card-frame');
-    return { acc, cardW, legalGlow: legal ? getComputedStyle(legal).boxShadow.slice(0, 60) : '' };
+    const smallest = Object.entries(textById).sort((a, b) => a[1] - b[1]).slice(0, 4).map(([id, v]) => `${id} ${v.toFixed(1)}`);
+    return { acc, cardW, smallest, legalGlow: legal ? getComputedStyle(legal).boxShadow.slice(0, 60) : '' };
   }, PARTS);
   const stat = (a) => { if (!a.length) return '-'; const s = [...a].sort((x, y) => x - y); return `${s[0].toFixed(1)}/${s[Math.floor(s.length / 2)].toFixed(1)}`; };
-  rows.push({ vp, cardW: Math.round(sizes.cardW), parts: Object.fromEntries(Object.entries(sizes.acc).map(([k, v]) => [k, stat(v)])) });
+  rows.push({ vp, cardW: Math.round(sizes.cardW), smallest: sizes.smallest, parts: Object.fromEntries(Object.entries(sizes.acc).map(([k, v]) => [k, stat(v)])) });
   await ctx.close();
 }
 await b.close();
 console.log(`${LANG}: rendered font size in CSS px, smallest/median over all cards (hand)`);
 console.log(`size        card  ${Object.keys(PARTS).map((k) => k.padEnd(10)).join('')}`);
 for (const r of rows) console.log(`${r.vp.padEnd(11)} ${String(r.cardW).padStart(4)}  ${Object.keys(PARTS).map((k) => r.parts[k].padEnd(10)).join('')}`);
+console.log('smallest effect text per size:');
+for (const r of rows) console.log(`  ${r.vp.padEnd(11)} ${r.smallest.join(', ')}`);

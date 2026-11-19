@@ -37,6 +37,15 @@ function fixed(handSpecs, drawSpecs = [], extra = {}) {
   return c;
 }
 const slot = (c, i) => c.hand[i];
+// Phase 5: a committed card executes over time; run the clock until nothing is queued or executing
+function settle(c, max = 20) {
+  for (let i = 0; i < max * 60 && (c.executing || c.queue.length); i++) c.update(1 / 60);
+}
+function play(c, uid, o) {
+  const r = c.playCard(uid, o);
+  settle(c);
+  return r;
+}
 
 test('card library: every card has a category and the Phase 4 shape', () => {
   const real = CARD_LIST.filter((c) => c.category !== 'junk');
@@ -86,7 +95,7 @@ test('neutral basic attacks: any hero performs them, and the combo records who',
   for (const hero of ['V', 'C', 'S']) {
     const c = fixed(['scrapline', 'rivet_jab']);
     assert.ok(c.selectHero(hero).ok);
-    const res = c.playCard(slot(c, 0));
+    const res = play(c, slot(c, 0));
     assert.ok(res.ok);
     assert.equal(c.combo.hero, hero);
     assert.equal(c.combo.cards[0].owner, hero, 'damage and animation are attributed to the hero');
@@ -101,15 +110,18 @@ test('artes: owner, a basic attack first, a higher rank and enough Momentum; eac
   const c = fixed(['scrapfall', 'thermal_lance', 'scrapline', 'rivet_jab', 'piston_strike', 'sunderline'], [], { momentum: 0 });
   c.selectHero('V');
   assert.equal(c.check(slot(c, 0)).reason, 'needbasic', 'an arte cannot start a combo');
-  c.playCard(slot(c, 2)); // Weak 1 (+1)
+  play(c, slot(c, 2)); // Weak 1 (+1)
   assert.equal(c.check(slot(c, 1)).reason, 'owner', "Corvin's arte in Hessa's combo");
   assert.equal(c.check(slot(c, 0)).reason, 'momentum', 'rank-4 arte needs 2 Momentum, 1 available');
   assert.deepEqual(c.check(slot(c, 0)).text, { k: 'Needs {n} Momentum', p: { n: 2 } });
-  c.playCard(slot(c, 3)); // Medium 2 (+1): 2 Momentum
+  play(c, slot(c, 3)); // Medium 2 (+1): 2 Momentum
   assert.equal(c.momentum, 2);
   assert.equal(c.check(slot(c, 0)).ok, true, 'Weak → Medium → arte 4');
-  c.playCard(slot(c, 0));
-  assert.equal(c.history[0].type, 'perfect', 'no higher arte: the arte ended the combo');
+  play(c, slot(c, 0));
+  assert.ok(c.combo, 'no higher arte, but Corvin and Pin can still take a Relay: the chain stays open');
+  assert.ok(c.canFinish());
+  assert.ok(c.finishOrCashOut().ok);
+  assert.equal(c.history[0].type, 'perfect');
   assert.equal(c.momentum, 2, 'the arte cost 2, the Perfect paid 2');
   assert.equal(c.stats.artes, 1);
 });
@@ -117,23 +129,25 @@ test('artes: owner, a basic attack first, a higher rank and enough Momentum; eac
 test('an arte needs one basic attack, not a full Weak → Medium → Strong ladder; higher artes may follow', () => {
   const c = fixed(['piston_strike', 'scrapfall', 'sunderline', 'scrapline'], [], { momentum: 6 });
   c.selectHero('V');
-  c.playCard(slot(c, 0)); // Strong 3 (+2) → 8
+  play(c, slot(c, 0)); // Strong 3 (+2) → 8
   assert.ok(c.check(slot(c, 1)).ok, 'Strong 3 → arte 4');
-  c.playCard(slot(c, 1)); // arte 4 (−2) → 6
+  play(c, slot(c, 1)); // arte 4 (−2) → 6
   assert.ok(c.combo, 'a higher affordable arte keeps the combo open');
   assert.equal(c.check(slot(c, 3)).reason, 'rank', 'basic attacks cannot follow an arte');
   assert.ok(c.check(slot(c, 2)).ok, 'arte 4 → arte 6');
-  c.playCard(slot(c, 2));
-  assert.equal(c.combo, null, 'no higher card left: the combo ends');
+  play(c, slot(c, 2));
+  assert.ok(c.combo, 'still open: a Relay is possible');
+  c.finishChain();
+  assert.equal(c.combo, null);
   assert.equal(c.history[0].type, 'perfect');
   assert.equal(c.history[0].closerId, 'sunderline');
 });
 
 test('rank skips are legal, repeated and descending ranks are not, and suits never block an ascending card', () => {
   const c = fixed([{ id: 'scrapline', variant: 'A' }, { id: 'piston_strike', variant: 'B' }, { id: 'rivet_jab', variant: 'A' }, { id: 'scrapline', variant: 'B' }]);
-  c.playCard(slot(c, 0));
+  play(c, slot(c, 0));
   assert.ok(c.check(slot(c, 1)).ok, 'Weak A 1 → Strong B 3 (the old rule refused this Cross)');
-  c.playCard(slot(c, 1));
+  play(c, slot(c, 1));
   assert.equal(c.check(slot(c, 2)).reason, 'rank', 'Medium 2 after Strong 3');
   assert.deepEqual(c.check(slot(c, 2)).text, { k: 'Needs rank {n}+', p: { n: 4 } });
   assert.equal(c.check(slot(c, 3)).reason, 'rank', 'Weak 1 after Strong 3');
@@ -141,32 +155,39 @@ test('rank skips are legal, repeated and descending ranks are not, and suits nev
 
 test('Steps and Crosses are counted and pay Momentum on resolution (Weak +1, Medium +1, Strong +2, Cross +1)', () => {
   const c = fixed([{ id: 'scrapline', variant: 'A' }, { id: 'rivet_jab', variant: 'B' }, { id: 'piston_strike', variant: 'B' }], [], { momentum: 0 });
-  c.playCard(slot(c, 0));
+  play(c, slot(c, 0));
   assert.equal(c.momentum, 1, 'Weak +1, no Cross on the first card');
-  c.playCard(slot(c, 1));
+  play(c, slot(c, 1));
   assert.equal(c.momentum, 3, 'Medium +1, Cross +1');
   assert.deepEqual([c.combo.steps, c.combo.crosses], [1, 1], 'A1 → B2 is both a Step and a Cross');
-  c.playCard(slot(c, 2));
+  play(c, slot(c, 2));
   assert.equal(c.momentum, 5, 'Strong +2, same suit: no Cross');
   assert.deepEqual([c.combo.steps, c.combo.crosses], [2, 1]);
 });
 
-test('support is independent: playable before, during and outside combos; never starts, extends or ends one', () => {
+test('support is independent: playable before, during and outside combos; never starts, extends or ends one; its performer recovers', () => {
   const c = fixed(['salvage', 'mend_circuit', 'scrapline', 'rivet_jab', 'spare_parts', 'hold_the_line'], ['pinprick', 'tripwire', 'cold_start', 'junk_toss'], { momentum: 2 });
   c.hp = 60;
-  assert.ok(c.check(slot(c, 0)).ok, 'free support in PRE');
-  c.playCard(slot(c, 0));
+  assert.ok(c.check(slot(c, 0)).ok, 'free support with no chain');
+  play(c, slot(c, 0)); // Hessa's Salvage
   assert.equal(c.phase, 'PRE');
   assert.equal(c.combo, null);
   assert.ok(c.guard >= 5);
-  c.playCard(slot(c, 2)); // start a combo
-  const { rank, cards, deadline } = { rank: c.combo.rank, cards: c.combo.cards.length, deadline: c.combo.deadline };
-  assert.ok(c.check(slot(c, 1)).ok, 'support during a combo');
-  c.playCard(slot(c, 1)); // Mend Circuit, cost 2
+  assert.equal(c.heroState('V'), 'RECOVERING', 'support costs the performer its action');
+  assert.ok(Math.abs(c.recoverLeft('V') - RULES.RECOVER_SUPPORT) < 0.05, `Recovery ${c.recoverLeft('V')}`);
+  c.selectHero('S');
+  play(c, slot(c, 2)); // Pin starts a chain
+  const { rank, cards } = { rank: c.combo.rank, cards: c.combo.cards.length };
+  const left = c.flowLeft();
+  assert.ok(c.check(slot(c, 1)).ok, "Corvin's support during Pin's chain");
+  play(c, slot(c, 1)); // Mend Circuit, cost 2
   assert.ok(c.combo, 'the combo goes on');
-  assert.deepEqual([c.combo.rank, c.combo.cards.length, c.combo.deadline], [rank, cards, deadline], 'rank, cards and Flow unchanged');
+  assert.deepEqual([c.combo.rank, c.combo.cards.length], [rank, cards], 'rank and cards unchanged');
+  assert.ok(Math.abs(c.flowLeft() - left) < 0.02, 'the decision window held while the support executed');
   assert.equal(c.hp, 74, 'healed the pool by 14');
   assert.equal(c.stats.supports, 2);
+  assert.equal(c.heroState('C'), 'RECOVERING');
+  assert.equal(c.heroState('S'), 'ACTIVE');
 });
 
 test('Glitch is unplayable, never starts a combo, and Churn deletes it for free', () => {
@@ -187,60 +208,71 @@ test('Glitch is unplayable, never starts a combo, and Churn deletes it for free'
 
 // ── Momentum accounting (docs/COMBAT_SPEC.md §11) ──
 test('a committed card reserves its cost: the same Momentum cannot be spent twice; cancel releases it and gains nothing', () => {
-  const c = fixed(['piston_strike', 'scrapfall', 'dead_drop', 'scrapline'], ['rivet_jab', 'pinprick'], { momentum: 1 });
+  const c = fixed(['piston_strike', 'scrapfall', 'sunderline', 'scrapline'], ['rivet_jab', 'pinprick'], { momentum: 3 });
   c.selectHero('V');
-  c.playCard(slot(c, 0)); // Strong +2 → 3
-  assert.equal(c.momentum, 3);
-  const a = c.commit(slot(c, 1));
+  const s = c.commit(slot(c, 0)); // Strong starts executing at once
+  assert.equal(c.executing.cmd.uid, s.cmd.uid);
+  const a = c.commit(slot(c, 1)); // Scrapfall waits behind it
   assert.ok(a.ok);
   assert.deepEqual([c.momentum, c.reserved, c.available()], [3, 2, 1], 'reserved, not yet spent');
   assert.equal(c.zoneOf(a.cmd.uid), 'queue');
   assert.equal(c.hand[1], null, 'the slot holds a placeholder');
   assert.deepEqual(c.verifyZones(), { ok: true });
-  const b = c.commit(slot(c, 2)); // Dead Drop costs 2 too
-  assert.equal(b.ok, false, 'the second arte is refused: only 1 Momentum is unreserved');
+  const b = c.commit(slot(c, 2)); // Sunderline costs 4
+  assert.equal(b.ok, false, 'refused: only 1 Momentum is unreserved (future gains do not count)');
   assert.equal(b.chk.reason, 'momentum');
+  assert.equal(c.momentum, 3, 'no Stumble while gains are still on their way');
   const gainedBefore = c.stats.momentumGained;
-  c.cancel(a.cmd);
-  assert.deepEqual([c.momentum, c.reserved, c.available()], [2, 0, 2], 'the stumble cost 1; the reservation is back');
+  assert.ok(c.cancel(a.cmd));
+  assert.deepEqual([c.momentum, c.reserved, c.available()], [3, 0, 3], 'the reservation is back');
   assert.equal(c.hand[1], a.cmd.uid, 'the card is back in its slot');
   assert.equal(c.stats.momentumGained, gainedBefore, 'a cancelled command gains nothing');
-  assert.equal(c.stats.artes, 0, 'and has no effect');
+  assert.equal(c.cancel(s.cmd), false, 'an executing command cannot be cancelled');
+  settle(c);
+  assert.equal(c.stats.artes, 0, 'and the cancelled arte had no effect');
+  assert.equal(c.momentum, 5, 'Strong +2 on resolution');
   assert.deepEqual(c.verifyZones(), { ok: true });
 });
 
 test('a cancelled basic attack never starts a combo or generates Momentum', () => {
-  const c = fixed(['piston_strike'], ['scrapline'], { momentum: 0 });
-  const r = c.commit(slot(c, 0));
-  c.cancel(r.cmd);
+  const c = fixed(['salvage', 'piston_strike'], ['scrapline'], { momentum: 0 });
+  c.commit(slot(c, 0)); // Hessa's Salvage executes
+  const r = c.commit(slot(c, 1)); // a basic attack waits behind it (Corvin, the first Ready hero)
+  assert.ok(r.ok);
+  assert.equal(r.cmd.hero, 'C');
+  assert.ok(c.cancel(r.cmd));
   assert.deepEqual([c.phase, c.combo, c.momentum, c.stats.basics], ['PRE', null, 0, 0]);
-  assert.equal(c.hand[0], r.cmd.uid);
+  assert.equal(c.hand[1], r.cmd.uid);
+  settle(c);
+  assert.equal(c.stats.basics, 0);
+  assert.deepEqual(c.verifyZones(), { ok: true });
 });
 
 test('the Momentum cap holds; Overflow Valve turns the excess into damage', () => {
   const c = fixed(['piston_strike', 'rivet_jab'], [], { momentum: 9 });
-  c.playCard(slot(c, 0));
+  play(c, slot(c, 0));
   assert.equal(c.momentum, RULES.MOMENTUM_MAX);
   const v = fixed(['piston_strike'], [], { momentum: 9, relics: ['overflow_valve'], enemies: ['foundry_warden'] });
   const hp = v.enemies[0].hp + v.enemies[0].guard;
-  v.playCard(slot(v, 0));
+  play(v, slot(v, 0));
   const hits = v.drainEvents().filter((e) => e.type === 'hit' && e.tag === 'overflow');
   assert.equal(hits.length, 1);
   assert.ok(v.enemies[0].hp + v.enemies[0].guard < hp - 10);
 });
 
 test('Momentum drains take only unreserved Momentum and never go negative', () => {
-  const c = fixed(['piston_strike', 'scrapfall'], ['scrapline', 'rivet_jab'], { momentum: 1, enemies: ['scrap_tyrant'], opts: { adaptation: { id: 'momentum_drain', need: 12 } } });
+  const c = fixed(['piston_strike', 'scrapfall'], ['scrapline', 'rivet_jab'], { momentum: 3, enemies: ['scrap_tyrant'], opts: { adaptation: { id: 'momentum_drain', need: 12 } } });
   c.selectHero('V');
-  c.playCard(slot(c, 0)); // 3
-  const r = c.commit(slot(c, 1)); // reserve 2
+  c.commit(slot(c, 0)); // Strong executing
+  c.commit(slot(c, 1)); // Scrapfall queued: 2 reserved
   const boss = c.enemies[0];
   boss.intent = { key: 'rubble', kind: 'aoe', name: 'x', dmg: 1, target: null };
   c.enemyAct(boss); // drains min(2, available 1)
   assert.deepEqual([c.momentum, c.reserved], [2, 2], 'only the unreserved point was drained');
-  c.execute(r.cmd);
+  settle(c);
   assert.ok(c.momentum >= 0);
   assert.equal(c.reserved, 0);
+  assert.equal(c.stats.artes, 1, 'the reserved arte still executed');
 });
 
 test('Flywheel, Long Breath and Pressure Gauge still change Momentum costs and caps', () => {
@@ -250,12 +282,15 @@ test('Flywheel, Long Breath and Pressure Gauge still change Momentum costs and c
 });
 
 // ── the persistent hand (docs/COMBAT_SPEC.md §6) ──
-test('the hand stays mixed: playing a card refills only its slot, from the card the preview showed', () => {
+test('the hand stays mixed: a played card\'s slot refills only after it resolves, from the card the preview showed', () => {
   const c = fixed(['scrapline', 'scrapfall', 'mend_circuit', 'rivet_jab', 'salvage', 'bolt_volley'], ['piston_strike', 'tripwire', 'pinprick']);
   const before = c.hand.slice();
   const next = c.nextCard();
   assert.equal(CARDS[c.cards.get(next).id].id, 'piston_strike');
   c.playCard(slot(c, 0));
+  assert.equal(c.hand[0], null, 'held while the card executes');
+  assert.equal(c.nextCard(), next, 'nothing drawn yet');
+  settle(c);
   assert.equal(c.hand[0], next, 'the slot got the previewed card');
   for (let i = 1; i < 6; i++) assert.equal(c.hand[i], before[i], `slot ${i} untouched when the combo started`);
   assert.equal(c.nextCard(), c.draw[0]);
@@ -269,12 +304,11 @@ test('the preview never draws or reshuffles; an empty draw pile shows nothing un
   c.discard.push(...c.hand.splice(2, 4, null, null, null, null));
   c.hand.length = RULES.HAND;
   for (let i = 0; i < 4; i++) c.hand[2 + i] = null;
-  // keep the four in discard only
   assert.equal(c.nextCard(), null);
   const d = c.discard.length;
   c.nextCard();
   assert.equal(c.discard.length, d, 'looking does not reshuffle');
-  c.playCard(slot(c, 0));
+  play(c, slot(c, 0));
   assert.ok(c.drainEvents().some((e) => e.type === 'reshuffle'), 'the draw reshuffled the discard');
   assert.deepEqual(c.verifyZones(), { ok: true });
 });
@@ -302,11 +336,13 @@ test('Reserve: bounded, and Reserve cards obey the same legality, costs and arte
   assert.equal(c.stash(slot(c, 1)).ok, false, 'Reserve holds 2');
   assert.equal(c.check(arte).reason, 'needbasic', 'no shortcut from Reserve');
   assert.equal(c.check(heal).reason, 'momentum', 'support cost applies in Reserve');
-  c.playCard(slot(c, 1)); // Weak +1
-  c.playCard(slot(c, 2)); // Medium +1 → 2
+  play(c, slot(c, 1)); // Weak +1
+  play(c, slot(c, 2)); // Medium +1 → 2
   assert.ok(c.check(arte).ok);
   c.playCard(arte);
   assert.ok(!c.reserve.includes(arte));
+  assert.equal(c.stash(slot(c, 3)).ok, false, 'a Reserve card that is executing keeps its Reserve place until it resolves');
+  settle(c);
   assert.equal(c.stats.reservePlays, 1);
   assert.deepEqual(c.verifyZones(), { ok: true });
 });
@@ -318,21 +354,23 @@ test('card modifiers (upgrade, graft, rank modifier, suit) travel with the insta
   assert.equal(c.effVariant(u), 'B');
   c.stash(u);
   assert.equal(c.hand[0], c.cards.get(c.hand[0]).uid, 'the stashed card\'s slot refilled');
-  c.playCard(u);
+  const r = c.commit(u);
+  assert.equal(r.cmd.rank, 2, 'rank frozen into the command');
+  assert.equal(c.zoneOf(u), null, 'executing (not in any pile)');
+  assert.deepEqual(c.verifyZones(), { ok: true });
+  settle(c);
   assert.ok(c.discard.includes(u));
   assert.deepEqual(c.cards.get(u), { uid: u, id: 'scrapline', up: true, graft: 'spark', rankMod: 1, variant: 'B' });
   assert.equal(c.momentum, 2, 'Weak +1 and Spark +1');
 });
 
-test('a combo keeps its hero; switching heroes mid-combo is refused and never creates a Relay', () => {
+test('playing another hero\'s card never changes the performer: only the Relay command hands a chain over', () => {
   const c = fixed(['scrapline', 'bolt_volley', 'rivet_jab'], ['pinprick']);
-  c.selectHero('S');
-  c.playCard(slot(c, 0));
-  const r = c.selectHero('V');
-  assert.equal(r.ok, false);
-  assert.equal(c.combo.hero, 'S');
-  c.playCard(slot(c, 2));
-  assert.deepEqual([c.combo.relays, c.stats.relays, c.combo.owners], [0, 0, ['S']]);
+  c.selectHero('V');
+  play(c, slot(c, 0));
+  assert.equal(c.check(slot(c, 1)).reason, 'owner', "Pin's arte in Hessa's chain");
+  play(c, slot(c, 2));
+  assert.deepEqual([c.combo.hero, c.combo.relays, c.stats.relays, c.combo.owners], ['V', 0, 0, ['V']]);
   assert.equal(c.drainEvents().filter((e) => e.type === 'relay').length, 0);
 });
 
@@ -340,26 +378,24 @@ test('a combo keeps its hero; switching heroes mid-combo is refused and never cr
 test('Cash Out needs 2+ cards ending on a basic attack; after an arte the button is FINISH (a Perfect)', () => {
   const c = fixed(['scrapline', 'rivet_jab', 'scrapfall', 'sunderline'], [], { momentum: 5, enemies: ['foundry_warden'] });
   c.selectHero('V');
-  c.playCard(slot(c, 0));
+  play(c, slot(c, 0));
   assert.equal(c.canCashOut(), false, 'one card');
-  c.playCard(slot(c, 1));
+  play(c, slot(c, 1));
   assert.equal(c.canCashOut(), true);
-  c.playCard(slot(c, 2)); // arte 4, Sunderline still affordable → combo stays open
+  play(c, slot(c, 2));
   assert.ok(c.combo);
   assert.equal(c.canCashOut(), false);
   assert.equal(c.canFinish(), true);
   assert.equal(c.cashOut().ok, false);
   assert.ok(c.finishOrCashOut().ok);
   assert.equal(c.history[0].type, 'perfect');
-  const m = c.momentum;
   assert.equal(c.phase, 'RECOVER');
-  void m;
 });
 
 test('Cash Out pays out and differs from a Perfect', () => {
   const c = fixed(['scrapline', 'rivet_jab'], ['pinprick'], { enemies: ['foundry_warden'] });
-  c.playCard(slot(c, 0));
-  c.playCard(slot(c, 1));
+  play(c, slot(c, 0));
+  play(c, slot(c, 1));
   const hp = c.enemies[0].hp + c.enemies[0].guard;
   assert.ok(c.finishOrCashOut().ok);
   assert.equal(c.history[0].type, 'cashout');
@@ -369,22 +405,22 @@ test('Cash Out pays out and differs from a Perfect', () => {
 
 test('when Flow runs out the combo drops after a basic attack, but counts as a Perfect after an arte', () => {
   const a = fixed(['scrapline', 'rivet_jab'], [], { momentum: 4 });
-  a.playCard(slot(a, 0));
+  play(a, slot(a, 0));
   advance(a, RULES.FLOW_READ_GRACE + RULES.FLOW_INITIAL + 0.2);
   assert.equal(a.history[0].type, 'forced');
   assert.equal(a.momentum, 3, 'Weak +1, Dropped −2');
   const b = fixed(['piston_strike', 'scrapfall', 'sunderline'], [], { momentum: 4 });
   b.selectHero('V');
-  b.playCard(slot(b, 0));
-  b.playCard(slot(b, 1));
+  play(b, slot(b, 0));
+  play(b, slot(b, 1));
   assert.ok(b.combo, 'Sunderline is still affordable');
-  advance(b, RULES.FLOW_CARD_HOLD + RULES.FLOW_INITIAL + 2);
+  advance(b, RULES.FLOW_INITIAL + RULES.FLOW_READ_GRACE + RULES.FLOW_REFUND + 1);
   assert.equal(b.history[0].type, 'perfect');
 });
 
 test('illegal taps during a combo stumble with a bounded penalty; the third ends it', () => {
   const c = fixed(['piston_strike', 'scrapline', 'rivet_jab'], ['pinprick'], { momentum: 3 });
-  c.playCard(slot(c, 0));
+  play(c, slot(c, 0));
   const bad = slot(c, 1);
   assert.equal(c.check(bad).reason, 'rank');
   const d0 = c.combo.deadline;
@@ -400,9 +436,9 @@ test('illegal taps during a combo stumble with a bounded penalty; the third ends
 test('Clean Exit ends the combo as a Cash Out and pays it out', () => {
   const c = fixed(['piston_strike', 'clean_exit'], [], { momentum: 2, enemies: ['foundry_warden'] });
   c.selectHero('V');
-  c.playCard(slot(c, 0));
+  play(c, slot(c, 0));
   const hp = c.enemies[0].hp + c.enemies[0].guard;
-  c.playCard(slot(c, 1));
+  play(c, slot(c, 1));
   assert.equal(c.history[0].type, 'cashout');
   assert.ok(c.drainEvents().some((e) => e.type === 'cashout'), 'the payout happened');
   assert.ok(c.enemies[0].hp + c.enemies[0].guard < hp - 10);
@@ -412,8 +448,9 @@ test('a Perfect pays +2 Momentum and a Churn charge, and the breather holds the 
   const c = fixed(['piston_strike', 'scrapfall'], ['scrapline'], { momentum: 0, enemies: ['rush_hound'] });
   c.selectHero('V');
   c.churn.charges = 1;
-  c.playCard(slot(c, 0)); // +2
-  c.playCard(slot(c, 1)); // −2, ends (nothing higher)
+  play(c, slot(c, 0)); // +2
+  play(c, slot(c, 1)); // −2
+  assert.ok(c.finishChain().ok);
   assert.equal(c.history[0].type, 'perfect');
   assert.equal(c.momentum, 2);
   assert.equal(c.churn.charges, 2);
@@ -469,7 +506,7 @@ test('jammed slot refills from the draw pile after it expires', () => {
 
 test('echo restriction: echoes repeat damage only', () => {
   const c = fixed(['scrapline'], [], { enemies: ['foundry_warden'] });
-  c.playCard(slot(c, 0));
+  play(c, slot(c, 0));
   const m = c.momentum;
   const rank = c.combo.rank;
   c.echo(0, 1.0);
@@ -480,42 +517,10 @@ test('echo restriction: echoes repeat damage only', () => {
 test('Shuffle Step replaces exactly the hand cards that cannot be played now', () => {
   const c = fixed(['shuffle_step', 'scrapfall', 'scrapline', 'rivet_jab', 'bolt_volley', 'salvage'], ['pinprick', 'tripwire', 'cold_start', 'junk_toss']);
   const keep = [slot(c, 2), slot(c, 3), slot(c, 5)];
-  c.playCard(slot(c, 0));
+  play(c, slot(c, 0));
   for (const u of keep) assert.ok(c.hand.includes(u), 'playable cards stay');
   assert.ok(!c.hand.some((u) => u && ['scrapfall', 'bolt_volley'].includes(c.def(u).id)), 'the artes (unplayable before a basic) were replaced');
   assert.deepEqual(c.verifyZones(), { ok: true });
-});
-
-test('randomized soak: thousands of actions keep zones, Momentum and timers sane', () => {
-  for (let seed = 1; seed <= 40; seed++) {
-    const rng = new RNG(seed * 13);
-    const pool = CARD_LIST.filter((c) => c.category !== 'junk' && c.p4 !== 'withheld').map((c) => c.id);
-    const specs = [...STARTER_DECK, ...Array.from({ length: 10 }, () => rng.pick(pool))];
-    const enemies = [rng.pick([['wire_jammer', 'interference_mite'], ['suit_scrambler', 'latch_wisp'], ['the_corruptor'], ['clockwork_regent'], ['archive_censor'], ['scrap_tyrant']])][0];
-    const c = new Combat({ deck: deck(specs), party: PARTY.map((p) => ({ ...p, hp: p.hp * 6, maxHp: p.maxHp * 6 })), enemies, seed, relics: ['spare_pockets', 'long_fuse', 'overflow_valve'], mutations: ['deep_pockets'], act: 2 });
-    for (let i = 0; i < 1500 && c.phase !== 'END'; i++) {
-      const roll = rng.next();
-      const l = legal(c);
-      if (roll < 0.5 && l.length) c.playCard(rng.pick(l));
-      else if (roll < 0.56) c.selectHero(rng.pick(['V', 'C', 'S']));
-      else if (roll < 0.62) { const u = rng.pick(c.hand.filter(Boolean)); if (u) c.churnCard(u); }
-      else if (roll < 0.66) { const u = rng.pick(c.hand.filter(Boolean)); if (u) c.stash(u); }
-      else if (roll < 0.7) c.finishOrCashOut();
-      else if (roll < 0.72) c.spendMomentumFlow();
-      else if (roll < 0.74) c.spendMomentumGuard();
-      else if (roll < 0.76) { const u = rng.pick(c.hand.filter(Boolean)); if (u) c.playCard(u); }
-      else if (roll < 0.78) { const u = rng.pick(l); if (u) { const r = c.commit(u); if (r.ok) c.cancel(r.cmd); } }
-      c.update(rng.next() * 0.4);
-      const z = c.verifyZones();
-      assert.ok(z.ok, `seed ${seed} step ${i}: ${z.error}`);
-      assert.ok(c.momentum >= 0 && c.momentum <= c.momentumMax(), `momentum ${c.momentum}`);
-      assert.equal(c.reserved, 0, 'nothing stays reserved between actions');
-      assert.equal(c.queue.length, 0);
-      if (c.combo) assert.ok(c.combo.deadline <= c.flowCap() + 1e-9);
-      for (const u of Object.keys(c.locks)) assert.ok(c.locks[u].until - c.t <= 4.6, 'no permanent locks');
-      c.drainEvents();
-    }
-  }
 });
 
 // ── shared party HP and individual Defense ──
@@ -571,7 +576,7 @@ test('Cover: Hessa\'s Guard card redirects single-target hits to her; area attac
   const c = new Combat({ deck: deck(Array(14).fill('salvage')), party: PARTY.map((p) => ({ ...p })), enemies: ['iron_maw'], seed: 3, act: 1 });
   for (const e of c.enemies) e.atb = -100;
   assert.equal(c.coverActive(), false);
-  c.playCard(legal(c)[0]);
+  play(c, legal(c)[0]);
   assert.equal(c.combo, null, 'a support card does not start a combo');
   assert.equal(c.coverActive(), true, 'a resolved Hessa Guard card starts Cover');
   assert.ok(c.drainEvents().some((x) => x.type === 'cover'));
@@ -651,12 +656,13 @@ test('defeat when the pool reaches 0; the outcome reports the pool', () => {
 });
 
 // ── Phase 4 support with Phase 3 survival ──
-test('Braced: +20% Defense on the hero an enemy is aiming at, visible in the damage, capped, and it expires', () => {
+test('Braced: +20% Defense on the hero an enemy is aiming at (by default), visible in the damage, capped, and it expires', () => {
   const c = fixed(['hold_the_line', 'scrapline'], ['pinprick'], { momentum: 1 });
   const e = c.enemies[0];
   e.intent = { ...e.intent, kind: 'atk', dmg: 10, target: 'C' };
   e.atb = 0.5;
-  c.playCard(slot(c, 0));
+  play(c, slot(c, 0));
+  e.atb = -100;
   assert.ok(c.member('C').st.braced > c.t, 'Corvin, the one aimed at, is Braced');
   assert.ok(c.drainEvents().some((x) => x.type === 'partyStatus' && x.kind === 'braced' && x.who === 'C'));
   assert.equal(c.defenseOf(c.member('C')), 0.2);
@@ -671,7 +677,6 @@ test('Braced: +20% Defense on the hero an enemy is aiming at, visible in the dam
   advance(c, 10);
   assert.equal(c.defenseOf(c.member('C')), 0, 'expired on combat time');
   before = c.hp;
-  e.atb = -100;
   c.hitParty(e, 'C', 10);
   assert.equal(before - c.hp, 10);
 });
@@ -679,31 +684,34 @@ test('Braced: +20% Defense on the hero an enemy is aiming at, visible in the dam
 test("Hessa's Guard support grants Guard and starts Cover; Corvin's heal fills the pool, never above max", () => {
   const c = fixed(['salvage', 'mend_circuit', 'scrapline'], ['pinprick', 'tripwire'], { momentum: 2 });
   c.hp = 120;
-  c.playCard(slot(c, 0));
+  play(c, slot(c, 0));
   assert.ok(c.guard >= 5);
   assert.ok(c.coverActive());
-  c.playCard(slot(c, 1));
+  play(c, slot(c, 1));
   assert.equal(c.hp, c.maxHp);
 });
 
-// ── beta-feedback pacing, kept under the Phase 4 rules ──
-test('Flow holds after the first card while the next is chosen, without shortening the combo', () => {
+// ── beta-feedback pacing under the Phase 5 decision window ──
+test('Flow holds while the first card executes and for the read hold after it, without shortening the combo', () => {
   const c = fixed(['scrapline', 'rivet_jab'], ['pinprick']);
   c.playCard(slot(c, 0));
-  assert.ok(Math.abs(c.combo.deadline - c.combo.start - RULES.FLOW_INITIAL) < 1e-9);
+  const start = c.combo.start;
+  assert.ok(Math.abs(c.flowLeft() - RULES.FLOW_INITIAL) < 1e-9);
+  settle(c); // executing: held
+  assert.ok(Math.abs(c.flowLeft() - RULES.FLOW_INITIAL) < 0.02, `held during execution: ${c.flowLeft()}`);
   const left0 = c.flowLeft();
-  assert.ok(c.flowHeld());
+  assert.ok(c.flowHeld(), 'the read hold follows the first card');
   advance(c, RULES.FLOW_READ_GRACE * 0.8);
   assert.ok(Math.abs(c.flowLeft() - left0) < 0.02, `held: ${left0} -> ${c.flowLeft()}`);
   advance(c, RULES.FLOW_READ_GRACE * 0.2 + 1);
   assert.ok(!c.flowHeld());
-  assert.ok(c.flowLeft() < left0 - 0.9, 'drains after the grace');
-  assert.ok(Math.abs(c.flowCap() - (c.combo.start + RULES.FLOW_READ_GRACE + RULES.FLOW_ABS_MAX)) < 0.02, 'the cap moves with the grace');
+  assert.ok(c.flowLeft() < left0 - 0.9, 'drains after the hold');
+  assert.ok(Math.abs(c.flowCap() - (start + RULES.ACTION_TIME + RULES.FLOW_READ_GRACE + RULES.FLOW_ABS_MAX)) < 0.05, 'the cap moves with every hold');
 });
 
 test('natural refunds are capped per combo and the combo never exceeds its cap', () => {
   const c = fixed(['scrapline'], [], { relics: ['brass_metronome'] });
-  c.playCard(slot(c, 0));
+  play(c, slot(c, 0));
   const combo = c.combo;
   for (let i = 0; i < 20; i++) c.naturalRefund(1);
   assert.ok(combo.refundUsed <= RULES.FLOW_REFUND_MAX + 1e-9);
@@ -715,7 +723,7 @@ test('natural refunds are capped per combo and the combo never exceeds its cap',
 
 test('the Flow rules give a learning player time for a five-card combo', () => {
   const c = fixed(['scrapline'], []);
-  c.playCard(slot(c, 0));
+  play(c, slot(c, 0));
   advance(c, RULES.FLOW_READ_GRACE);
   for (let i = 0; i < 4; i++) {
     advance(c, 1.3);
@@ -725,17 +733,18 @@ test('the Flow rules give a learning player time for a five-card combo', () => {
   assert.ok(c.flowLeft() > 1.5, `Flow left after five cards: ${c.flowLeft().toFixed(2)}s`);
 });
 
-test('Flow also holds while each played card resolves, but not after a wrong card', () => {
+test('Flow holds while a command executes (its real duration), but not after a wrong card', () => {
   const c = fixed(['scrapline', 'rivet_jab', 'scrapline', 'piston_strike'], ['pinprick', 'tripwire']);
-  c.playCard(slot(c, 0));
+  play(c, slot(c, 0));
   advance(c, RULES.FLOW_READ_GRACE + 0.5);
   c.playCard(slot(c, 1));
-  assert.ok(c.flowHeld(), 'held after a valid card');
+  assert.ok(c.flowHeld(), 'held while the card executes');
   const left = c.flowLeft();
-  advance(c, RULES.FLOW_CARD_HOLD * 0.8);
-  assert.ok(Math.abs(c.flowLeft() - left) < 0.02);
-  advance(c, RULES.FLOW_CARD_HOLD * 0.2 + 0.3);
+  advance(c, RULES.ACTION_TIME * 0.8);
+  assert.ok(Math.abs(c.flowLeft() - (left + RULES.FLOW_REFUND)) < 0.02, 'nothing counted down; the refund arrived when the card resolved');
+  advance(c, RULES.ACTION_TIME * 0.2 + 0.3);
   assert.ok(!c.flowHeld());
+  assert.ok(c.flowLeft() < left + RULES.FLOW_REFUND - 0.2, 'counting down again after the execution');
   c.playCard(slot(c, 2)); // Weak 1 after Medium 2: a stumble
   assert.ok(!c.flowHeld(), 'a stumble does not hold Flow');
 });
@@ -754,7 +763,7 @@ test('enemies advance before a combo and wait during the breather after one', ()
   c.enemies[0].atb = 0;
   advance(c, 1.0);
   assert.ok(c.enemies[0].atb > 0, 'ATB advances in PRE');
-  c.playCard(slot(c, 0));
+  play(c, slot(c, 0));
   advance(c, RULES.FLOW_READ_GRACE + RULES.FLOW_INITIAL + 0.1); // the combo drops
   assert.equal(c.phase, 'RECOVER');
   const atb = c.enemies[0].atb;

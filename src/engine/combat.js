@@ -11,8 +11,22 @@ import { RNG } from '../core/rng.js';
 export const RULES = {
   HAND: 6,
   FLOW_INITIAL: 5.0, // prototype (was 3.0)
-  FLOW_READ_GRACE: 1.2, // prototype: Flow holds this long after a combo's first card, while the next one is chosen
-  FLOW_CARD_HOLD: 0.7, // prototype: and this long after every other valid card, while its attack plays (0.5-0.7s) and the new card slides in
+  FLOW_READ_GRACE: 1.2, // prototype: the decision window holds this long after a chain's first card has executed
+  // Phase 5 scheduling (docs/COMBAT_SPEC.md §7, §9, §13; prototype values, §21). The decision window
+  // also holds for as long as any command is executing (replacing 0.2.2-0.2.4's fixed 0.7s card hold).
+  QUEUE_AHEAD: 3, // commands that may wait behind the one executing
+  ACTION_TIME: 0.6, // seconds a card (or support) command executes
+  RELAY_TIME: 0.5, // seconds the Relay hand-off executes
+  // when, after its start, a command's effects resolve (matched to the hero animations' impact frames)
+  RESOLVE_AT: { melee: 0.27, cast: 0.38, shoot: 0.25, guard: 0.15, buff: 0.2, counter: 0.11, relay: 0.25 },
+  RECOVER_SEGMENT: 1.5, // a hero's Recovery after its segment: this + RECOVER_PER_CARD per card it played
+  RECOVER_PER_CARD: 0.3,
+  RECOVER_SUPPORT: 2.0, // Recovery after a support action
+  RELAY_MOMENTUM: 1, // Momentum a Relay gives when it executes (none under the Relay Jammer adaptation)
+  RELAY_FIRST_BONUS: 0.1, // the incoming hero's first card: +10% damage per Relay so far in the chain
+  RELAY_HOLD: 1.2, // the decision window holds this long after a Relay
+  RELAY_NEEDS_ARTE: false, // open design decision A (spec §25): false = a Relay may follow any card
+  TACTICAL_ATB: 0.25, // Tactical timing (optional setting): enemy ATB speed while the player decides
   FLOW_REFUND: 1.0, // prototype (was 0.18, then 0.8): per valid card
   FLOW_REFUND_MAX: 5.0, // prototype (was 1.2): per combo
   FLOW_ABS_MAX: 14, // prototype (was 6.2): longest combo, counted from the opener, not counting the grace
@@ -107,13 +121,18 @@ export class Combat {
     // Commands (docs/COMBAT_SPEC.md §7.1, §11.3): a committed card waits in the queue with its Momentum
     // reserved until it executes or is cancelled. Phase 4 executes each command at once (playCard); the
     // queue zone, reservation and cancel exist so Phase 5 can run commands over time.
-    this.queue = [];
+    this.queue = []; // waiting commands, in order (the executing one is this.executing)
+    this.executing = null; // { cmd, start, resolveAt, endAt, resolved }
     this.reserved = 0;
     this.cmdSeq = 0;
-    this.heldSlots = new Set(); // hand slots whose card is in the queue (they do not refill)
+    this.heldSlots = new Set(); // hand slots whose card is queued or executing (they do not refill)
+    this.tactical = !!opts.tactical; // optional Tactical timing (docs/COMBAT_SPEC.md §13.5)
+    this.breatherUntil = 0;
 
     // ── party: three heroes, one HP pool (heroes never fall; defeat is the pool reaching 0) ──
     this.party = opts.party.map((p) => ({ id: p.id, name: PARTY_DEFS[p.id].name, def: RULES.DEFENSE[p.id] || 0, st: {} }));
+    // each hero's own availability (docs/COMBAT_SPEC.md §7): Recovery after a segment or support
+    this.heroes = Object.fromEntries(this.party.map((p) => [p.id, { recoverUntil: 0, recoverDur: 0, readyNoted: true }]));
     // callers that still pass per-hero HP (older tests and tools) get the sum
     this.maxHp = opts.maxHp !== undefined ? opts.maxHp : opts.party.reduce((a, p) => a + (p.maxHp || 0), 0);
     this.hp = Math.min(this.maxHp, opts.hp !== undefined ? opts.hp : opts.party.reduce((a, p) => a + Math.max(0, p.hp || 0), 0));
@@ -154,6 +173,12 @@ export class Combat {
       variantPlays: { A: 0, B: 0, EX: 0 }, cardsPlayed: 0, momentumSpent: 0, flowGained: 0, longCombos: 0,
       stumbles: 0, damageTaken: 0, interferencePayoffs: 0, bestComboDamage: 0, finishers: 0,
       basics: 0, artes: 0, supports: 0, momentumGained: 0, rejected: 0, byHero: { V: 0, C: 0, S: 0 }, strandedChurns: 0,
+      // Phase 5: commands, chains by number of heroes, time by player state, hero Recovery
+      commands: 0, cancelled: 0, chainHeroes: { 1: 0, 2: 0, 3: 0 }, chainCards: 0, chainArtes: 0, relayMomentum: 0,
+      time: { decide: 0, execute: 0, grace: 0, breather: 0, idle: 0, wait: 0 }, recoverTime: 0, allRecovering: 0, queuePeak: 0,
+      // evidence for the two open design decisions (docs/COMBAT_SPEC.md §26): Relays from a segment
+      // without an arte (A), and queued attacks whose target changed between commit and execution (B)
+      relaysNoArte: 0, relayMomentumNoArte: 0, queuedAttacks: 0, targetChangedByPlayer: 0, targetChangedByDeath: 0,
     };
 
     // ── battle-start effects ──
@@ -198,10 +223,6 @@ export class Combat {
   // Momentum not reserved by a committed command: what legality checks and spending may use.
   available() {
     return Math.max(0, this.momentum - this.reserved);
-  }
-  // The hero who would perform a neutral card now: the combo's hero, or the selected hero.
-  performer() {
-    return this.combo ? this.combo.hero : this.selected;
   }
   lastIsArte() {
     const c = this.combo;
@@ -296,8 +317,10 @@ export class Combat {
   flowCap() {
     return this.combo ? this.combo.start + this.combo.graceUsed + RULES.FLOW_ABS_MAX : 0;
   }
+  // the decision window holds while a command executes and during the short holds after a chain's
+  // first card and after each Relay (docs/COMBAT_SPEC.md §13.2)
   flowHeld() {
-    return !!(this.combo && this.combo.graceUntil > this.t);
+    return !!(this.combo && (this.executing || this.combo.graceUntil > this.t));
   }
   aliveEnemies() {
     return this.enemies.filter((e) => e.alive);
@@ -326,9 +349,137 @@ export class Combat {
     return this.relics.has('wild_hinge');
   }
 
+  // ───────────────────────── heroes (docs/COMBAT_SPEC.md §7) ─────────────────────────
+  // Each hero's state is derived from the authoritative facts (the executing command, Recovery
+  // timers, the chain's active segment, queued commands), so two states can never disagree:
+  //   ACTING      its command is executing now
+  //   RECOVERING  after its segment or a support action, until heroes[id].recoverUntil
+  //   ACTIVE      runs the chain's current segment (more of its attacks may wait in the queue)
+  //   COMMITTED   has a queued support command, or is the destination of a queued Relay
+  //   READY       free: may start a chain, receive a Relay or perform support
+  heroState(id) {
+    const x = this.executing;
+    if (x && x.cmd.hero === id) return 'ACTING';
+    const h = this.heroes[id];
+    if (h && h.recoverUntil > this.t) return 'RECOVERING';
+    if (this.combo && this.combo.hero === id) return 'ACTIVE';
+    if ((x && x.cmd.to === id) || this.queue.some((q) => q.hero === id || q.to === id)) return 'COMMITTED';
+    return 'READY';
+  }
+  heroReady(id) {
+    return !!this.member(id) && this.heroState(id) === 'READY';
+  }
+  recoverLeft(id) {
+    const h = this.heroes[id];
+    return h ? Math.max(0, h.recoverUntil - this.t) : 0;
+  }
+  startRecovery(id, dur, why) {
+    const h = this.heroes[id];
+    if (!h) return;
+    h.recoverUntil = Math.max(h.recoverUntil, this.t + dur);
+    h.recoverDur = h.recoverUntil - this.t;
+    h.readyNoted = false;
+    this.emit({ type: 'recover', who: id, dur: h.recoverDur, why });
+  }
+  // Who starts the next chain: the selected hero if Ready, otherwise the first Ready hero in party
+  // order (docs/COMBAT_SPEC.md §8.1). Null while every hero is busy.
+  starter() {
+    if (this.heroReady(this.selected)) return this.selected;
+    const p = this.party.find((m) => this.heroReady(m.id));
+    return p ? p.id : null;
+  }
+  // The hero who would perform a neutral card now: the (projected) chain's hero, or the starter.
+  performer() {
+    const P = this.proj();
+    return P.open ? P.hero : this.starter() || this.selected;
+  }
+  // Who performs a support card: its owner, or (neutral) the selected hero when Ready, otherwise
+  // the first Ready hero in party order. A hero that is attacking, acting, committed or recovering
+  // cannot (docs/COMBAT_SPEC.md §10).
+  supportPerformer(d) {
+    if (d.owner) return this.heroReady(d.owner) ? d.owner : null;
+    for (const id of [this.selected, ...this.party.map((p) => p.id)]) if (this.heroReady(id)) return id;
+    return null;
+  }
+  busyText(id) {
+    const st = this.heroState(id);
+    if (st === 'RECOVERING') return { k: '{hero} recovering {s}s', p: { hero: { hero: id }, s: { n: this.recoverLeft(id), d: 1 } } };
+    if (st === 'ACTIVE' || st === 'ACTING') return { k: '{hero} is attacking', p: { hero: { hero: id } } };
+    return { k: '{hero} is busy', p: { hero: { hero: id } } };
+  }
+  // What the player is doing, for timing statistics and the enemy-action log (R1, R3).
+  playerState() {
+    if (this.phase === 'END') return 'end';
+    if (this.phase === 'RECOVER') return 'breather';
+    if (this.executing) return 'execute';
+    if (this.phase === 'ACTIVE') return this.combo && this.combo.graceUntil > this.t ? 'grace' : 'decide';
+    return this.party.some((p) => this.heroReady(p.id)) ? 'idle' : 'wait';
+  }
+
+  // ───────────────────────── projection ─────────────────────────
+  // The chain as it will be once every started-but-unresolved and queued command has executed.
+  // Legality of a new command is judged against this, so the player can queue Weak 1 → Medium 2 →
+  // Strong 3 while Weak 1 is still executing. Momentum is never projected: costs need Momentum the
+  // party already has and has not reserved (gains arrive only when their command resolves).
+  baseProj() {
+    const c = this.combo;
+    if (!c) return { open: false, hero: null, rank: 0, variant: null, hasBasic: false, segArte: false, seg: 0, cards: 0, last: null, lastCmd: null, parts: new Set(), relays: 0, finish: false, ending: false };
+    return {
+      open: true, hero: c.hero, rank: c.rank, variant: c.variant, hasBasic: c.hasBasic, segArte: c.segArte, seg: c.segCards, cards: c.cards.length,
+      last: c.cards.length ? c.cards[c.cards.length - 1].category : null, lastCmd: c.lastCmd, parts: new Set(c.owners), relays: c.relays, finish: false, ending: !!c.pendingEnd,
+    };
+  }
+  applyProj(P, q) {
+    if (q.type === 'card') {
+      if (!P.open) { P.open = true; P.hero = q.hero; P.parts.add(q.hero); }
+      P.rank = q.rank;
+      P.variant = q.variant;
+      if (q.category === 'basic') P.hasBasic = true; else P.segArte = true;
+      P.seg++;
+      P.cards++;
+      P.last = q.category;
+      P.lastCmd = 'card';
+    } else if (q.type === 'relay') {
+      P.hero = q.to;
+      P.parts.add(q.to);
+      P.rank = 0;
+      P.variant = null;
+      P.hasBasic = false;
+      P.segArte = false;
+      P.seg = 0;
+      P.relays++;
+      P.lastCmd = 'relay';
+    } else if (q.type === 'finish') P.finish = true;
+    return P;
+  }
+  proj() {
+    const P = this.baseProj();
+    const x = this.executing;
+    if (x && !x.resolved) this.applyProj(P, x.cmd);
+    for (const q of this.queue) this.applyProj(P, q);
+    return P;
+  }
+  queueFull() {
+    return this.queue.length >= RULES.QUEUE_AHEAD;
+  }
+  isChainCmd(cmd) {
+    return cmd.type === 'card' || cmd.type === 'relay' || cmd.type === 'finish';
+  }
+  chainPending() {
+    const x = this.executing;
+    return !!((x && this.isChainCmd(x.cmd)) || this.queue.some((q) => this.isChainCmd(q)));
+  }
+  pendingFromReserve() {
+    let n = this.queue.filter((q) => q.zone === 'reserve').length;
+    const x = this.executing;
+    if (x && !x.resolved && x.cmd.zone === 'reserve') n++;
+    return n;
+  }
+
   // ───────────────────────── legality ─────────────────────────
-  // Single source of truth for "can this card be played right now" (docs/COMBAT_SPEC.md §8.2, §10).
-  // The hand, the Reserve, keyboard input, the bots and the tests all use it.
+  // Single source of truth for "can this card be committed right now" (docs/COMBAT_SPEC.md §8.2,
+  // §10). The hand, the Reserve, keyboard input, the bots and the tests all use it. Offensive cards
+  // are judged against the projected chain (above); `rank`/`variant` are frozen into the command.
   check(uid) {
     const inst = this.cards.get(uid);
     if (!inst) return { ok: false, reason: 'missing', text: 'Missing card' };
@@ -339,50 +490,73 @@ export class Combat {
     if (d.category === 'junk') return { ok: false, reason: 'junk', text: 'Glitch: swipe down' };
     if (zone === 'reserve' && this.reserveLatchUntil > this.t) return { ok: false, reason: 'latched', text: 'Reserve sealed' };
     if (this.isLocked(uid)) return { ok: false, reason: 'locked', text: { k: 'Locked {s}s', p: { s: { n: this.lockLeft(uid), d: 1 } } } };
-    if (this.phase === 'RECOVER') return { ok: false, reason: 'recover', text: 'Recovering' };
+    if (this.phase === 'RECOVER') return { ok: false, reason: 'recover', text: 'Breather' };
+    if (this.queueFull()) return { ok: false, reason: 'queue', text: 'Queue full' };
     const cost = d.cost || 0;
     const short = () => ({ ok: false, reason: 'momentum', text: { k: 'Needs {n} Momentum', p: { n: cost } } });
-    // support: independent of combos; performed by its owner, or by the selected hero when neutral
+    // support: independent of chains; costs its performer's action (Recovery afterwards)
     if (d.category === 'support') {
+      const hero = this.supportPerformer(d);
+      if (!hero) return { ok: false, reason: 'busy', text: d.owner ? this.busyText(d.owner) : 'Every hero is busy' };
       if (this.available() < cost) return short();
-      return { ok: true, kind: 'support', zone, category: 'support', hero: d.owner || this.performer() };
+      return { ok: true, kind: 'support', zone, category: 'support', hero };
     }
     const rank = this.effRank(uid);
-    if (this.phase === 'PRE') {
-      // a combo starts with a basic attack, performed by the selected hero
+    const variant = this.effVariant(uid);
+    const P = this.proj();
+    if (P.finish || P.ending) return { ok: false, reason: 'finishing', text: 'Combo ending' };
+    if (!P.open) {
+      // a chain starts with a basic attack, performed by the starter
       if (d.category === 'arte') return { ok: false, reason: 'needbasic', text: 'Basic attack first' };
-      return { ok: true, kind: 'open', zone, category: 'basic', hero: this.selected, step: false, cross: false };
+      const hero = this.starter();
+      if (!hero) return { ok: false, reason: 'heroes', text: 'All heroes recovering' };
+      return { ok: true, kind: 'open', zone, category: 'basic', hero, rank, variant, step: false, cross: false };
     }
-    // ACTIVE: the next offensive card of the combo's hero
-    const c = this.combo;
     if (d.category === 'arte') {
-      if (d.owner !== c.hero) return { ok: false, reason: 'owner', text: { k: '{hero} only', p: { hero: { hero: d.owner } } } };
-      if (!c.hasBasic) return { ok: false, reason: 'needbasic', text: 'Basic attack first' };
+      if (d.owner !== P.hero) return { ok: false, reason: 'owner', text: { k: '{hero} only', p: { hero: { hero: d.owner } } } };
+      if (!P.hasBasic) return { ok: false, reason: 'needbasic', text: 'Basic attack first' };
     }
-    const r = seqCheck(c.rank, c.variant, rank, this.effVariant(uid), this.crossIsStep());
-    if (!r.ok) return { ok: false, reason: 'rank', text: { k: 'Needs rank {n}+', p: { n: c.rank + 1 } } };
+    const r = seqCheck(P.rank, P.variant, rank, variant, this.crossIsStep());
+    if (!r.ok) return { ok: false, reason: 'rank', text: { k: 'Needs rank {n}+', p: { n: P.rank + 1 } } };
     if (this.available() < cost) return short();
-    return { ok: true, kind: r.kind, step: r.step, cross: r.cross, zone, category: d.category, hero: c.hero };
+    const first = P.seg === 0;
+    return { ok: true, kind: first ? (P.relays ? 'relay' : 'open') : r.kind, step: !first && r.step, cross: !first && r.cross, zone, category: d.category, hero: P.hero, rank, variant };
   }
 
-  // Cash Out: 2+ cards and the last one is not an arte (an arte ends the combo as a Perfect instead).
+  // Ending a chain (projected): a Perfect needs the last card to be an arte; Cash Out needs 2+ cards
+  // ending on a basic attack. Neither while a Relay is the last thing queued, or after a finish.
+  finishable(mode, P = this.proj()) {
+    if (!P.open || P.finish || P.ending || P.lastCmd === 'relay') return false;
+    if (mode === 'perfect') return P.last === 'arte';
+    return P.cards >= RULES.CASHOUT_MIN && P.last === 'basic';
+  }
   canCashOut() {
-    return this.phase === 'ACTIVE' && this.combo && this.combo.cards.length >= RULES.CASHOUT_MIN && !this.lastIsArte();
+    return this.phase === 'ACTIVE' && this.finishable('cashout');
   }
   canFinish() {
-    return this.phase === 'ACTIVE' && this.lastIsArte();
+    return this.phase === 'ACTIVE' && this.finishable('perfect');
   }
-  // A hand with nothing playable before a combo (for example only artes, which need a basic attack
+  // A hand with nothing playable before a chain (for example only artes, which need a basic attack
   // first, or support the party cannot afford) must not strand the player: until something is
-  // playable, Churn costs no charge (prototype, docs/COMBAT_SPEC.md §25).
+  // playable, Churn costs no charge (prototype, docs/COMBAT_SPEC.md §25). Judged on the cards and
+  // Momentum alone — a hero recovering, a full queue or a command executing is a wait, not a
+  // stranded hand, and never makes Churn free.
   stranded() {
-    if (this.phase !== 'PRE') return false;
+    if (this.phase !== 'PRE' || this.combo) return false;
     const held = [...this.hand, ...this.reserve].filter(Boolean);
     if (!held.length || !this.hand.some((u) => u && !this.isLocked(u))) return false;
-    return !held.some((u) => this.check(u).ok);
+    return !held.some((u) => this.cardUsable(u));
   }
-
-  // Whether the combo's hero still has an offensive card that is playable now.
+  // Whether a card could start or join something if every hero were free (cards and Momentum only).
+  cardUsable(u) {
+    const d = this.def(u);
+    if (!d || d.category === 'junk' || this.isLocked(u)) return false;
+    if (this.reserve.includes(u) && this.reserveLatchUntil > this.t) return false;
+    if (d.category === 'basic') return true;
+    if (d.category === 'support') return this.available() >= (d.cost || 0);
+    return false; // an arte never starts a chain
+  }
+  // Whether the chain's hero still has an offensive card that is legal now.
   hasContinuation() {
     for (const u of [...this.hand, ...this.reserve]) {
       if (!u) continue;
@@ -391,13 +565,44 @@ export class Combat {
     }
     return false;
   }
+  // Whether a Relay could still happen in this chain: a hero who has not joined it yet (Ready now or
+  // later — recovering and committed heroes become Ready within a few seconds).
+  relayStillPossible() {
+    const c = this.combo;
+    if (!c) return false;
+    return this.party.some((p) => !c.owners.includes(p.id));
+  }
 
-  // Phase 4 hero selector: who performs neutral basic attacks and starts the next combo. A combo
-  // keeps its hero until it ends (handing over to another hero is the Phase 5 Relay command).
+  // Relay eligibility (docs/COMBAT_SPEC.md §9), kept in one place so the rule can change without
+  // touching the scheduler. Decision A is open: RULES.RELAY_NEEDS_ARTE (default false, the
+  // specification's prototype) would require an arte in the outgoing segment.
+  relayCheck(to) {
+    if (this.phase === 'END') return { ok: false, reason: 'end', text: 'Battle over' };
+    if (!this.member(to)) return { ok: false, reason: 'missing', text: 'Missing hero' };
+    const P = this.proj();
+    if (!P.open) return { ok: false, reason: 'nochain', text: 'No combo running' };
+    if (P.finish || P.ending) return { ok: false, reason: 'finishing', text: 'Combo ending' };
+    if (to === P.hero) return { ok: false, reason: 'same', text: { k: '{hero} is attacking', p: { hero: { hero: to } } } };
+    if (P.parts.has(to)) return { ok: false, reason: 'used', text: { k: '{hero} already joined this combo', p: { hero: { hero: to } } } };
+    if (P.seg < 1) return { ok: false, reason: 'setup', text: 'Play a card before the Relay' };
+    if (RULES.RELAY_NEEDS_ARTE && !P.segArte) return { ok: false, reason: 'setup', text: 'Relay after an arte' };
+    if (!this.heroReady(to)) return { ok: false, reason: 'busy', text: this.busyText(to) };
+    if (this.queueFull()) return { ok: false, reason: 'queue', text: 'Queue full' };
+    return { ok: true, from: P.hero, to };
+  }
+
+  // Hero buttons, a tap on a hero, Q/W/E. With no chain running: choose who starts the next one.
+  // During a chain: request a Relay to that hero (docs/COMBAT_SPEC.md §20).
   selectHero(id) {
     if (!this.member(id) || this.phase === 'END') return { ok: false };
-    if (this.combo && this.combo.hero !== id) {
-      const text = 'Finish this combo to switch heroes';
+    const P = this.proj();
+    if (P.open) {
+      if (id === P.hero) return { ok: true, same: true };
+      return this.commitRelay(id);
+    }
+    const st = this.heroState(id);
+    if (st !== 'READY') {
+      const text = this.busyText(id);
       this.emit({ type: 'reject', reason: 'hero', text });
       return { ok: false, text };
     }
@@ -410,7 +615,8 @@ export class Combat {
 
   // ───────────────────────── zones ─────────────────────────
   // The hand is six persistent slots filled from the top of the draw pile (this.draw[0]); a played
-  // card's slot refills, other cards stay. When the draw pile is empty the discard pile is shuffled in.
+  // card's slot refills after the card resolves, other cards stay. When the draw pile is empty the
+  // discard pile is shuffled in.
   nextCard() {
     return this.draw[0] || null;
   }
@@ -447,10 +653,14 @@ export class Combat {
     this.draw.push(uid);
     this.emit({ type: 'tuck', uid, slot: i });
   }
-  // Integrity: every card instance lives in exactly one zone.
+  // Integrity: every card instance lives in exactly one zone (draw, hand, Reserve, queue, executing,
+  // discard, exhaust); held slots match the commands whose cards came from them; reservations match
+  // the queue; no queued command is illegal; resources are not negative.
   verifyZones() {
     const seen = new Map();
-    const zones = { draw: this.draw, hand: this.hand.filter(Boolean), reserve: this.reserve, queue: this.queue.map((q) => q.uid), discard: this.discard, exhaust: this.exhaust };
+    const x = this.executing;
+    const executing = x && !x.resolved && x.cmd.uid ? [x.cmd.uid] : [];
+    const zones = { draw: this.draw, hand: this.hand.filter(Boolean), reserve: this.reserve, queue: this.queue.filter((q) => q.uid).map((q) => q.uid), executing, discard: this.discard, exhaust: this.exhaust };
     for (const [z, arr] of Object.entries(zones)) {
       for (const u of arr) {
         if (seen.has(u)) return { ok: false, error: `duplicate ${u} in ${seen.get(u)} and ${z}` };
@@ -460,13 +670,28 @@ export class Combat {
     }
     for (const u of this.cards.keys()) if (!seen.has(u)) return { ok: false, error: `missing ${u}` };
     if (this.hand.length !== RULES.HAND) return { ok: false, error: 'hand size changed' };
+    const held = new Set(this.queue.filter((q) => q.zone === 'hand').map((q) => q.slot));
+    if (x && !x.resolved && x.cmd.zone === 'hand') held.add(x.cmd.slot);
+    if (held.size !== this.heldSlots.size || [...held].some((s) => !this.heldSlots.has(s))) return { ok: false, error: `held slots ${[...this.heldSlots]} vs commands ${[...held]}` };
+    for (const s of this.heldSlots) if (this.hand[s] !== null) return { ok: false, error: `held slot ${s} holds a card` };
     if (this.reserved !== this.queue.reduce((a, q) => a + q.cost, 0)) return { ok: false, error: 'reservations out of step with the queue' };
+    if (this.momentum < 0 || this.reserved > this.momentum) return { ok: false, error: `Momentum ${this.momentum} reserved ${this.reserved}` };
+    if (this.queue.length > RULES.QUEUE_AHEAD) return { ok: false, error: 'queue over capacity' };
+    const P = this.baseProj();
+    if (x && !x.resolved) this.applyProj(P, x.cmd);
+    for (const q of this.queue) {
+      if (!this.cmdValid(q, P)) return { ok: false, error: `illegal queued command ${q.type} ${q.uid || q.to || ''}` };
+      this.applyProj(P, q);
+    }
+    if (this.combo && this.phase !== 'ACTIVE') return { ok: false, error: `chain open in phase ${this.phase}` };
     return { ok: true };
   }
 
-  // ───────────────────────── commands ─────────────────────────
-  // commit: validate, move the card from its slot (or Reserve) into the queue, reserve its cost.
-  commit(uid) {
+  // ───────────────────────── commands (docs/COMBAT_SPEC.md §7.1, §11.3, §16) ─────────────────────────
+  // commit: validate, move the card from its slot (or Reserve) into the queue (its slot is held, not
+  // refilled), reserve its cost. Execution starts when every earlier command has completed.
+  // o.target: the hero a hero-targeted support (Braced) acts on.
+  commit(uid, o = {}) {
     const chk = this.check(uid);
     if (!chk.ok) {
       this.stumble(uid, chk);
@@ -480,37 +705,171 @@ export class Combat {
       this.hand[slot] = null;
       this.heldSlots.add(slot);
     }
-    const cmd = { id: ++this.cmdSeq, uid, zone: chk.zone, slot, cost: d.cost || 0, chk, hero: chk.hero };
+    const cmd = {
+      id: ++this.cmdSeq, type: d.category === 'support' ? 'support' : 'card', uid, zone: chk.zone, slot, cost: d.cost || 0, hero: chk.hero,
+      category: d.category, rank: chk.rank || 0, variant: chk.variant || null, scrambled: this.isScrambled(uid), target: o.target && this.member(o.target) ? o.target : null, at: this.t,
+      enemyAtCommit: this.target, waited: !!this.executing,
+    };
+    if (cmd.type === 'card' && !this.combo) this.startCombo(chk.hero);
     this.reserved += cmd.cost;
     this.queue.push(cmd);
+    this.emit({ type: 'commit', id: cmd.id, cmdType: cmd.type, uid, hero: cmd.hero, cost: cmd.cost });
+    this.processQueue();
+    this.checkEnd();
     return { ok: true, cmd, chk };
   }
-  // cancel: an unstarted command returns its card where it came from and releases its reservation;
-  // nothing else happens (no effect, no Momentum gained).
-  cancel(cmd) {
-    const i = this.queue.indexOf(cmd);
-    if (i < 0) return false;
+  commitRelay(to) {
+    const chk = this.relayCheck(to);
+    if (!chk.ok) {
+      this.emit({ type: 'reject', reason: chk.reason, text: chk.text });
+      return { ok: false, text: chk.text, chk };
+    }
+    const cmd = { id: ++this.cmdSeq, type: 'relay', from: chk.from, to, hero: chk.from, cost: 0, at: this.t };
+    this.queue.push(cmd);
+    this.emit({ type: 'commit', id: cmd.id, cmdType: 'relay', hero: chk.from, to });
+    this.processQueue();
+    return { ok: true, cmd };
+  }
+  // FINISH (Perfect) or CASH OUT, queued behind the commands already committed; executes at once
+  // when nothing is pending. The ending is decided from what has executed by then.
+  commitFinish(mode) {
+    const P = this.proj();
+    if (!mode) mode = this.finishable('perfect', P) ? 'perfect' : 'cashout';
+    if (!this.finishable(mode, P) || this.phase !== 'ACTIVE') {
+      const text = this.phase !== 'ACTIVE' ? 'No combo running' : P.finish || P.ending ? 'Combo ending' : P.lastCmd === 'relay' ? 'Play a card after the Relay' : mode === 'perfect' ? 'Play an arte to finish' : P.last === 'arte' ? 'Play an arte to finish' : 'Needs 2+ cards';
+      this.emit({ type: 'reject', reason: mode === 'perfect' ? 'finish' : 'cashout', text });
+      return { ok: false, text };
+    }
+    if (this.queueFull()) {
+      this.emit({ type: 'reject', reason: 'queue', text: 'Queue full' });
+      return { ok: false, text: 'Queue full' };
+    }
+    const cmd = { id: ++this.cmdSeq, type: 'finish', mode, hero: P.hero, cost: 0, at: this.t };
+    this.queue.push(cmd);
+    this.emit({ type: 'commit', id: cmd.id, cmdType: 'finish', hero: P.hero, mode });
+    this.processQueue();
+    this.checkEnd();
+    return { ok: true, cmd };
+  }
+  // Cancel a waiting command (the player taps it in the queue strip). A started command cannot be
+  // cancelled. Later commands that depended on it are revalidated and dropped if now illegal.
+  cancelCmd(ref, why = 'player') {
+    const cmd = typeof ref === 'object' && ref ? ref : this.queue.find((q) => q.id === ref);
+    const i = cmd ? this.queue.indexOf(cmd) : -1;
+    if (i < 0) {
+      if (why === 'player') this.emit({ type: 'reject', reason: 'started', text: 'Already executing' });
+      return false;
+    }
     this.queue.splice(i, 1);
-    this.reserved -= cmd.cost;
-    if (cmd.zone === 'hand') {
-      this.heldSlots.delete(cmd.slot);
-      if (this.hand[cmd.slot] === null) this.hand[cmd.slot] = cmd.uid;
-      else this.discard.push(cmd.uid);
-    } else if (this.reserve.length < this.reserveMax()) this.reserve.push(cmd.uid);
-    else this.discard.push(cmd.uid);
-    this.emit({ type: 'cancel', uid: cmd.uid });
+    this.restoreCmd(cmd, why);
+    this.revalidateQueue();
+    this.abortEmptyChain();
     return true;
   }
-  cancelAll() {
-    for (const q of [...this.queue]) this.cancel(q);
+  cancel(cmd) {
+    return this.cancelCmd(cmd, 'player');
   }
-  // execute: spend the reservation, resolve the card, then gains; the card goes to discard and its
-  // slot refills.
-  execute(cmd) {
-    const i = this.queue.indexOf(cmd);
-    if (i < 0) return false;
-    this.queue.splice(i, 1);
-    if (cmd.slot >= 0) this.heldSlots.delete(cmd.slot);
+  // the card goes back where it came from; the reservation is released; nothing else happens (no
+  // effect, no Momentum, no refund)
+  restoreCmd(cmd, why) {
+    this.reserved -= cmd.cost;
+    if (cmd.uid) {
+      if (cmd.zone === 'hand') {
+        this.heldSlots.delete(cmd.slot);
+        if (this.hand[cmd.slot] === null) this.hand[cmd.slot] = cmd.uid;
+        else this.discard.push(cmd.uid);
+      } else if (this.reserve.length < this.reserveMax()) this.reserve.push(cmd.uid);
+      else this.discard.push(cmd.uid);
+    }
+    this.stats.cancelled++;
+    this.emit({ type: 'cancel', id: cmd.id, cmdType: cmd.type, uid: cmd.uid || null, to: cmd.to || null, why });
+  }
+  cancelAll(why = 'end') {
+    for (const q of [...this.queue]) {
+      this.queue.splice(this.queue.indexOf(q), 1);
+      this.restoreCmd(q, why);
+    }
+  }
+  cancelChainCmds(why) {
+    for (const q of [...this.queue]) {
+      if (!this.isChainCmd(q)) continue;
+      this.queue.splice(this.queue.indexOf(q), 1);
+      this.restoreCmd(q, why);
+    }
+  }
+  // Is a queued command still legal on top of projection P (the executed chain plus the commands
+  // before it)? Support stays valid (its performer is reserved for it).
+  cmdValid(q, P) {
+    if (q.type === 'support') return true;
+    if (P.finish || P.ending) return false;
+    if (q.type === 'finish') return this.finishable(q.mode, P);
+    if (q.type === 'relay') {
+      return P.open && P.seg >= 1 && q.to !== P.hero && !P.parts.has(q.to) && this.recoverLeft(q.to) <= 0 && (!RULES.RELAY_NEEDS_ARTE || P.segArte);
+    }
+    if (!P.open) return false;
+    if (q.hero !== P.hero) return false;
+    if (q.category === 'arte' && (!P.hasBasic || CARDS[this.cards.get(q.uid).id].owner !== P.hero)) return false;
+    return q.rank > P.rank;
+  }
+  // walk the queue from what has executed; drop (and restore) every command that is no longer legal
+  revalidateQueue() {
+    const P = this.baseProj();
+    const x = this.executing;
+    if (x && !x.resolved) this.applyProj(P, x.cmd);
+    for (const q of [...this.queue]) {
+      if (this.cmdValid(q, P)) this.applyProj(P, q);
+      else {
+        this.queue.splice(this.queue.indexOf(q), 1);
+        this.restoreCmd(q, 'invalid');
+      }
+    }
+  }
+  // a chain whose only commands were cancelled before anything executed never happened
+  abortEmptyChain() {
+    const c = this.combo;
+    if (!c || c.cards.length || c.relays || this.chainPending()) return;
+    this.combo = null;
+    if (this.phase === 'ACTIVE') this.phase = 'PRE';
+    if (c.stopwatch) this.firstCombo = true;
+    this.emit({ type: 'comboAbort' });
+  }
+  // Runs the queue: resolve the executing command at its impact moment, complete it at its end,
+  // then start the next waiting command (revalidated first). Called after every commit and every
+  // combat step; commands never execute faster than their own duration.
+  processQueue() {
+    for (let guard = 0; guard < 64 && this.phase !== 'END'; guard++) {
+      const x = this.executing;
+      if (x) {
+        if (!x.resolved && this.t >= x.resolveAt - 1e-9) {
+          x.resolved = true;
+          this.resolveCmd(x.cmd);
+          if (this.phase === 'END') { this.executing = null; return; }
+          if (this.queue.length) this.revalidateQueue(); // an effect may have changed the chain
+          continue;
+        }
+        if (x.resolved && this.t >= x.endAt - 1e-9) {
+          this.executing = null;
+          this.completeCmd(x.cmd);
+          if (this.phase === 'END') return;
+          continue;
+        }
+        return;
+      }
+      if (!this.queue.length) return;
+      this.revalidateQueue();
+      if (!this.queue.length) { this.abortEmptyChain(); return; }
+      this.startCmd(this.queue.shift());
+    }
+  }
+  cmdAnim(cmd) {
+    if (cmd.type === 'relay') return 'relay';
+    if (cmd.type === 'finish') return 'finish';
+    const d = this.def(cmd.uid);
+    return d.owner ? d.anim : HERO_ANIM[cmd.hero];
+  }
+  // Execution start: the reservation becomes a spend, the hero acts (animation), effects wait for
+  // the impact moment (RULES.RESOLVE_AT).
+  startCmd(cmd) {
     this.reserved -= cmd.cost;
     if (cmd.cost > 0) {
       this.momentum -= cmd.cost;
@@ -518,31 +877,90 @@ export class Combat {
       if (this.adaptOn('momentum_drain')) this.adaptProgress(cmd.cost);
       this.emit({ type: 'momentum', delta: -cmd.cost, why: CARDS[this.cards.get(cmd.uid).id].name });
     }
-    if (this.def(cmd.uid).category === 'support') this.resolveSupport(cmd);
-    else this.resolveCard(cmd);
-    return true;
+    const anim = this.cmdAnim(cmd);
+    const dur = cmd.type === 'finish' ? 0 : cmd.type === 'relay' ? RULES.RELAY_TIME : RULES.ACTION_TIME;
+    const at = Math.min(dur, RULES.RESOLVE_AT[anim] !== undefined ? RULES.RESOLVE_AT[anim] : 0.3);
+    this.executing = { cmd, start: this.t, resolveAt: this.t + at, endAt: this.t + dur, resolved: false, anim };
+    this.stats.commands++;
+    this.emit({ type: 'execStart', id: cmd.id, cmdType: cmd.type, hero: cmd.hero, uid: cmd.uid || null, to: cmd.to || null, dur, at });
+    if (cmd.type === 'card' || cmd.type === 'support') {
+      const d = this.def(cmd.uid);
+      const c = this.combo;
+      let seq = { kind: cmd.type === 'support' ? 'support' : 'open', step: false, cross: false };
+      if (cmd.type === 'card' && c && c.segCards > 0) seq = seqCheck(c.rank, c.variant, cmd.rank, cmd.variant, this.crossIsStep());
+      this.emit({
+        type: 'act', who: cmd.hero, anim, card: d.name, id: d.id, category: d.category, rank: cmd.rank, variant: cmd.variant, cmd: cmd.id,
+        kind: seq.kind, step: !!seq.step, cross: !!seq.cross, relay: !!(c && cmd.type === 'card' && c.segCards === 0 && c.relays), big: d.category === 'arte', all: false, fromReserve: cmd.zone === 'reserve',
+      });
+    } else if (cmd.type === 'relay') this.emit({ type: 'relayStart', from: cmd.from, to: cmd.to, cmd: cmd.id });
+  }
+  resolveCmd(cmd) {
+    if (cmd.type === 'card') this.resolveCard(cmd);
+    else if (cmd.type === 'support') this.resolveSupport(cmd);
+    else if (cmd.type === 'relay') this.resolveRelay(cmd);
+    else if (cmd.type === 'finish') this.resolveFinish(cmd);
+  }
+  // Execution complete: a support performer starts Recovery; the first card of a chain and each
+  // Relay open a short hold of the decision window; a requested ending happens now; otherwise a
+  // chain that cannot continue at all (no higher card, no hero left to Relay to) ends as a Perfect.
+  completeCmd(cmd) {
+    this.emit({ type: 'execEnd', id: cmd.id, cmdType: cmd.type, hero: cmd.hero });
+    if (cmd.type === 'support') this.startRecovery(cmd.hero, RULES.RECOVER_SUPPORT, 'support');
+    const c = this.combo;
+    if (!c) return;
+    if (cmd.type === 'card' && cmd.chainFirst) {
+      c.graceUntil = Math.max(c.graceUntil, this.t + RULES.FLOW_READ_GRACE);
+      this.emit({ type: 'flowHold', until: c.graceUntil });
+    } else if (cmd.type === 'relay') {
+      c.graceUntil = Math.max(c.graceUntil, this.t + RULES.RELAY_HOLD);
+      this.emit({ type: 'flowHold', until: c.graceUntil, relay: true });
+    }
+    if (c.pendingEnd) {
+      if (!this.chainPending()) {
+        const type = c.pendingEnd;
+        c.pendingEnd = null;
+        this.finishCombo(type);
+      }
+      return;
+    }
+    this.autoFinish();
+  }
+  autoFinish() {
+    const c = this.combo;
+    if (!c || c.pendingEnd || this.chainPending() || this.phase !== 'ACTIVE') return;
+    if (this.lastIsArte() && c.lastCmd === 'card' && !this.hasContinuation() && !this.relayStillPossible()) this.finishCombo('perfect');
+  }
+  // End the chain now if nothing of it is executing, otherwise as soon as the executing command
+  // completes. Unstarted chain commands are cancelled at once (docs/COMBAT_SPEC.md §12.3, §16).
+  requestEnd(type) {
+    const c = this.combo;
+    if (!c || c.pendingEnd) return;
+    this.cancelChainCmds('end');
+    const x = this.executing;
+    if (x && this.isChainCmd(x.cmd)) c.pendingEnd = type;
+    else this.finishCombo(type);
   }
 
   // ───────────────────────── player actions ─────────────────────────
-  playCard(uid) {
-    const r = this.commit(uid);
-    if (!r.ok) return r.chk;
-    this.execute(r.cmd);
-    this.checkEnd();
-    return r.chk;
+  // A tap on a card: commit it (it executes when its turn in the queue comes).
+  playCard(uid, o) {
+    const r = this.commit(uid, o);
+    return r.ok ? r.chk : r.chk;
   }
 
   stumble(uid, chk) {
     this.stats.rejected++;
     this.emit({ type: 'reject', uid, reason: chk.reason, text: chk.text });
-    if (this.phase !== 'ACTIVE' || !SEQ_REASONS.has(chk.reason)) return;
+    if (this.phase !== 'ACTIVE' || !SEQ_REASONS.has(chk.reason) || !this.combo || this.combo.pendingEnd) return;
+    // short of Momentum while commands are still executing is not a mistake: their gains are coming
+    if (chk.reason === 'momentum' && (this.executing || this.queue.length)) return;
     const c = this.combo;
     c.stumbles++;
     this.stats.stumbles++;
     c.deadline = Math.max(this.t + 0.15, c.deadline - RULES.STUMBLE_FLOW);
     if (this.available() > 0) this.momentum -= 1;
     this.emit({ type: 'stumble', uid, n: c.stumbles });
-    if (c.stumbles >= RULES.MAX_STUMBLES) this.finishCombo(this.lastIsArte() ? 'perfect' : 'forced');
+    if (c.stumbles >= RULES.MAX_STUMBLES) this.requestEnd('forced');
   }
 
   startCombo(hero) {
@@ -551,11 +969,12 @@ export class Combat {
     this.combo = {
       start: this.t,
       deadline: Math.min(this.t + RULES.FLOW_INITIAL + extra, this.t + RULES.FLOW_ABS_MAX),
-      graceUntil: 0, graceUsed: 0, hero, owner: hero, hasBasic: false, artes: 0,
+      graceUntil: 0, graceUsed: 0, hero, owner: hero, hasBasic: false, segArte: false, segCards: 0, artes: 0, lastCmd: null,
       refundUsed: 0, cards: [], rank: 0, variant: null, relays: 0, crosses: 0, steps: 0, climbs: 0,
       damage: 0, guardGained: 0, stumbles: 0, owners: [hero], suits: [], stepBonus: 0, refundBonus: 0,
       relayEcho: 0, relayEchoUsed: false, nextRelayEcho: 0, cashPct: 0, cashPerCard: 0, stored: [], pendingBonus: 0,
-      harness: 0, closeAsCashOut: false, churned: false, len: 0,
+      harness: 0, relayBoost: 0, closeAsCashOut: false, churned: false, len: 0, pendingEnd: null, stopwatch: extra > 0,
+      segments: [{ hero, cards: 0, basics: 0, artes: 0 }],
     };
     this.phase = 'ACTIVE';
     this.emit({ type: 'comboStart', deadline: this.combo.deadline, hero });
@@ -617,36 +1036,52 @@ export class Combat {
     }
   }
 
-  // A basic attack or arte executing as the next card of the combo (starting one if none is running).
+  // A basic attack or arte resolving (its impact moment) as the next card of the chain's active
+  // segment. Rank and suit were frozen when the card was committed.
   resolveCard(cmd) {
     const uid = cmd.uid;
     const inst = this.cards.get(uid);
     const d = CARDS[inst.id];
     const fromReserve = cmd.zone === 'reserve';
-    const rank = this.effRank(uid);
-    const variant = this.effVariant(uid);
+    const rank = cmd.rank;
+    const variant = cmd.variant;
     const wasLocked = this.wasLocked.has(uid);
     this.wasLocked.delete(uid);
     const disruptedAtPlay = this.disruptedCount() > 0;
-    const scrambledAtPlay = this.isScrambled(uid);
+    const scrambledAtPlay = cmd.scrambled;
+    if (cmd.slot >= 0) this.heldSlots.delete(cmd.slot);
+    // decision B evidence: the target is the one selected now, at execution (spec §14)
+    if (cmd.waited) {
+      this.stats.queuedAttacks++;
+      if (cmd.enemyAtCommit !== this.target) {
+        const was = this.enemies.find((e) => e.uid === cmd.enemyAtCommit);
+        if (was && !was.alive) this.stats.targetChangedByDeath++;
+        else this.stats.targetChangedByPlayer++;
+      }
+    }
 
-    const isOpen = !this.combo;
-    if (isOpen) this.startCombo(cmd.hero);
+    if (!this.combo) this.startCombo(cmd.hero);
     const c = this.combo;
     const hero = c.hero;
-    const first = c.cards.length === 0;
-    const seq = first ? { step: false, cross: false, kind: 'open' } : seqCheck(c.rank, c.variant, rank, variant, this.crossIsStep());
+    const segFirst = c.segCards === 0;
+    const relayCard = segFirst && c.relays > 0; // the incoming hero's first card after a Relay
+    const seq = segFirst ? { step: false, cross: false, kind: relayCard ? 'relay' : 'open' } : seqCheck(c.rank, c.variant, rank, variant, this.crossIsStep());
     const entry = {
-      uid, id: d.id, name: d.name, owner: hero, cardOwner: d.owner, category: d.category, rank, variant,
-      kind: seq.kind, step: !!seq.step, cross: !!seq.cross, relay: false, fromReserve, dmg: 0, spent: cmd.cost, wasLocked, index: c.cards.length,
+      uid, id: d.id, name: d.name, owner: hero, cardOwner: d.owner, category: d.category, rank, variant, seg: c.segments.length - 1,
+      kind: seq.kind, step: !!seq.step, cross: !!seq.cross, relay: relayCard, fromReserve, dmg: 0, spent: cmd.cost, wasLocked, index: c.cards.length,
     };
     c.cards.push(entry);
+    cmd.chainFirst = c.cards.length === 1;
     c.len = c.cards.length;
+    c.segCards++;
+    c.lastCmd = 'card';
+    const seg = c.segments[c.segments.length - 1];
+    seg.cards++;
     if (!c.suits.includes(variant)) c.suits.push(variant);
     if (entry.step) { c.steps++; this.stats.steps++; }
     if (entry.cross) { c.crosses++; this.stats.crosses++; }
-    if (!entry.step && !entry.cross && !first) c.climbs++;
-    if (d.category === 'basic') { c.hasBasic = true; this.stats.basics++; } else { c.artes++; this.stats.artes++; }
+    if (!entry.step && !entry.cross && !segFirst) c.climbs++;
+    if (d.category === 'basic') { c.hasBasic = true; seg.basics++; this.stats.basics++; } else { c.artes++; c.segArte = true; seg.artes++; this.stats.artes++; }
     this.stats.byHero[hero]++;
     this.stats.cardsPlayed++;
     this.stats.variantPlays[variant] = (this.stats.variantPlays[variant] || 0) + 1;
@@ -660,15 +1095,11 @@ export class Combat {
     // sequence state set before fx so effects may override it (rewind, suit change)
     c.rank = rank;
     c.variant = variant;
-    if (!first) this.naturalRefund(entry.index);
+    if (!cmd.chainFirst) this.naturalRefund(entry.index);
 
     const pendingBonus = c.pendingBonus;
     c.pendingBonus = 0;
-
-    this.emit({
-      type: 'act', who: hero, anim: d.owner ? d.anim : HERO_ANIM[hero], card: d.name, id: d.id, category: d.category, rank, variant,
-      kind: entry.kind, step: entry.step, cross: entry.cross, relay: false, big: d.category === 'arte', all: false, fromReserve,
-    });
+    c.nextRelayEcho = 0; // Hand Off's promise lapses unless its next command is a Relay
 
     // first-hit bonuses
     let bonus = pendingBonus;
@@ -678,14 +1109,18 @@ export class Combat {
     if (fromReserve && this.mutations.has('deep_pockets')) bonus += 4;
     if (entry.cross && this.mutations.has('duality_engine')) bonus += 4;
     if (scrambledAtPlay && this.relics.has('root_key')) bonus += 4;
+    bonus += c.harness * 2; // Relay Harness: +2 for every Relay so far
 
     let mult = 1;
     if (fromReserve && inst.graft === 'cached') mult *= 1.5;
     if (wasLocked && this.mutations.has('signal_thief')) mult *= 1.5;
+    if (relayCard) mult *= 1 + c.relayBoost; // +10% per Relay so far (docs/COMBAT_SPEC.md §9)
 
     const api = this.makeApi(entry, inst, d, { mult, bonus, echoing: false, disruptedAtPlay, ctx: c });
     d.fx(api);
     this.coverCheck(d);
+    // Echoing graft (spec §18.2): the first card after a Relay Echoes itself at 30%
+    if (relayCard && inst.graft === 'echoing' && this.combo === c) this.echo(entry.index, 0.3, entry);
 
     // gains on resolution (docs/COMBAT_SPEC.md §11.1): basic attacks by strength, Crosses, grafts
     if (d.category === 'basic') this.gainMomentum(d.gain || 0, 'Basic');
@@ -703,42 +1138,33 @@ export class Combat {
       if (sb > 0 && tgt) this.dealDamage(tgt, sb, { src: hero, entry, tag: 'step' });
     }
 
-    // card to discard (temp cards are deleted)
+    // card to discard (temp cards are deleted); its slot refills now that it has resolved
     if (d.temp) this.exhaust.push(uid);
     else this.discard.push(uid);
-
-    if (this.phase === 'END' || this.combo !== c) return; // fx may have ended the battle or the combo
+    if (this.phase === 'END' || this.combo !== c) return; // fx may have ended the battle or the chain
     this.refill();
-    // the first card: Flow holds while the next one is chosen; later cards: while each plays out
-    if (first) {
-      c.graceUntil = this.t + RULES.FLOW_READ_GRACE;
-      this.emit({ type: 'flowHold', until: c.graceUntil });
-    } else c.graceUntil = Math.max(c.graceUntil, this.t + RULES.FLOW_CARD_HOLD);
-
-    // endings (docs/COMBAT_SPEC.md §12): an arte ends the combo as a Perfect unless the hero can still
-    // add a higher card (then FINISH, the clock, or that card decide)
-    if (d.category === 'arte') {
-      if (c.closeAsCashOut) { this.payout(1); if (this.phase !== 'END') this.finishCombo('cashout'); }
-      else if (!this.hasContinuation()) this.finishCombo('perfect');
-    } else if (c.deadline <= this.t) this.finishCombo('forced');
+    // Clean Exit: the chain ends as a Cash Out once this card has finished executing
+    if (d.category === 'arte' && c.closeAsCashOut) {
+      this.payout(1);
+      if (this.phase !== 'END') this.requestEnd('cashout');
+    }
   }
 
-  // A support card: not part of any combo (it neither starts, extends, ends nor pauses one).
-  // Phase 4 bridge (docs/COMBAT_SPEC.md §10): it executes at once, performed by its owner or the
-  // selected hero; Phase 5 adds the performer's Recovery and the queue.
+  // A support card resolving: not part of any chain (it neither starts, extends, ends nor pauses
+  // one). Its performer goes into Recovery when the command completes (completeCmd).
   resolveSupport(cmd) {
     const uid = cmd.uid;
     const inst = this.cards.get(uid);
     const d = CARDS[inst.id];
     const fromReserve = cmd.zone === 'reserve';
     const hero = cmd.hero;
+    if (cmd.slot >= 0) this.heldSlots.delete(cmd.slot);
     const ctx = this.combo || { cards: [], len: 0, damage: 0, rank: 0, variant: null, owners: [hero], suits: [], stored: [], steps: 0, crosses: 0, relays: 0 };
-    const entry = { uid, id: d.id, name: d.name, owner: hero, cardOwner: d.owner, category: 'support', rank: 0, variant: null, kind: 'support', step: false, cross: false, relay: false, fromReserve, dmg: 0, spent: cmd.cost, index: -1 };
+    const entry = { uid, id: d.id, name: d.name, owner: hero, cardOwner: d.owner, category: 'support', rank: 0, variant: null, kind: 'support', step: false, cross: false, relay: false, fromReserve, dmg: 0, spent: cmd.cost, index: -1, target: cmd.target };
     this.stats.supports++;
     this.stats.byHero[hero]++;
     this.stats.cardsPlayed++;
     if (fromReserve) this.stats.reservePlays++;
-    this.emit({ type: 'act', who: hero, anim: d.anim, card: d.name, id: d.id, category: 'support', big: false, all: false, fromReserve });
     let mult = 1;
     if (fromReserve && inst.graft === 'cached') mult *= 1.5;
     const api = this.makeApi(entry, inst, d, { mult, bonus: 0, echoing: false, ctx });
@@ -753,23 +1179,77 @@ export class Combat {
     this.refill();
   }
 
-  // Finish the combo after an arte (the FINISH button): a Perfect.
-  finishChain() {
-    if (!this.canFinish()) {
-      this.emit({ type: 'reject', reason: 'finish', text: this.phase === 'ACTIVE' ? 'Play an arte to finish' : 'No combo running' });
-      return { ok: false };
+  // A Relay resolving (docs/COMBAT_SPEC.md §9): the outgoing hero's segment closes and that hero
+  // starts Recovery; the incoming hero becomes active with segment rank 0 and must open with a basic
+  // attack. The chain's history (cards, damage, Relays, Steps, Crosses, heroes) carries on.
+  resolveRelay(cmd) {
+    const c = this.combo;
+    if (!c) return;
+    const from = c.hero;
+    const to = cmd.to;
+    const noArte = !c.segArte;
+    if (noArte) this.stats.relaysNoArte++;
+    this.startRecovery(from, RULES.RECOVER_SEGMENT + RULES.RECOVER_PER_CARD * c.segCards, 'segment');
+    c.relays++;
+    this.stats.relays++;
+    c.hero = to;
+    c.owner = to;
+    if (!c.owners.includes(to)) c.owners.push(to);
+    c.rank = 0;
+    c.variant = null;
+    c.hasBasic = false;
+    c.segArte = false;
+    c.segCards = 0;
+    c.lastCmd = 'relay';
+    c.relayBoost = RULES.RELAY_FIRST_BONUS * c.relays;
+    c.segments.push({ hero: to, cards: 0, basics: 0, artes: 0 });
+    this.emit({ type: 'relay', from, to, n: c.relays, bonus: Math.round(c.relayBoost * 100) });
+    if (!this.adaptOn('relay_jam')) {
+      const before = this.momentum;
+      this.gainMomentum(RULES.RELAY_MOMENTUM, 'Relay');
+      this.stats.relayMomentum += this.momentum - before;
+      if (noArte) this.stats.relayMomentumNoArte += this.momentum - before;
     }
-    this.finishCombo('perfect');
-    this.checkEnd();
-    return { ok: true };
-  }
-  // the end-of-combo button: FINISH after an arte, CASH OUT otherwise
-  finishOrCashOut() {
-    return this.canFinish() ? this.finishChain() : this.cashOut();
+    // Relay Echoes repeat the outgoing segment's last attack (the last card that dealt damage)
+    let prev = -1;
+    for (let i = c.cards.length - 1; i >= 0; i--) if (c.cards[i].dmg > 0) { prev = i; break; }
+    if (prev >= 0) {
+      if (!c.relayEchoUsed) {
+        let p = 0;
+        if (this.relics.has('echo_splice')) p = Math.max(p, 0.4);
+        if (c.relayEcho) p = Math.max(p, c.relayEcho);
+        if (p > 0) { c.relayEchoUsed = true; this.echo(prev, p, null); }
+      }
+      if (c.nextRelayEcho > 0 && this.combo === c) this.echo(prev, c.nextRelayEcho, null);
+      if (this.mutations.has('relay_resonance') && this.combo === c) this.echo(prev, 0.25, null);
+    }
+    c.nextRelayEcho = 0;
+    if (this.relics.has('relay_harness')) c.harness++;
   }
 
-  // Braced (docs/COMBAT_SPEC.md §4.5): the hero the most imminent single-target enemy attack will
-  // land on (after Cover), else the hero last hit, else the performer.
+  // A queued FINISH / CASH OUT reaching the front: the ending is judged on what has executed.
+  resolveFinish(cmd) {
+    const c = this.combo;
+    if (!c) return;
+    const P = this.baseProj();
+    if (!this.finishable(cmd.mode, P)) return; // no longer possible (an earlier command was dropped)
+    if (cmd.mode === 'cashout') {
+      this.payout(1);
+      if (this.phase !== 'END' && this.combo === c) this.finishCombo('cashout');
+    } else this.finishCombo('perfect');
+  }
+
+  // the end-of-chain button: FINISH after an arte (a Perfect), CASH OUT after a basic attack
+  finishChain() {
+    return this.commitFinish('perfect');
+  }
+  finishOrCashOut() {
+    return this.commitFinish(null);
+  }
+
+  // Braced (docs/COMBAT_SPEC.md §4.5, §10): the hero the player chose; by default the hero the most
+  // imminent single-target enemy attack will land on (after Cover), else the hero last hit, else the
+  // performer.
   braceTarget() {
     let best = null;
     for (const e of this.aliveEnemies()) {
@@ -779,8 +1259,8 @@ export class Combat {
     if (best) return this.hitTarget(best.intent.target);
     return this.member(this.lastHitHero) || this.member(this.performer());
   }
-  brace(sec) {
-    const p = this.braceTarget();
+  brace(sec, target) {
+    const p = (target && this.member(target)) || this.braceTarget();
     if (!p) return null;
     p.st.braced = Math.max(p.st.braced || 0, this.t + sec);
     this.emit({ type: 'partyStatus', who: p.id, kind: 'braced', dur: sec });
@@ -892,10 +1372,10 @@ export class Combat {
         self.refill();
         return n;
       },
-      brace: (sec) => (echoing ? null : self.brace(sec)),
+      brace: (sec) => (echoing ? null : self.brace(sec, entry.target)),
       stashBestArte() {
         if (echoing) return false;
-        if (self.reserve.length >= self.reserveMax() || self.reserveLatchUntil > self.t) return false;
+        if (self.reserve.length + self.pendingFromReserve() >= self.reserveMax() || self.reserveLatchUntil > self.t) return false;
         let best = -1, bestRank = -1;
         self.hand.forEach((u, i) => {
           if (u && self.categoryOf(u) === 'arte' && !self.isLocked(u) && self.effRank(u) > bestRank) { best = i; bestRank = self.effRank(u); }
@@ -972,13 +1452,13 @@ export class Combat {
 
   canStash(uid) {
     if (this.phase === 'END') return false;
-    return this.hand.includes(uid) && this.reserve.length < this.reserveMax() && this.reserveLatchUntil <= this.t
+    return this.hand.includes(uid) && this.reserve.length + this.pendingFromReserve() < this.reserveMax() && this.reserveLatchUntil <= this.t
       && !this.isLocked(uid) && this.categoryOf(uid) !== 'junk';
   }
 
   stash(uid) {
     if (!this.canStash(uid)) {
-      const text = this.reserveLatchUntil > this.t ? 'Reserve sealed' : this.reserve.length >= this.reserveMax() ? 'Reserve full' : 'Cannot stash';
+      const text = this.reserveLatchUntil > this.t ? 'Reserve sealed' : this.reserve.length + this.pendingFromReserve() >= this.reserveMax() ? 'Reserve full' : 'Cannot stash';
       this.emit({ type: 'reject', uid, reason: 'stash', text });
       return { ok: false, text };
     }
@@ -1022,14 +1502,7 @@ export class Combat {
   }
 
   cashOut() {
-    if (!this.canCashOut()) {
-      this.emit({ type: 'reject', reason: 'cashout', text: this.phase === 'ACTIVE' ? (this.lastIsArte() ? 'Play an arte to finish' : 'Needs 2+ cards') : 'No combo running' });
-      return { ok: false };
-    }
-    this.payout(1);
-    if (this.phase !== 'END') this.finishCombo('cashout');
-    this.checkEnd();
-    return { ok: true };
+    return this.commitFinish('cashout');
   }
 
   cashOutPreview() {
@@ -1042,7 +1515,8 @@ export class Combat {
     const len = c.cards.length;
     let ledger = 0;
     for (const e of c.cards) if (this.cards.get(e.uid).graft === 'ledger') ledger += 3;
-    let amt = 4 + 3 * len + c.rank + (c.cashPerCard || 0) * len + ledger;
+    const top = len ? Math.max(...c.cards.map((e) => e.rank)) : 0; // the chain's highest rank (segments restart at 0)
+    let amt = 4 + 3 * len + top + (c.cashPerCard || 0) * len + ledger;
     let pct = 1 + (c.cashPct || 0) + (this.relics.has('riveted_ledger') ? 0.3 : 0) + (this.mutations.has('quick_exit') ? 0.4 : 0);
     const quick = this.flowLeft() >= RULES.QUICK_CASH_LEFT;
     if (quick) pct += 0.25;
@@ -1066,7 +1540,10 @@ export class Combat {
   finishCombo(type) {
     const c = this.combo;
     if (!c) return;
-    this.cancelAll(); // commands that have not started are cancelled (docs/COMBAT_SPEC.md §16)
+    if (type === 'forced' && this.lastIsArte()) type = 'perfect'; // the arte was the finish (spec §12.3)
+    this.cancelChainCmds('end'); // chain commands that have not started are cancelled (spec §16)
+    // the last segment closes: its hero recovers
+    this.startRecovery(c.hero, RULES.RECOVER_SEGMENT + RULES.RECOVER_PER_CARD * c.segCards, 'segment');
     // Dead Drop stored echoes release on a Perfect or Cash Out
     if (type !== 'forced' && c.stored.length) {
       const idx = c.cards.map((e, i) => [e.dmg, i]).sort((a, b) => b[0] - a[0])[0];
@@ -1077,6 +1554,9 @@ export class Combat {
     this.stats.longest = Math.max(this.stats.longest, c.cards.length);
     if (c.cards.length >= 5) this.stats.longCombos++;
     this.stats.bestComboDamage = Math.max(this.stats.bestComboDamage, c.damage);
+    this.stats.chainHeroes[Math.min(3, c.owners.length)]++;
+    this.stats.chainCards += c.cards.length;
+    this.stats.chainArtes += c.artes;
     let finisher = false;
     if (type === 'perfect') {
       this.stats.perfect++;
@@ -1109,7 +1589,8 @@ export class Combat {
       openerSuit: c.cards[0] ? c.cards[0].variant : null,
       openerStrength: c.cards[0] && c.cards[0].category === 'basic' ? CARDS[c.cards[0].id].rank : null,
       closerId: type === 'perfect' && this.lastIsArte() ? c.cards[c.cards.length - 1].id : null,
-      owners: c.owners.length, duration, churned: c.churned, maxRank: Math.max(...c.cards.map((e) => e.rank)),
+      owners: c.owners.length, heroes: c.owners.slice(), segments: c.segments.map((g) => ({ ...g })), artes: c.artes,
+      duration, churned: c.churned, maxRank: Math.max(0, ...c.cards.map((e) => e.rank)),
       strongest: Math.max(0, ...c.cards.map((e) => e.dmg)),
     };
     this.history.push(summary);
@@ -1119,7 +1600,7 @@ export class Combat {
     this.combo = null;
     if (this.phase === 'END') return;
     this.phase = 'RECOVER';
-    this.recoverUntil = this.t + RULES.RECOVER[type];
+    this.breatherUntil = this.t + RULES.RECOVER[type];
   }
 
   trackAdaptation(s) {
@@ -1528,7 +2009,7 @@ export class Combat {
 
   drainFlow(e, sec) {
     if (!this.combo) return;
-    this.combo.deadline = Math.max(this.t + 0.25, this.combo.deadline - sec);
+    this.combo.deadline = Math.max(this.t + 0.5, this.combo.deadline - sec); // never below 0.5s (spec §17)
     this.emit({ type: 'drain', amount: sec, source: e ? e.id : null });
     this.noteInterference();
   }
@@ -1576,7 +2057,7 @@ export class Combat {
     const def = ENEMIES[e.id];
     const it = e.intent;
     const idef = def.intents[it.key];
-    this.emit({ type: 'enemyAct', uid: e.uid, id: e.id, key: it.key, kind: it.kind, name: it.name, target: it.target });
+    this.emit({ type: 'enemyAct', uid: e.uid, id: e.id, key: it.key, kind: it.kind, name: it.name, target: it.target, pstate: this.playerState() });
     idef.exec(e, this, it);
     if (e.flags.rootAccess && this.phase !== 'END') this.addGlitch(e, 1);
     if (this.trait === 'STATIC' && this.phase !== 'END' && it.kind !== 'lock' && this.rng.chance(0.25)) this.lockCards(e, 1);
@@ -1591,6 +2072,9 @@ export class Combat {
     }
     e.actCount++;
     if (e.alive) this.chooseIntent(e);
+    // an enemy action may have changed what the queued commands rely on (The Corruptor's Context Bleed
+    // raises the chain's rank): waiting commands that no longer fit go back at once, never executing
+    if (this.phase !== 'END' && this.queue.length) { this.revalidateQueue(); this.abortEmptyChain(); }
   }
 
   enemySpeed(e) {
@@ -1623,17 +2107,37 @@ export class Combat {
   step(dt) {
     this.t += dt;
     const t = this.t;
-    if (this.phase === 'ACTIVE' && this.combo && this.combo.graceUntil > t - dt) {
-      // Flow is held: move the deadline with the clock (the cap moves with it in flowCap)
-      const held = Math.min(dt, this.combo.graceUntil - (t - dt));
-      this.combo.deadline += held;
-      this.combo.graceUsed += held;
+    // time by player state (R2/R3 measurements) and hero Recovery
+    const pst = this.playerState();
+    if (this.stats.time[pst] !== undefined) this.stats.time[pst] += dt;
+    const rec = this.party.filter((p) => this.heroes[p.id].recoverUntil > t).length;
+    this.stats.recoverTime += rec * dt;
+    if (rec === this.party.length) this.stats.allRecovering += dt;
+    const c = this.combo;
+    if (this.phase === 'ACTIVE' && c) {
+      // the decision window is held while a command executes and during the post-card/Relay holds:
+      // the deadline moves with the clock (the cap moves with it in flowCap)
+      const held = this.executing ? dt : Math.max(0, Math.min(dt, c.graceUntil - (t - dt)));
+      if (held > 0) {
+        c.deadline += held;
+        c.graceUsed += held;
+      }
+      if (!this.executing && t >= c.deadline && !c.pendingEnd) this.requestEnd('forced');
     }
-    if (this.phase === 'ACTIVE' && this.combo && t >= this.combo.deadline) this.finishCombo(this.lastIsArte() ? 'perfect' : 'forced');
-    if (this.phase === 'RECOVER' && t >= this.recoverUntil) {
+    if (this.phase === 'RECOVER' && t >= this.breatherUntil) {
       this.phase = 'PRE';
       this.emit({ type: 'ready' });
     }
+    for (const p of this.party) {
+      const h = this.heroes[p.id];
+      if (!h.readyNoted && h.recoverUntil <= t) {
+        h.readyNoted = true;
+        this.emit({ type: 'heroReady', who: p.id });
+      }
+    }
+    this.processQueue();
+    if (this.phase === 'END') return;
+    this.stats.queuePeak = Math.max(this.stats.queuePeak, this.queue.length);
     for (const uid of Object.keys(this.locks)) {
       if (this.locks[uid].until <= t) {
         this.unlock(uid);
@@ -1687,9 +2191,12 @@ export class Combat {
     // enemy ATB: it waits during the breather after a combo, and two enemies never act within
     // ENEMY_SPACING of each other (a full bar holds until then; the bar shows it as ready)
     if (this.phase !== 'RECOVER') {
+      // Tactical timing: while a chain is open and the player is choosing (nothing executing or
+      // queued) enemies fill their bars at a quarter speed. Hero Recovery never slows them.
+      const slow = this.tactical && this.phase === 'ACTIVE' && !this.executing && !this.queue.length ? RULES.TACTICAL_ATB : 1;
       for (const e of this.enemies) {
         if (!e.alive) continue;
-        e.atb = Math.min(1, e.atb + (dt / e.actTime) * this.enemySpeed(e));
+        e.atb = Math.min(1, e.atb + (dt / e.actTime) * this.enemySpeed(e) * slow);
       }
       if (t - this.lastEnemyActT >= RULES.ENEMY_SPACING) {
         // the enemy that has waited longest at full goes first
@@ -1709,17 +2216,27 @@ export class Combat {
 
   checkEnd() {
     if (this.phase === 'END') return;
-    if (this.hp <= 0) {
-      this.phase = 'END';
-      this.combo = null;
-      this.result = { victory: false };
-      this.emit({ type: 'defeat' });
-    } else if (this.enemies.every((e) => !e.alive)) {
-      this.phase = 'END';
-      this.combo = null;
-      this.result = { victory: true };
-      this.emit({ type: 'victory' });
+    let victory = null;
+    if (this.hp <= 0) victory = false;
+    else if (this.enemies.every((e) => !e.alive)) victory = true;
+    if (victory === null) return;
+    this.phase = 'END';
+    this.endCleanup();
+    this.combo = null;
+    this.result = { victory };
+    this.emit({ type: victory ? 'victory' : 'defeat' });
+  }
+  // Victory or defeat mid-queue (spec §16): waiting commands are cancelled (cards back, no rewards);
+  // a command that started but has not resolved keeps its card out of play (to the discard pile)
+  // and never resolves.
+  endCleanup() {
+    this.cancelAll('battleEnd');
+    const x = this.executing;
+    if (x && !x.resolved && x.cmd.uid) {
+      if (x.cmd.slot >= 0) this.heldSlots.delete(x.cmd.slot);
+      this.discard.push(x.cmd.uid);
     }
+    if (x && !x.resolved) this.executing = null; // (a resolving command is cleared by processQueue)
   }
 
   // Summary for run bookkeeping after the battle.

@@ -61,7 +61,8 @@ for (const [lang, w, h] of [['en', 844, 390], ['ru', 1194, 834], ['ru', 667, 375
     const bs = window.__sb.battle;
     const c = bs.combat;
     for (const e of c.enemies) e.atb = 0; // no enemy action in between
-    const uid = c.hand.find((u) => u && c.check(u).ok && ['scrapline', 'rivet_jab', 'pinprick'].includes(c.def(u).id));
+    // any single-target basic attack (Static Bloom and Junk Toss-style cards aside)
+    const uid = c.hand.find((u) => u && c.check(u).ok && c.categoryOf(u) === 'basic' && !['static_bloom', 'tripwire', 'gear_swap'].includes(c.def(u).id));
     const el = uid && document.querySelector(`.hand .card[data-uid="${uid}"]`);
     if (!el) return null;
     const r = el.getBoundingClientRect();
@@ -69,19 +70,52 @@ for (const [lang, w, h] of [['en', 844, 390], ['ru', 1194, 834], ['ru', 667, 375
   });
   if (hit) {
     await p.touchscreen.tap(hit.x, hit.y);
-    await p.waitForTimeout(150);
+    await p.waitForTimeout(800); // the card executes over time (Phase 5) and lands mid-animation
     const after = await p.evaluate(() => window.__sb.battle.combat.enemies.map((e) => [e.uid, e.hp + e.guard]));
     const tgt = (await state()).target;
     const hurt = after.filter(([u, v], k) => v < hit.hp[k][1]).map(([u]) => u);
     check(`${tag}: the attack hits the tapped enemy and no other`, hurt.length === 1 && hurt[0] === tgt, `target ${tgt}, damaged ${hurt.join(',') || 'none'}`);
-    await p.evaluate(() => { const c = window.__sb.battle.combat; if (c.combo) c.finishCombo('forced'); });
+    // 1c. a queued attack uses the target selected when it starts executing (spec §14): retarget while
+    // it waits and it lands on the new target
+    // setup (disclosed): end the open chain, wait out the breather, then put a Weak and a Medium basic
+    // attack in the first two slots so one executes while the other waits
+    await p.evaluate(() => { const c = window.__sb.battle.combat; if (c.combo) c.requestEnd('forced'); });
+    await p.waitForFunction(() => { const c = window.__sb.battle.combat; return c.phase === 'PRE' && !c.executing && c.starter(); }, null, { timeout: 6000 }).catch(() => {});
+    const q = await p.evaluate(() => {
+      const bs = window.__sb.battle;
+      const c = bs.combat;
+      for (const e of c.enemies) e.atb = 0;
+      window.__hits = [];
+      if (!c.__hitLog) { const em = c.emit.bind(c); c.emit = (ev) => { if (ev.type === 'hit' && ev.amount + ev.blocked > 0 && !ev.tag) window.__hits.push(ev.uid); em(ev); }; c.__hitLog = true; }
+      const put = (id, slot) => { const uid = `tq_${id}`; if (!c.cards.has(uid)) { c.cards.set(uid, { uid, id, up: false }); } const old = c.hand[slot]; if (old && old !== uid) c.discard.push(old); c.hand[slot] = uid; return uid; };
+      const a = put('scrapline', 0), b2 = put('rivet_jab', 1);
+      bs.updateHud(true);
+      return { a, b: b2, phase: c.phase, chk: [c.check(a).ok, c.check(b2).text || 'ok'] };
+    });
+    await p.waitForTimeout(450); // let the new cards finish sliding in
+    const at = (u) => p.evaluate((x) => { const el = document.querySelector(`.hand .card[data-uid="${x}"]`); if (!el) return null; const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }, u);
+    q.a = await at(q.a);
+    q.b = await at(q.b);
+    await p.touchscreen.tap(q.a[0], q.a[1]); // executes at once
+    await p.touchscreen.tap(q.b[0], q.b[1]); // waits behind it
+    const waiting = await p.evaluate(() => window.__sb.battle.combat.queue.length);
+    const before = await p.evaluate(() => window.__sb.battle.combat.target);
+    await p.waitForTimeout(380); // the first attack lands on the current target; the second still waits
+    const tgts = await p.evaluate(() => window.__sb.battle.combat.aliveEnemies().map((e) => e.uid));
+    await tapEnemy(tgts.indexOf(before) === 1 ? 2 : 1); // retarget while the second attack waits
+    await p.waitForTimeout(1500);
+    const r = await p.evaluate(() => ({ hits: window.__hits.slice(), target: window.__sb.battle.combat.target }));
+    check(`${tag}: a queued attack lands on the target selected when it executes`, waiting === 1 && r.hits.length >= 2 && r.hits[0] === before && r.hits[r.hits.length - 1] === r.target && r.target !== before, `waiting ${waiting}, first hit ${r.hits[0]} (target then ${before}), queued hit ${r.hits[r.hits.length - 1]} (target now ${r.target})`);
+    await p.evaluate(() => { const c = window.__sb.battle.combat; if (c.combo) c.requestEnd('forced'); });
     await p.waitForTimeout(1600);
   } else check(`${tag}: the attack hits the tapped enemy and no other`, false, 'no single-target Opener in hand');
   // 2. the ⌖ chip cycles targets
+  const s2b = await state();
   await p.tap('.target-chip');
   await p.waitForTimeout(150);
   const s3 = await state();
-  check(`${tag}: the ⌖ chip switches to the next enemy`, s3.target !== s2.target && s3.alive.includes(s3.target), `${s2.target} → ${s3.target}`);
+  check(`${tag}: the ⌖ chip switches to the next enemy`, s3.target !== s2b.target && s3.alive.includes(s3.target), `${s2b.target} → ${s3.target}`);
+  void s2;
   // 3. the target dies: the next enemy is picked and labeled
   await p.evaluate(() => { const c = window.__sb.battle.combat; c.dealDamage(c.enemies.find((x) => x.uid === c.target), 999, { src: 'S', tag: 'test' }); });
   await p.waitForTimeout(700);

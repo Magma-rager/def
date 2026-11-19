@@ -2,7 +2,7 @@
 export const MUTATIONS = {
   ascendant_ladder: { name: 'Ascendant Ladder', tag: 'ladder', text: 'Every Step deals +3 damage and refunds +0.06s more Flow (refund cap still applies).' },
   duality_engine: { name: 'Duality Engine', tag: 'variant', text: 'Each Cross grants +1 Momentum and +4 damage to the crossing card.' },
-  relay_resonance: { name: 'Relay Resonance', tag: 'relay', text: 'Every Relay Echoes the previous card at 25%.', p4: 'withheld' },
+  relay_resonance: { name: 'Relay Resonance', tag: 'relay', text: 'Every Relay Echoes the last attack at 25%.' },
   overpressure_valve: { name: 'Overpressure Valve', tag: 'momentum', text: 'Max Momentum +4. At 10+ Momentum, your cards deal +25%.' },
   long_breath: { name: 'Long Breath', tag: 'flow', text: 'Spending Momentum on Flow costs 1 less and grants +2.0s instead of +1.5s.' },
   grinder: { name: 'Grinder', tag: 'churn', text: '+2 max Churn charges. Every Churn deals 4 damage to a random enemy.' },

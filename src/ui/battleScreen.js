@@ -14,7 +14,7 @@ const OWNER_COL = { V: '#d0603f', C: '#b48cf0', S: '#e6c25a' };
 const HERO_KEYS = { KeyQ: 'V', KeyW: 'C', KeyE: 'S' };
 const KEY_OF = { V: 'Q', C: 'W', S: 'E' };
 // reasons an unplayable hand card shows on its face (others are shown by the card's own state)
-const SHOWN_REASONS = ['rank', 'owner', 'needbasic', 'momentum', 'junk'];
+const SHOWN_REASONS = ['rank', 'owner', 'needbasic', 'momentum', 'junk', 'busy', 'heroes', 'queue'];
 
 // A mini card (Reserve, next card): rank and suit for attacks, a cross for support, then the name.
 function miniCard(c, uid, inst) {
@@ -57,6 +57,7 @@ export class BattleScreen {
     this.saidOnce = new Set();
     this.tutorialQueue = [];
     this.lastFlowWarn = 0;
+    this.pick = null; // a hero-targeted support (Braced) waiting for the player to choose its hero
   }
 
   mount(root) {
@@ -81,15 +82,21 @@ export class BattleScreen {
     // who the next attack hits; tap to switch to the next enemy (enemies can also be tapped directly)
     this.targetChip = h('button', { class: 'target-chip', type: 'button' }, h('span', { class: 'tc-ico', 'aria-hidden': 'true' }, '⌖'), h('span', { class: 'tc-name' }), h('span', { class: 'tc-cycle', 'aria-hidden': 'true' }, '⟳'));
     this.targetChip.addEventListener('click', () => this.cycleTarget());
-    // hero selector: who performs basic attacks and starts the next combo (also: tap a hero, Q/W/E)
+    // hero buttons (docs/COMBAT_SPEC.md §20): each hero's state (Ready, Active, Acting, Committed,
+    // Recovering with a bar); with no chain a tap picks who starts the next one, during a chain a tap
+    // on another hero asks for a Relay (also: tap a hero on the field, Q/W/E)
     this.heroSel = h('div', { class: 'hero-sel', role: 'group' });
     this.heroBtns = {};
     for (const id of ['V', 'C', 'S']) {
-      const b = h('button', { class: `hero-btn owner-${id}`, type: 'button', 'data-hero': id }, h('span', { class: 'hb-i' }), h('span', { class: 'hb-n' }), h('span', { class: 'hb-a' }));
+      const b = h('button', { class: `hero-btn owner-${id}`, type: 'button', 'data-hero': id }, h('span', { class: 'hb-i' }), h('span', { class: 'hb-n' }), h('span', { class: 'hb-a' }), h('span', { class: 'hb-st' }), h('span', { class: 'hb-bar' }));
       b.addEventListener('click', () => this.doSelectHero(id));
       this.heroBtns[id] = b;
       this.heroSel.append(b);
     }
+    // while a hero-targeted support waits for its hero: cancel without spending the card
+    this.pickCancel = h('button', { class: 'pick-cancel', type: 'button', hidden: true }, '✕');
+    this.pickCancel.addEventListener('click', () => this.endPick(true));
+    this.heroSel.append(this.pickCancel);
     const strip = h('div', { class: 'strip' }, this.heroSel, this.targetChip, h('div', { class: 'combo-wrap' }, this.chipsEl, this.nextEl), this.flowBar);
     this.nextCell = h('div', { class: 'next-cell' }, h('span', { class: 'nc-label' }), h('div', { class: 'nc-body' }));
     this.nextCell.lastChild.style.cssText = 'flex:1;display:flex;min-height:0';
@@ -98,7 +105,8 @@ export class BattleScreen {
     this.reserveEl.append(this.reserveSlots);
     this.handEl = h('div', { class: 'hand' });
     this.slots.forEach((s, i) => {
-      const el = h('div', { class: 'slot', 'data-slot': i }, h('div', { class: 'slot-jam' }, h('span', {})), h('div', { class: 'swipe-hint' }));
+      const el = h('div', { class: 'slot', 'data-slot': i }, h('div', { class: 'slot-jam' }, h('span', {})), h('div', { class: 'swipe-hint' }),
+        h('div', { class: 'slot-ghost' }, h('span', { class: 'g-r' }), h('span', { class: 'g-n' }), h('span', { class: 'g-s' })));
       s.box = el;
       this.bindGestures(el, i);
       this.handEl.append(el);
@@ -134,10 +142,11 @@ export class BattleScreen {
     this.view.setCombat(c, this.setup.act, this.setup.kind === 'boss' ? 1 : 0);
     this.canvas.addEventListener('pointerdown', (e) => {
       const r = this.canvas.getBoundingClientRect();
-      const uid = this.view.hitTest(e.clientX - r.left, e.clientY - r.top);
-      if (uid) { c.setTarget(uid); this.app.audio.sfx('click'); return; }
       const hero = this.view.heroHitTest(e.clientX - r.left, e.clientY - r.top);
-      if (hero) this.doSelectHero(hero);
+      if (hero) { this.doSelectHero(hero); return; }
+      if (this.pick) { this.endPick(true); return; }
+      const uid = this.view.hitTest(e.clientX - r.left, e.clientY - r.top);
+      if (uid) { c.setTarget(uid); this.app.audio.sfx('click'); }
     });
     this.keyHandler = (e) => this.onKey(e);
     window.addEventListener('keydown', this.keyHandler);
@@ -158,8 +167,8 @@ export class BattleScreen {
     for (const [id, b] of Object.entries(this.heroBtns)) {
       b.querySelector('.hb-i').textContent = ownerInitial(id);
       b.querySelector('.hb-n').textContent = ownerName(id);
-      b.title = t('{hero} performs basic attacks and starts the next combo (key {k})', { hero: { hero: id }, k: KEY_OF[id] });
     }
+    this.pickCancel.title = t('Cancel');
     for (const s of this.slots) s.box.querySelector('.slot-jam span').textContent = t('STATIC');
     this.cashBtn.querySelector('.ctl-main').textContent = t('CASH OUT');
     this.flowBtn.querySelector('.ctl-main').textContent = t('+FLOW');
@@ -170,7 +179,9 @@ export class BattleScreen {
   relocalize() {
     this.applyLabels();
     this.renderTop();
-    for (const k of ['_ft', '_fbs', '_gbs', '_gh', '_ch', '_cs', '_cm', 'chipSig', 'momSig', 'resSig', 'adaptHtml', 'tgtSig', 'heroSig', 'nextSig']) this[k] = undefined;
+    for (const k of ['_ft', '_fbs', '_gbs', '_gh', '_ch', '_cs', '_cm', 'chipSig', 'momSig', 'resSig', 'adaptHtml', 'tgtSig', 'heroSig', 'nextSig', 'hintSig']) this[k] = undefined;
+    for (const b of Object.values(this.heroBtns)) b._sig = undefined;
+    for (const sl of this.slots) sl.ghostSig = undefined;
     for (const s of this.slots) {
       if (s.el) s.el.remove();
       s.el = null;
@@ -222,6 +233,7 @@ export class BattleScreen {
     };
     box.addEventListener('pointerdown', (e) => {
       const uid = this.slots[i].uid;
+      if (!uid && !g && this.combat.heldSlots.has(i)) { this.cancelSlot(i); e.preventDefault(); return; }
       if (!uid || g) return;
       this.app.audio.unlock();
       g = { id: e.pointerId, uid, x0: e.clientX, y0: e.clientY, t0: performance.now(), dy: 0, moved: false, done: false };
@@ -263,8 +275,10 @@ export class BattleScreen {
   onKey(e) {
     if (this.app.modalOpen() || this.ended) return;
     const c = this.combat;
+    if (e.key === 'Escape' && this.pick) { this.endPick(true); e.preventDefault(); return; }
     if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') { this.app.pause(); e.preventDefault(); return; }
     if (this.app.paused) return;
+    if (e.key === 'Backspace' || e.key === 'Delete') { this.cancelLast(); e.preventDefault(); return; }
     if (HERO_KEYS[e.code] && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) { this.doSelectHero(HERO_KEYS[e.code]); e.preventDefault(); return; }
     const n = parseInt(e.key, 10);
     const digit = /^Digit[1-8]$/.test(e.code) ? parseInt(e.code.slice(5), 10) : n;
@@ -297,11 +311,16 @@ export class BattleScreen {
   }
 
   // ───────────────────────── actions ─────────────────────────
-  doPlay(uid) {
+  doPlay(uid, opts) {
     if (this.app.paused || this.ended) return;
     const c = this.combat;
     const def = c.def(uid);
-    const res = c.playCard(uid);
+    // a hero-targeted support (Braced): the first tap asks which hero; tapping it again uses the default
+    if (def && def.targetHero && !opts) {
+      if (this.pick && this.pick.uid === uid) { const tgt = this.pick.def; this.endPick(false); return this.doPlay(uid, { target: tgt }); }
+      if (c.check(uid).ok) { this.startPick(uid); return; }
+    }
+    const res = c.playCard(uid, opts);
     if (res.ok) {
       this.causes[uid] = 'play';
       this.app.audio.sfx('cardPlay', { rank: def ? Math.max(1, def.rank) : 1 });
@@ -339,8 +358,48 @@ export class BattleScreen {
 
   doSelectHero(id) {
     if (this.app.paused || this.ended) return;
+    if (this.pick) {
+      const uid = this.pick.uid;
+      this.endPick(false);
+      this.doPlay(uid, { target: id });
+      return;
+    }
     const r = this.combat.selectHero(id);
-    this.app.audio.sfx(r.ok ? 'click' : 'reject');
+    this.app.audio.sfx(r.ok ? (r.cmd ? 'relay' : 'click') : 'reject');
+    if (r.ok && r.cmd) this.tutorial('relay');
+    this.afterAction();
+  }
+
+  // Braced: choose the hero (hero buttons, a hero on the field, Q/W/E); ✕, Escape or a tap elsewhere
+  // cancels without spending the card
+  startPick(uid) {
+    const c = this.combat;
+    const d = c.braceTarget();
+    this.pick = { uid, def: d ? d.id : 'V' };
+    this.app.audio.sfx('click');
+    this.afterAction();
+  }
+  endPick(cancelled) {
+    if (!this.pick) return;
+    this.pick = null;
+    if (cancelled) this.app.audio.sfx('click');
+    this.afterAction();
+  }
+  // cancel the queued command whose card came from this hand slot (tap the placeholder)
+  cancelSlot(i) {
+    const c = this.combat;
+    const q = c.queue.find((x) => x.zone === 'hand' && x.slot === i);
+    if (q) this.doCancel(q.id);
+    else { this.app.audio.sfx('reject'); this.flashNote(t('Already executing')); }
+  }
+  cancelLast() {
+    const q = this.combat.queue[this.combat.queue.length - 1];
+    if (q) this.doCancel(q.id);
+  }
+  doCancel(id) {
+    if (this.app.paused || this.ended) return;
+    const ok = this.combat.cancelCmd(id);
+    this.app.audio.sfx(ok ? 'click' : 'reject');
     this.afterAction();
   }
 
@@ -464,10 +523,11 @@ export class BattleScreen {
     const meta = this.app.meta;
     if (!this.app.settings.hints || meta.tut[key]) return;
     const TXT = {
-      start: ['THE RELAY', 'Your three heroes share one hand of six cards. Enemies act in real time — watch their ATB bars and intent bubbles. A <b>red ring</b> under a hero shows who an enemy is about to hit.<br><br>Your attacks hit the enemy in <b>gold brackets</b> (TARGET). <b>Tap an enemy</b> to choose another.<br><br>Pick the hero who attacks with the buttons above the hand (or tap a hero). A ★ on a button means that hero has an <b>arte</b> in hand. Then <b>tap a basic attack ◆</b> to start a combo.'],
-      opened: ['COMBO STARTED', 'Each next attack needs a <b>higher rank</b> (skipping ranks is fine). Basic attacks give <b>Momentum</b>: Weak and Medium +1, Strong +2, and changing suit (a <b>Cross</b>) +1 more.<br><br>Flow <b>holds for a moment</b> so you can choose, then counts down from 5 seconds. Each valid card gives back 1s, and Flow also holds while it plays out.<br><br><b>Hold a card</b> to read it in full: the battle pauses while you read.'],
-      closer: ['ARTE READY', 'This hero\'s <b>arte ★</b> is playable. Artes cost Momentum (the number in the corner) and need a basic attack earlier in the combo.<br><br>Ending a combo with an arte is a <b>PERFECT</b>: +2 Momentum and a Churn charge. After an arte, play a higher one of the same hero, or press <b>FINISH</b>.'],
-      afterCombo: ['MORE TOOLS', '<b>Support ✚</b> cards (healing, Guard, utility) can be played any time, in or out of a combo; some cost Momentum.<br><b>Swipe a card DOWN</b> to Churn it (uses a charge, replaces it).<br><b>Swipe UP</b> to stash it in Reserve; Reserve cards can be played later.<br><b>CASH OUT</b> ends a combo of 2+ basic attacks early for a payout (bonus if 2.5s+ Flow remains).<br><b>NEXT CARD</b> beside the hand is the card you will draw next.'],
+      start: ['THE RELAY', 'Your three heroes share one hand of six cards. Enemies act in real time — watch their ATB bars and intent bubbles. A <b>red ring</b> under a hero shows who an enemy is about to hit.<br><br>Your attacks hit the enemy in <b>gold brackets</b> (TARGET). <b>Tap an enemy</b> to choose another.<br><br>Pick the hero who starts with the buttons above the hand (or tap a hero). A ★ on a button means that hero has an <b>arte</b> in hand. Then <b>tap a basic attack ◆</b> to start a combo. You can tap the next cards while the first one plays out: they wait in the <b>queue</b> and execute in order.'],
+      opened: ['COMBO STARTED', 'Each next attack needs a <b>higher rank</b> (skipping ranks is fine). Basic attacks give <b>Momentum</b> when they land: Weak and Medium +1, Strong +2, and changing suit (a <b>Cross</b>) +1 more.<br><br>Flow counts down from 5 seconds only while you are choosing: it <b>holds while your attacks play out</b> and for a moment after the first one. Each valid card gives back 1s.<br><br>Queued cards wait beside the combo (dashed) and leave a placeholder in the hand: <b>tap one to take it back</b>. <b>Hold a card</b> to read it in full: the battle pauses while you read.'],
+      closer: ['ARTE READY', 'This hero\'s <b>arte ★</b> is playable. Artes cost Momentum (the number in the corner) and need a basic attack earlier in the hero\'s part of the combo.<br><br>After an arte, <b>tap another hero to RELAY</b>: they take over the same combo, starting again from a basic attack, and the combo keeps everything it has built. Each hero joins a combo once. Or press <b>FINISH</b> for a <b>PERFECT</b>: +2 Momentum and a Churn charge.'],
+      afterCombo: ['MORE TOOLS', 'A hero who has attacked or used <b>support ✚</b> needs a moment to <b>recover</b> (the bar under the hero button); the others can act meanwhile.<br><b>Support</b> cards (healing, Guard, utility) can be played any time, even during another hero\'s combo; some cost Momentum.<br><b>Swipe a card DOWN</b> to Churn it (uses a charge, replaces it). <b>Swipe UP</b> to stash it in Reserve.<br><b>CASH OUT</b> ends a combo that ends with a basic attack for a payout (bonus if 2.5s+ Flow remains).<br><b>NEXT CARD</b> beside the hand is the card you will draw next.'],
+      relay: ['RELAY', 'The Relay waits in the queue like a card. When it runs, the hero who attacked <b>recovers</b> and the new hero takes over the combo: Momentum +1, and their first attack deals +10% for every Relay so far.<br><br>Start their part with a <b>basic attack ◆</b>, then their arte. Each hero joins a combo once, so three heroes can build one long combo together.'],
       lock: ['CARD LOCKED', 'An enemy <b>Locked</b> a card (chain icon). Locks show their source and expire after their timer runs out — even between combos. Plan around them.'],
       scramble: ['SCRAMBLED', 'A <b>Scramble</b> temporarily changed a card\'s rank or suit (glitch stripes). The card shows its current values; it reverts in a few seconds.'],
       jam: ['SLOT JAMMED', 'Static jammed a hand slot. No card can fill it until the static clears.'],
@@ -510,7 +570,7 @@ export class BattleScreen {
       void this.targetChip.offsetWidth;
       if (tgt) this.targetChip.classList.add('flash');
     }
-    // flow strip (writes only when values change)
+    // flow strip (writes only when values change): the decision window, and what is happening now
     const set = (key, fn, val) => { if (this[key] !== val) { this[key] = val; fn(val); } };
     if (c.phase === 'ACTIVE' && c.combo) {
       const left = c.flowLeft();
@@ -518,46 +578,43 @@ export class BattleScreen {
       set('_ff', (v) => (this.flowFill.style.width = v), `${Math.min(100, (left / RULES.FLOW_BAR_SECONDS) * 100).toFixed(1)}%`);
       set('_fc', (v) => (this.flowCap.style.width = v), `${Math.min(100, (cap / RULES.FLOW_BAR_SECONDS) * 100).toFixed(1)}%`);
       const held = c.flowHeld();
-      set('_ft', (v) => (this.flowText.textContent = v), held ? t('FLOW {s} · HOLDING', { s: secs(left, 1) }) : t('FLOW {s}', { s: secs(left, 1) }));
-      set('_fb', (v) => (this.flowBar.className = v), `flow-bar active${held ? ' held' : left < 1.5 ? ' low' : ''}`);
+      set('_ft', (v) => (this.flowText.textContent = v), c.executing ? t('FLOW {s} · EXECUTING', { s: secs(left, 1) }) : held ? t('FLOW {s} · HOLDING', { s: secs(left, 1) }) : t('FLOW {s}', { s: secs(left, 1) }));
+      set('_fb', (v) => (this.flowBar.className = v), `flow-bar active${held ? ' held' : left < 1.5 ? ' low' : ''}${c.executing ? ' exec' : ''}`);
     } else {
       set('_ff', (v) => (this.flowFill.style.width = v), '0%');
       set('_fc', (v) => (this.flowCap.style.width = v), '0%');
       const stranded = c.stranded();
-      set('_ft', (v) => (this.flowText.textContent = v), c.phase === 'RECOVER' ? t('BREATHER · ENEMIES WAIT') : c.phase === 'END' ? '—' : stranded ? t('NOTHING PLAYABLE · CHURN IS FREE') : t('{hero} · PLAY A BASIC ATTACK', { hero: ownerName(c.selected).toUpperCase() }));
-      set('_fb', (v) => (this.flowBar.className = v), `flow-bar ${c.phase === 'PRE' ? 'pre' : c.phase === 'RECOVER' ? 'breather' : ''}`);
+      const starter = c.starter();
+      const soonest = Math.min(...c.party.map((p) => c.recoverLeft(p.id)));
+      const txt = c.phase === 'RECOVER' ? t('BREATHER · ENEMIES WAIT') : c.phase === 'END' ? '—' : stranded ? t('NOTHING PLAYABLE · CHURN IS FREE')
+        : !starter ? t('ALL HEROES RECOVERING · {s}', { s: secs(soonest, 1) }) : t('{hero} · PLAY A BASIC ATTACK', { hero: ownerName(starter).toUpperCase() });
+      set('_ft', (v) => (this.flowText.textContent = v), txt);
+      set('_fb', (v) => (this.flowBar.className = v), `flow-bar ${c.phase === 'PRE' ? (starter ? 'pre' : 'wait') : c.phase === 'RECOVER' ? 'breather' : ''}`);
     }
-    // combo chips: rank, suit, Step ↑ / Cross ✕, arte ★, in the hero's colour
-    const combo = c.combo;
-    const sig = combo ? combo.cards.map((e) => e.uid + e.kind).join() + combo.rank + combo.variant + c.available() : `${c.phase}${c.selected}`;
-    if (force || sig !== this.chipSig) {
-      this.chipSig = sig;
-      clear(this.chipsEl);
-      if (combo) {
-        for (const e of combo.cards) {
-          this.chipsEl.append(h('span', { class: `chip v-${e.variant}${e.category === 'arte' ? ' arte' : ''}`, style: { borderColor: OWNER_COL[e.owner] } },
-            h('b', {}, String(e.rank)), e.variant, e.step ? h('i', { class: 'k' }, '↑') : null, e.cross ? h('i', { class: 'k' }, '✕') : null, e.category === 'arte' ? h('i', { class: 'cat' }, '★') : null));
-        }
-        const hero = ownerName(combo.hero);
-        this.setNext(c.lastIsArte()
-          ? t('<b>{hero}</b>: a higher arte, or FINISH', { hero })
-          : combo.hasBasic ? t('NEXT <b>rank {n}+</b> · {hero}\'s arte or a basic attack', { n: Math.min(9, combo.rank + 1), hero }) : t('NEXT <b>rank {n}+</b>', { n: Math.min(9, combo.rank + 1) }));
+    // the chain and the queue in one row: executed cards (solid, a ⇄ where a Relay handed over), the
+    // executing command (glowing, with progress), then waiting commands (dashed; tap one to cancel it)
+    this.renderQueue();
+    // the hint beside the chips
+    const P = c.proj();
+    const hintSig = `${c.phase}|${P.open}|${P.hero}|${P.rank}|${P.last}|${P.lastCmd}|${P.hasBasic}|${P.finish}|${c.starter()}|${this.pick ? this.pick.uid : ''}|${c.relayStillPossible()}`;
+    if (force || hintSig !== this.hintSig) {
+      this.hintSig = hintSig;
+      const narrowStrip = this.deck.getBoundingClientRect().width < 900;
+      if (this.pick) this.setNext(t('<b>BRACE</b>: tap a hero · ✕'));
+      else if (P.open) {
+        const hero = ownerName(P.hero);
+        if (P.finish) this.setNext(t('Finishing the combo…'));
+        else if (P.lastCmd === 'relay') this.setNext(t('<b>{hero}</b>: start with a basic attack ◆', { hero }));
+        else if (P.last === 'arte') this.setNext(c.relayStillPossible() ? t('<b>{hero}</b>: higher arte, RELAY ⇄ or FINISH', { hero }) : t('<b>{hero}</b>: a higher arte, or FINISH', { hero }));
+        else this.setNext(P.hasBasic && !narrowStrip ? t('NEXT <b>rank {n}+</b> · {hero}\'s arte or a basic attack', { n: Math.min(9, P.rank + 1), hero }) : t('NEXT <b>rank {n}+</b>', { n: Math.min(9, P.rank + 1) }));
       } else {
-        this.setNext(c.phase === 'PRE' ? t('<b>{hero}</b> starts: tap a basic attack ◆', { hero: ownerName(c.selected) }) : '');
+        const st = c.starter();
+        this.setNext(c.phase === 'PRE' && st ? t('<b>{hero}</b> starts: tap a basic attack ◆', { hero: ownerName(st) }) : '');
       }
     }
-    // hero selector: the selected (or attacking) hero, and how many of each hero's artes are in hand
-    const heroSig = `${c.performer()}|${!!combo}|${[...c.hand, ...c.reserve].map((u) => (u ? c.categoryOf(u) + c.def(u).owner : '')).join()}`;
-    if (force || heroSig !== this.heroSig) {
-      this.heroSig = heroSig;
-      for (const [id, b] of Object.entries(this.heroBtns)) {
-        const artes = [...c.hand, ...c.reserve].filter((u) => u && c.categoryOf(u) === 'arte' && c.def(u).owner === id).length;
-        b.classList.toggle('sel', c.performer() === id);
-        b.classList.toggle('locked', !!combo && combo.hero !== id);
-        b.querySelector('.hb-a').textContent = '★'.repeat(Math.min(3, artes));
-        b.setAttribute('aria-pressed', String(c.performer() === id));
-      }
-    }
+    // hero buttons: state from the engine (Ready / Active / Acting / Committed / Recovering + bar), arte
+    // count; during a chain, which heroes can take a Relay
+    this.updateHeroButtons(P);
     // next card: the real top of the draw pile; nothing is shown (or drawn) when it is empty
     const nu = c.nextCard();
     // with 3-4 Reserve slots the preview shrinks to one row (rank, suit, owner colour; hold for the card)
@@ -604,14 +661,18 @@ export class BattleScreen {
     const free = (c.relics.has('beta_badge') && !c.churn.freeUsed) || c.stranded();
     set('_ch', (v) => (this.churnEl.innerHTML = v), `<span class="ic">⟲</span><span class="dots">${dots}</span><span class="lblwrap"><span class="lbl">${snared ? t('SNARED') : t('CHURN')}</span>${free && !snared ? `<span class="free">${t('FREE')}</span>` : ''}</span>`);
     this.churnEl.classList.toggle('snared', snared);
-    // cash out / finish
+    // cash out / finish (queued behind waiting commands when there are any)
     const fin = c.canFinish();
     const can = c.canCashOut();
-    set('_cm', (v) => (this.cashBtn.querySelector('.ctl-main').textContent = v), fin ? t('FINISH ★') : t('CASH OUT'));
-    this.cashBtn.classList.toggle('finish', fin);
-    this.cashBtn.disabled = !can && !fin;
+    const finishing = P.finish;
+    set('_cm', (v) => (this.cashBtn.querySelector('.ctl-main').textContent = v), finishing ? t('FINISHING') : fin ? t('FINISH ★') : t('CASH OUT'));
+    this.cashBtn.classList.toggle('finish', fin || finishing);
+    this.cashBtn.disabled = (!can && !fin) || finishing;
     const sub = this.cashBtn.querySelector('.ctl-sub');
-    if (fin) {
+    if (finishing) {
+      set('_cs', (v) => (sub.textContent = v), t('after the queue'));
+      this.cashBtn.classList.remove('quick');
+    } else if (fin) {
       set('_cs', (v) => (sub.textContent = v), t('PERFECT · +2M'));
       this.cashBtn.classList.remove('quick');
     } else if (can) {
@@ -631,6 +692,109 @@ export class BattleScreen {
       const html = parts.join('');
       if (html !== this.adaptHtml) { this.adaptHtml = html; this.adaptEl.innerHTML = html; }
     } else this.adaptEl.hidden = true;
+  }
+
+  // The chain and the queue (docs/COMBAT_SPEC.md §20 "Queue strip"): executed cards, a ⇄ mark where a
+  // Relay handed over, the executing command (with its progress), then the waiting commands, each a tap
+  // target that cancels it. Older executed cards fold into a "+n" chip on small screens.
+  renderQueue() {
+    const c = this.combat;
+    const combo = c.combo;
+    const x = c.executing;
+    const sig = `${combo ? combo.cards.map((e) => e.uid + e.kind).join() + combo.lastCmd : ''}|${x ? x.cmd.id + (x.resolved ? 'r' : '') : ''}|${c.queue.map((q) => q.id).join()}|${this.root.classList.contains('compact') || document.documentElement.classList.contains('compact')}`;
+    if (sig !== this.chipSig) {
+      this.chipSig = sig;
+      clear(this.chipsEl);
+      this.execChip = null;
+      const compact = this.deck.getBoundingClientRect().width < 900;
+      const max = compact ? 4 : 7;
+      if (combo) {
+        const cards = combo.cards;
+        const hidden = Math.max(0, cards.length - max);
+        if (hidden) this.chipsEl.append(h('span', { class: 'chip more', title: t('{n} earlier cards', { n: hidden }) }, `+${hidden}`));
+        for (let i = hidden; i < cards.length; i++) {
+          const e = cards[i];
+          if (e.relay) this.chipsEl.append(h('span', { class: 'chip relay-mark', style: { borderColor: OWNER_COL[e.owner], color: OWNER_COL[e.owner] }, title: t('Relay') }, '⇄'));
+          const el = h('span', { class: `chip v-${e.variant}${e.category === 'arte' ? ' arte' : ''}`, style: { borderColor: OWNER_COL[e.owner] } },
+            h('b', {}, String(e.rank)), e.variant, e.step ? h('i', { class: 'k' }, '↑') : null, e.cross ? h('i', { class: 'k' }, '✕') : null, e.category === 'arte' ? h('i', { class: 'cat' }, '★') : null);
+          // a card that has resolved but is still playing out is still the executing command
+          if (x && x.resolved && x.cmd.uid === e.uid) { el.classList.add('exec'); el.append(h('i', { class: 'qp' })); this.execChip = el; }
+          this.chipsEl.append(el);
+        }
+      }
+      const cmdChip = (q, state) => {
+        const hero = q.type === 'relay' ? q.to : q.hero;
+        const label = q.type === 'relay' ? ['⇄', ownerInitial(q.to)] : q.type === 'finish' ? [q.mode === 'perfect' ? '★✓' : '$'] : q.type === 'support' ? ['✚', ownerInitial(q.hero)] : [h('b', {}, String(q.rank)), q.variant, q.category === 'arte' ? h('i', { class: 'cat' }, '★') : null];
+        const name = q.type === 'relay' ? t('Relay to {hero}', { hero: ownerName(q.to) }) : q.type === 'finish' ? (q.mode === 'perfect' ? t('FINISH ★') : t('CASH OUT')) : cardName(c.def(q.uid).id);
+        const el = h('button', { type: 'button', class: `chip q ${state} q-${q.type}${q.type === 'card' ? ` v-${q.variant}` : ''}`, style: { borderColor: OWNER_COL[hero] }, 'data-cmd': q.id, title: state === 'wait' ? t('{c} · waiting · tap to cancel', { c: name }) : t('{c} · executing', { c: name }) }, ...label);
+        if (q.cost) el.append(h('i', { class: 'qc' }, `${q.cost}M`));
+        if (state === 'wait') { el.append(h('i', { class: 'qx' }, '↩')); el.addEventListener('click', () => this.doCancel(q.id)); }
+        else { el.append(h('i', { class: 'qp' })); this.execChip = el; el.addEventListener('click', () => { this.app.audio.sfx('reject'); this.flashNote(t('Already executing')); }); }
+        return el;
+      };
+      // an executed Relay whose incoming hero has not played yet
+      if (combo && combo.lastCmd === 'relay' && !(x && !x.resolved && x.cmd.type === 'relay')) this.chipsEl.append(h('span', { class: 'chip relay-mark', style: { borderColor: OWNER_COL[combo.hero], color: OWNER_COL[combo.hero] }, title: t('Relay') }, '⇄'));
+      if (x && !(x.resolved && x.cmd.type === 'card') && x.cmd.type !== 'finish') this.chipsEl.append(cmdChip(x.cmd, 'exec'));
+      for (const q of c.queue) this.chipsEl.append(cmdChip(q, 'wait'));
+      // the chips need the room: the hint steps aside while three or more are shown
+      this.nextEl.classList.toggle('crowded', this.chipsEl.children.length >= 3);
+      // still too wide: fold the oldest executed cards into the "+n" chip until the row fits
+      const wrap = this.chipsEl.parentElement;
+      const fits = () => this.chipsEl.getBoundingClientRect().right <= wrap.getBoundingClientRect().right + 0.5;
+      let folded = combo ? Math.max(0, combo.cards.length - max) : 0;
+      for (let guard = 0; guard < 12 && !fits(); guard++) {
+        const old = [...this.chipsEl.children].find((el) => !el.classList.contains('more') && !el.classList.contains('q') && !el.classList.contains('exec'));
+        if (!old) break;
+        if (!old.classList.contains('relay-mark')) folded++;
+        old.remove();
+        let more = this.chipsEl.querySelector('.chip.more');
+        if (!more) { more = h('span', { class: 'chip more' }); this.chipsEl.prepend(more); }
+        more.textContent = `+${folded}`;
+        more.title = t('{n} earlier cards', { n: folded });
+      }
+    }
+    if (this.execChip && x) {
+      const f = x.endAt > x.start ? Math.min(1, (c.t - x.start) / (x.endAt - x.start)) : 1;
+      const bar = this.execChip.querySelector('.qp');
+      if (bar) bar.style.width = `${(f * 100).toFixed(0)}%`;
+    }
+  }
+
+  updateHeroButtons(P) {
+    const c = this.combat;
+    for (const [id, b] of Object.entries(this.heroBtns)) {
+      const st = c.heroState(id);
+      const artes = [...c.hand, ...c.reserve].filter((u) => u && c.categoryOf(u) === 'arte' && c.def(u).owner === id).length;
+      const rel = P.open && id !== P.hero ? c.relayCheck(id) : null;
+      const picking = !!this.pick;
+      const left = c.recoverLeft(id);
+      const mark = picking ? '' : st === 'ACTING' ? '▶' : st === 'RECOVERING' ? num(left, 1) : st === 'COMMITTED' ? '…' : rel && rel.ok ? '⇄' : '';
+      const sig = `${st}|${artes}|${mark}|${rel ? rel.ok + String(rel.reason) : '-'}|${P.open && P.hero === id}|${c.starter() === id}|${picking}|${this.pick && this.pick.def === id}`;
+      if (b._sig !== sig) {
+        b._sig = sig;
+        b.className = `hero-btn owner-${id} st-${st.toLowerCase()}`;
+        const sel = picking ? this.pick.def === id : P.open ? P.hero === id : c.starter() === id;
+        b.classList.toggle('sel', sel);
+        b.classList.toggle('relay', !!(rel && rel.ok) && !picking);
+        b.classList.toggle('locked', !picking && ((P.open && id !== P.hero && !(rel && rel.ok)) || (!P.open && st !== 'READY')));
+        b.classList.toggle('pick', picking);
+        b.querySelector('.hb-a').textContent = '★'.repeat(Math.min(3, artes));
+        b.querySelector('.hb-st').textContent = mark;
+        b.setAttribute('aria-pressed', String(sel));
+        const state = { READY: t('Ready'), ACTIVE: t('Active'), ACTING: t('Acting'), COMMITTED: t('Committed'), RECOVERING: t('Recovering') }[st];
+        b.title = picking ? t('Brace {hero}', { hero: ownerName(id) })
+          : P.open ? (id === P.hero ? t('{hero} · {s} · attacking', { hero: ownerName(id), s: state }) : rel && rel.ok ? t('Relay to {hero} (key {k})', { hero: ownerName(id), k: KEY_OF[id] }) : `${ownerName(id)} · ${rel ? msg(rel.text) : state}`)
+            : t('{hero} · {s} · starts the next combo (key {k})', { hero: ownerName(id), s: state, k: KEY_OF[id] });
+      }
+      const bar = b.querySelector('.hb-bar');
+      const f = st === 'RECOVERING' && c.heroes[id].recoverDur > 0 ? 1 - left / c.heroes[id].recoverDur : 0;
+      const w = st === 'RECOVERING' ? `${(f * 100).toFixed(0)}%` : '0%';
+      if (bar._w !== w) { bar._w = w; bar.style.width = w; }
+    }
+    this.pickCancel.hidden = !this.pick;
+    // while the Braced picker is open its hint takes the chips' place
+    this.chipsEl.classList.toggle('picking', !!this.pick);
+    this.nextEl.classList.toggle('picking', !!this.pick);
   }
 
   updateHand() {
@@ -666,12 +830,37 @@ export class BattleScreen {
         }
       }
       s.box.classList.toggle('jammed', c.slotJammed(i));
+      // a committed card leaves a placeholder in its slot until it resolves (tap to cancel while it waits)
+      const held = !uid && c.heldSlots.has(i);
+      let gsig = '';
+      if (held) {
+        const q = c.queue.find((x) => x.zone === 'hand' && x.slot === i);
+        const ex = c.executing && c.executing.cmd.zone === 'hand' && c.executing.cmd.slot === i ? c.executing.cmd : null;
+        const cmd = q || ex;
+        if (cmd) {
+          const d = c.def(cmd.uid);
+          gsig = `${cmd.id}|${q ? 'w' : 'x'}`;
+          if (s.ghostSig !== gsig) {
+            s.ghostSig = gsig;
+            const g = s.box.querySelector('.slot-ghost');
+            g.querySelector('.g-r').textContent = d.category === 'support' ? '✚' : String(cmd.rank);
+            g.querySelector('.g-n').textContent = cardName(d.id);
+            g.querySelector('.g-s').textContent = q ? t('QUEUED #{n} · ↩', { n: c.queue.indexOf(q) + 1 }) : t('ACTING');
+            g.className = `slot-ghost owner-${cmd.hero} ${q ? 'wait' : 'exec'}`;
+          }
+        }
+      }
+      if (!gsig && s.ghostSig) s.ghostSig = undefined;
+      s.box.classList.toggle('held', !!gsig);
       if (!s.el || !uid) continue;
       // live state (single source of truth: combat.check)
       const chk = c.check(uid);
       const locked = c.isLocked(uid);
       const scr = c.isScrambled(uid) || c.wild.has(uid);
-      const st = `${chk.ok ? 'legal' : 'illegal'}|${locked}|${scr}|${chk.text || ''}|${c.effRank(uid)}${c.effVariant(uid)}`;
+      // a recovering performer (or every hero recovering): the card just says when it can be played
+      const why = chk.ok ? '' : chk.reason === 'busy' && chk.text && chk.text.k === '{hero} recovering {s}s' ? t('Ready in {s}s', { s: chk.text.p.s })
+        : chk.reason === 'heroes' ? t('Ready in {s}s', { s: { n: Math.min(...c.party.map((m) => c.recoverLeft(m.id))), d: 1 } }) : msg(chk.text || '');
+      const st = `${chk.ok ? 'legal' : 'illegal'}|${locked}|${scr}|${why}|${c.effRank(uid)}${c.effVariant(uid)}`;
       if (st !== s.state) {
         s.state = st;
         const el = s.el;
@@ -687,7 +876,7 @@ export class BattleScreen {
           el.classList.remove('v-A', 'v-B', 'v-EX');
           el.classList.add(`v-${v}`);
         }
-        s.reasonEl.textContent = !chk.ok && !locked && SHOWN_REASONS.includes(chk.reason) && c.phase !== 'RECOVER' ? msg(chk.text) : '';
+        s.reasonEl.textContent = !chk.ok && !locked && SHOWN_REASONS.includes(chk.reason) && c.phase !== 'RECOVER' ? why : '';
         if (locked) s.lockSrc.textContent = c.locks[uid].source ? enemyName(c.locks[uid].source) : t('Interference');
       }
       if (locked) {

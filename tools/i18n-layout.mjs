@@ -212,7 +212,7 @@ for (const [W, H] of VIEWPORTS) {
     const { ADAPTATIONS } = await import('/src/data/adaptations.js');
     const r = app.run;
     r.d.deck = []; r.d.nextUid = 1;
-    for (const id of ['scrapline', 'hotwire', 'salvage', 'rivet_jab', 'spark_primer', 'gauge_read', 'rethread', 'step_up', 'gear_swap', 'dead_drop', 'relay_baton', 'shuffle_step', 'scrapfall', 'last_word', 'final_notice', 'grand_relay']) r.addCard({ id });
+    for (const id of ['scrapline', 'hotwire', 'salvage', 'rivet_jab', 'spark_primer', 'gauge_read', 'rethread', 'step_up', 'gear_swap', 'dead_drop', 'relay_baton', 'shuffle_step', 'scrapfall', 'last_word', 'final_notice', 'grand_relay', 'hold_the_line']) r.addCard({ id });
     // the widest Churn panel: 6 charges (relic + mutation) plus the FREE badge
     if (!r.d.relics.includes('churn_gear')) r.d.relics.push('churn_gear');
     if (!r.d.mutations.includes('grinder')) r.d.mutations.push('grinder');
@@ -242,6 +242,37 @@ for (const [W, H] of VIEWPORTS) {
     if (r) bs.doStash(r);
   });
   await check('battle-combo', true);
+  // Phase 5: the queue strip with an executing and waiting commands, hand placeholders, a Relay chip,
+  // hero buttons in their states, and the Braced hero picker
+  await ev(() => {
+    const bs = window.__sb.battle;
+    const c = bs.combat;
+    c.hold = 0;
+    for (const e of c.enemies) e.atb = -100;
+    if (c.combo) c.requestEnd('forced');
+    c.phase = 'PRE';
+    c.breatherUntil = 0;
+    for (const h of Object.keys(c.heroes)) c.heroes[h].recoverUntil = 0;
+    c.momentum = 9;
+    c.selectHero('V');
+    const basics = [...c.hand].filter((u) => u && c.categoryOf(u) === 'basic' && !c.isLocked(u)).sort((a, b) => c.effRank(a) - c.effRank(b));
+    for (const u of basics.slice(0, 2)) c.commit(u);
+    c.selectHero('S'); // a Relay request
+    c.heroes.C.recoverUntil = c.t + 2.5;
+    bs.updateHud(true);
+  });
+  await check('battle-queue', true);
+  await ev(() => {
+    const bs = window.__sb.battle;
+    const c = bs.combat;
+    const { CARDS } = { CARDS: null };
+    void CARDS;
+    const u = [...c.hand, ...c.reserve].find((x) => x && c.def(x).targetHero);
+    if (u) bs.startPick(u); else bs.pick = { uid: c.hand.find(Boolean), def: 'C' };
+    bs.updateHud(true);
+  });
+  await check('battle-brace-pick', true);
+  await ev(() => { const bs = window.__sb.battle; bs.pick = null; bs.updateHud(true); });
   // every card name in the Reserve mini-cards, four at a time
   const resGroups = await ev(async () => {
     const { CARD_LIST } = await import('/src/data/cards.js');

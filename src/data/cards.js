@@ -16,8 +16,10 @@
 //   'converted' — reviewed for the new rules; offered by rewards, shops and events
 //   'compat'    — older card kept playable in existing decks with an interim conversion, but not
 //                 offered until its planned conversion (Rewind "techniques", Phase 8)
-//   'withheld'  — depends on Relays (Phase 5); never offered, and save version 5 replaces it with
-//                 `migrate` (same hero and rarity) when an older save is loaded
+//   'withheld'  — never offered; save version 5 replaces it with `migrate` (same hero and rarity)
+//                 when an older save is loaded. Phase 5 restored the Relay cards once the Relay
+//                 command existed; Pressure Valve stays withheld (it is not a Relay card and repeats
+//                 Overpressure at lower value; its redesign belongs to the Phase 8 content pass).
 
 export const CATEGORY_NAMES = { basic: 'Basic', arte: 'Arte', support: 'Support', junk: 'Glitch' };
 export const STRENGTH_NAMES = { 1: 'Weak', 2: 'Medium', 3: 'Strong' };
@@ -440,8 +442,8 @@ card({
 });
 // neutral
 card({
-  id: 'hold_the_line', name: 'Hold the Line', owner: null, category: 'support', cost: 1, variant: 'EX', rarity: 'common', anim: 'guard', glyph: 'shield',
-  v: { s: [6, 9] }, text: 'Brace the hero an enemy is aiming at: +20% Defense for {s}s.', tags: ['guard'],
+  id: 'hold_the_line', name: 'Hold the Line', owner: null, category: 'support', cost: 1, variant: 'EX', rarity: 'common', anim: 'guard', glyph: 'shield', targetHero: true,
+  v: { s: [6, 9] }, text: 'Brace a hero you pick: +20% Defense for {s}s.', tags: ['guard'],
   fx: (A) => A.brace(A.v('s')),
 });
 card({
@@ -450,33 +452,35 @@ card({
   fx: (A) => A.churnGain(A.v('n')),
 });
 
-// ─────────────── WITHHELD UNTIL RELAYS EXIST (Phase 5); replaced on load (save version 5) ───────────────
-// Their definitions and texts are kept for the Phase 5/8 conversion; they are never generated.
+// ─────────────── RELAY CARDS (withheld in Phase 4, restored in Phase 5 with the Relay command) ───────────────
+// A Relay is the explicit hand-off command (docs/COMBAT_SPEC.md §9). "Relay cards" (Chorus Break) are
+// the incoming hero's first cards after each Relay; "allies who joined" are the chain's heroes.
 card({
-  id: 'mirror_wire', name: 'Mirror Wire', owner: 'C', category: 'arte', rank: 4, variant: 'EX', rarity: 'uncommon', anim: 'cast', glyph: 'spiral', p4: 'withheld', migrate: 'feedback_loop',
-  v: { d: [3, 4], p: [50, 75] }, text: 'Deal {d}. The first Relay this combo Echoes the previous card at {p}%.', tags: ['relay'],
+  id: 'mirror_wire', name: 'Mirror Wire', owner: 'C', category: 'arte', rank: 4, variant: 'EX', rarity: 'uncommon', anim: 'cast', glyph: 'spiral',
+  v: { d: [3, 4], p: [50, 75] }, text: 'Deal {d}. The first Relay this combo Echoes the last attack {p}%.', tags: ['relay'],
   fx: (A) => { A.dmg(A.v('d')); A.ctxSet('relayEcho', A.v('p') / 100); },
 });
 card({
-  id: 'hand_off', name: 'Hand Off', category: 'basic', rank: 2, variant: 'EX', rarity: 'common', anim: 'buff', glyph: 'hook', p4: 'withheld', migrate: 'hotwire',
-  v: { p: [40, 60] }, text: 'Gain 1 Momentum. If the next card is a Relay, it Echoes at {p}%.', tags: ['relay'],
+  id: 'hand_off', name: 'Hand Off', category: 'basic', rank: 2, variant: 'EX', rarity: 'common', anim: 'buff', glyph: 'hook',
+  v: { p: [40, 60] }, text: 'Gain 1 Momentum. If a Relay follows, it Echoes the last attack at {p}%.', tags: ['relay'],
   fx: (A) => { A.mom(1); A.ctxSet('nextRelayEcho', A.v('p') / 100); },
 });
 card({
-  id: 'relay_baton', name: 'Relay Baton', owner: 'S', category: 'arte', rank: 5, variant: 'B', rarity: 'rare', anim: 'buff', glyph: 'hook', p4: 'withheld', migrate: 'deadeye_set',
-  v: { f: [0.2, 0.3] }, text: 'For each different ally who has acted this combo: +1 Momentum and +{f}s Flow.', tags: ['flow', 'relay'],
+  id: 'relay_baton', name: 'Relay Baton', owner: 'S', category: 'arte', rank: 5, variant: 'B', rarity: 'rare', anim: 'buff', glyph: 'hook',
+  v: { f: [0.2, 0.3] }, text: 'For each hero who joined this combo: +1 Momentum and +{f}s Flow.', tags: ['flow', 'relay'],
   fx: (A) => { const n = A.ctx.owners.length; A.mom(n); A.flow(n * A.v('f')); },
 });
 card({
-  id: 'chorus_break', name: 'Chorus Break', owner: 'C', category: 'arte', rank: 6, variant: 'A', rarity: 'uncommon', anim: 'cast', glyph: 'wave', p4: 'withheld', migrate: 'feedback_loop',
-  v: { p: [50, 70], d: [4, 6] }, text: 'Deal {d}. Echo every Relay card this combo at {p}%.', tags: ['relay'],
+  id: 'chorus_break', name: 'Chorus Break', owner: 'C', category: 'arte', rank: 6, variant: 'A', rarity: 'uncommon', anim: 'cast', glyph: 'wave',
+  v: { p: [50, 70], d: [4, 6] }, text: 'Deal {d}. Echo each first card after a Relay this combo at {p}%.', tags: ['relay'],
   fx: (A) => { A.dmg(A.v('d')); A.ctx.cards.forEach((e, i) => { if (e.relay && i < A.ctx.cards.length - 1) A.echo(i, A.v('p') / 100); }); },
 });
 card({
-  id: 'grand_relay', name: 'Grand Relay', owner: 'S', category: 'arte', rank: 6, variant: 'EX', rarity: 'rare', anim: 'shoot', glyph: 'star', p4: 'withheld', migrate: 'ladder_peak',
-  v: { d: [10, 13] }, text: 'Deal {d} per different ally who acted this combo. All three: hits ALL enemies.', tags: ['relay'],
+  id: 'grand_relay', name: 'Grand Relay', owner: 'S', category: 'arte', rank: 6, variant: 'EX', rarity: 'rare', anim: 'shoot', glyph: 'star',
+  v: { d: [10, 13] }, text: 'Deal {d} per hero who joined this combo. All three: hits ALL enemies.', tags: ['relay'],
   fx: (A) => { const n = A.ctx.owners.length; A.dmg(A.v('d') * n, { all: n >= 3 }); },
 });
+// still withheld: not a Relay card; repeats Overpressure at a lower value (Phase 8 redesign)
 card({
   id: 'pressure_valve', name: 'Pressure Valve', owner: 'C', category: 'arte', rank: 5, variant: 'A', rarity: 'uncommon', anim: 'cast', glyph: 'flame', p4: 'withheld', migrate: 'overpressure',
   v: { d: [3, 4] }, text: 'Spend all Momentum: deal {d} per point.', tags: ['momentum'],
@@ -511,7 +515,12 @@ export function rewardPool() {
 
 // Save version 5 card migration (docs/COMBAT_SPEC.md §19): withheld cards become a converted card of the
 // same hero and rarity; unknown ids become a Medium basic attack.
-export const MIGRATE_CARDS = Object.fromEntries(C.filter((c) => c.p4 === 'withheld').map((c) => [c.id, c.migrate]));
+// The table is the one Phase 4 shipped and stays fixed: a version-3 or version-4 save converts exactly
+// as it did in 0.2.4, including the Relay cards Phase 5 has since restored.
+export const MIGRATE_CARDS = {
+  mirror_wire: 'feedback_loop', hand_off: 'hotwire', relay_baton: 'deadeye_set',
+  chorus_break: 'feedback_loop', grand_relay: 'ladder_peak', pressure_valve: 'overpressure',
+};
 export const UNKNOWN_CARD_FALLBACK = 'rivet_jab';
 
 export function cardValue(def, up, key) {
@@ -525,7 +534,7 @@ export const GRAFTS = {
   spark: { name: 'Spark', text: '+1 Momentum when played.', tag: 'momentum' },
   quick: { name: 'Quick', text: '+0.5s Flow when played.', tag: 'flow' },
   plated: { name: 'Plated', text: '+3 Guard when played.', tag: 'guard' },
-  echoing: { name: 'Echoing', text: 'As a Relay, Echoes itself at 30%.', tag: 'relay', p4: 'withheld' },
+  echoing: { name: 'Echoing', text: 'As the first card after a Relay, Echoes itself at 30%.', tag: 'relay' },
   keen: { name: 'Keen', text: '+3 damage to its first hit.', tag: 'ladder' },
   cached: { name: 'Cached', text: '+50% power when played from Reserve.', tag: 'reserve' },
   churnfed: { name: 'Churnfed', text: 'When Churned: +1 Momentum and +2 Guard.', tag: 'churn' },
@@ -533,5 +542,5 @@ export const GRAFTS = {
   anchored: { name: 'Anchored', text: 'Cannot be Locked or Scrambled.', tag: 'interference' },
   ledger: { name: 'Ledger', text: 'Cash Out payout +3 if this card is in the combo.', tag: 'cashout' },
 };
-// Grafts that rewards, events and surgery may offer (Echoing needs Relays, Phase 5).
+// Grafts that rewards, events and surgery may offer.
 export const graftPool = () => Object.keys(GRAFTS).filter((g) => GRAFTS[g].p4 !== 'withheld');

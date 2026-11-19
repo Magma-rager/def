@@ -7,7 +7,7 @@ export const RELICS = {
 
   junk_dividend: { name: 'Junk Dividend', rarity: 'uncommon', icon: 'coin', tag: 'cashout', text: 'Each Cash Out: +1 Momentum and 3 Scrap (max 15 Scrap per battle).' },
   heat_shield: { name: 'Heat Shield', rarity: 'uncommon', icon: 'shield', tag: 'guard', text: 'When Guard fully absorbs an enemy hit, apply 2 Scorch to the attacker.' },
-  echo_splice: { name: 'Echo Splice', rarity: 'rare', icon: 'spiral', tag: 'relay', text: 'The first Relay each combo Echoes the previous card at 40%.', p4: 'withheld' },
+  echo_splice: { name: 'Echo Splice', rarity: 'rare', icon: 'spiral', tag: 'relay', text: 'The first Relay each combo Echoes the last attack at 40%.' },
   breach_clamp: { name: 'Breach Clamp', rarity: 'uncommon', icon: 'chain', tag: 'interference', text: 'When an enemy Locks or Scrambles your cards: +1 Momentum and +3 Guard. Locks last 1s less.' },
 
   brass_metronome: { name: 'Brass Metronome', rarity: 'common', icon: 'clock', tag: 'flow', text: 'Natural Flow refunds are a third larger: 1.33s per card (the 5s refund cap still applies).' },
@@ -28,7 +28,7 @@ export const RELICS = {
   patch_kit: { name: 'Patch Kit', rarity: 'common', icon: 'cross', tag: 'guard', text: 'After each battle, the party heals 12 HP.' },
   counter_spring: { name: 'Counter Spring', rarity: 'uncommon', icon: 'spring', tag: 'guard', text: 'Counter damage is doubled.' },
   long_fuse: { name: 'Long Fuse', rarity: 'rare', icon: 'flame', tag: 'cashout', text: 'When Flow runs out, the combo pays out at 50% instead of dropping (no Momentum loss).' },
-  relay_harness: { name: 'Relay Harness', rarity: 'rare', icon: 'hook', tag: 'relay', text: 'Each Relay gives later cards in the combo +2 damage (stacking).', p4: 'withheld' },
+  relay_harness: { name: 'Relay Harness', rarity: 'rare', icon: 'hook', tag: 'relay', text: 'Each Relay gives later cards in the combo +2 damage (stacking).' },
   scrap_magnet: { name: 'Scrap Magnet', rarity: 'common', icon: 'magnet', tag: null, text: '+25% Scrap from battles.' },
   wild_hinge: { name: 'Wild Hinge', rarity: 'rare', icon: 'prism', tag: 'variant', text: 'Every Cross also counts as a Step.' },
   iron_filings: { name: 'Iron Filings', rarity: 'common', icon: 'shield', tag: 'guard', text: 'Each basic attack played grants 1 Guard.' },
@@ -57,5 +57,5 @@ export const STARTER_OPTIONS = [
   { id: 'beta_badge', unlock: null, hint: 'Default' },
   { id: 'stopwatch_gear', unlock: 'boss1', hint: 'Defeat any Act I boss' },
   { id: 'pressure_gauge', unlock: 'runs3', hint: 'Finish 3 runs (win or lose)' },
-  { id: 'spare_pockets', unlock: 'win', hint: 'Win a run' },
+  { id: 'echo_splice', unlock: 'win', hint: 'Win a run' },
 ];

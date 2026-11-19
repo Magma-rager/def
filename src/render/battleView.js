@@ -228,6 +228,8 @@ export class BattleView {
         case 'heal': this.onHeal(ev); break;
         case 'status': this.onStatus(ev); break;
         case 'relay': this.onRelay(ev); break;
+        case 'relayStart': this.onRelayStart(ev); break;
+        case 'recover': if (ev.why === 'support') this.floatAt(ev.who, tr('RECOVERING'), '#9aa7b8', 10); break;
         case 'comboStart': this.sfx('comboStart'); break;
         case 'comboEnd': this.onComboEnd(ev); break;
         case 'cashout': this.onCashout(ev); break;
@@ -450,14 +452,23 @@ export class BattleView {
     this.enemyNumber(a, names[ev.kind] || ev.kind.toUpperCase(), colors[ev.kind] || '#fff', 11);
   }
 
-  onRelay(ev) {
-    const from = this.lastActor;
-    if (!from || from === ev.to) return;
-    const [x1, y1] = this.partyPos(from);
+  // The Relay command: the outgoing hero hands the chain over (relayStart, the hand-off motion), then the
+  // incoming hero takes it (relay, when the command resolves) with the Relay count and bonus.
+  onRelayStart(ev) {
+    const actor = this.actors[ev.from];
+    if (actor) actor.play('buff');
+    const [x1, y1] = this.partyPos(ev.from);
     const [x2, y2] = this.partyPos(ev.to);
     const k = this.unit();
     this.fx.push({ kind: 'relay', x1, y1: y1 - 60 * k, x2, y2: y2 - 60 * k, t: 0, dur: 0.45, color: OWNER_COLORS[ev.to] });
-    this.floatAt(ev.to, tr('RELAY'), OWNER_COLORS[ev.to], 13);
+    this.sfx('whoosh');
+  }
+  onRelay(ev) {
+    const from = ev.from || this.lastActor;
+    if (!from || from === ev.to) return;
+    this.sparkleOn(ev.to, OWNER_COLORS[ev.to]);
+    this.floatAt(ev.to, tr('RELAY {n} · +{b}%', { n: ev.n || 1, b: ev.bonus || 0 }), OWNER_COLORS[ev.to], 14);
+    this.zoom = Math.max(this.zoom, 0.03);
     this.sfx('relay');
   }
 
@@ -1266,6 +1277,15 @@ export class BattleView {
         roundRect(ctx, px - 1, by - 2, pw + 2, fs + 7, 5);
         ctx.stroke();
         ctx.restore();
+      }
+      // hero Recovery (docs/COMBAT_SPEC.md §7): a thin bar under the plate fills until the hero is Ready
+      if (c.heroState(p.id) === 'RECOVERING') {
+        const hs = c.heroes[p.id];
+        const f = hs.recoverDur > 0 ? Math.max(0, Math.min(1, 1 - c.recoverLeft(p.id) / hs.recoverDur)) : 1;
+        ctx.fillStyle = 'rgba(20,8,14,0.85)';
+        ctx.fillRect(px + 2, by + fs + 5, pw - 4, 3);
+        ctx.fillStyle = '#9aa7b8';
+        ctx.fillRect(px + 2, by + fs + 5, (pw - 4) * f, 3);
       }
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';

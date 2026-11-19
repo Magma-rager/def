@@ -84,7 +84,7 @@ export function cardEl(inst, opts = {}) {
       <div class="card-top">
         <span class="rank">${off ? rank : def.category === 'support' ? '✚' : '–'}</span>
         ${off ? `<span class="var">${variant}</span>` : ''}
-        <span class="role-tag" title="${esc(categoryName(def.category))}"><i>${CAT_GLYPH[def.category]}</i><span class="rt-word">${esc(catWord)}</span></span>
+        <span class="role-tag" title="${esc(categoryName(def.category))}"><i>${CAT_GLYPH[def.category]}</i><span class="rt-word">${esc(catWord)}</span>${def.category === 'basic' ? `<span class="rt-cost gain">+${def.gain}</span>` : def.cost > 0 ? `<span class="rt-cost">${def.cost}</span>` : ''}</span>
       </div>
       <div class="card-art"${def.owner && vignette(def.owner, def.anim) ? ` style="--vig:url(${vignette(def.owner, def.anim)})"` : ''}>${artSvg(def)}<span class="owner-chip${owner === 'N' ? ' any' : ''}">${chip}</span>${costBadge(def)}${def.rarity === 'rare' ? '<span class="rare-gem"></span>' : ''}</div>
       <div class="card-name"><span class="name-owner">${owner === 'N' ? '◇' : owner === 'X' ? '!' : ownerInitial(owner)}</span>${esc(cardName(def.id))}${inst.up ? '<sup>+</sup>' : ''}</div>
@@ -151,7 +151,7 @@ export function fitCard(el) {
     const min = document.documentElement.classList.contains('narrow') ? 0.6 : 0.7;
     fitText(el.querySelector('.card-text'), min, () => frame.scrollHeight > frame.clientHeight + 1);
   };
-  el.classList.remove('chip-out');
+  el.classList.remove('chip-out', 'cost-out');
   fitAll();
   // a long text can squeeze the art band below the hero initial: show the initial before the name
   const art = el.querySelector('.card-art');
@@ -160,6 +160,9 @@ export function fitCard(el) {
     el.classList.add('chip-out');
     fitAll();
   }
+  // ...or below the cost badge: show the cost in the top tag instead of the category word
+  const badge = art && art.querySelector('.cost, .gain');
+  if (badge && art.clientHeight < badge.offsetHeight + 2) el.classList.add('cost-out');
 }
 
 export function cardTooltip(inst) {
