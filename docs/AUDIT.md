@@ -347,6 +347,89 @@ Specification: `docs/COMBAT_SPEC.md` §7, §7.1, §9, §10, §11.3, §12, §13, 
 
 **Still for human judgment:** whether the queue and the hero states are understood without explanation; whether Recovery feels like tactical downtime or like waiting; whether Relays are recognised and worth their risk (a Relay late in the decision window can turn a Perfect into a Dropped combo); whether very slow players can use Relays at all (they mostly cannot within the current window) and whether Tactical timing helps them; whether support's Recovery cost makes support too weak or right; whether the game is now too hard for fast players (Act I retuning belongs to Phase 6).
 
+## Revised roadmap, Phase 6: Act I onboarding, Relay accessibility, Act I tuning and telegraphs (0.2.6, 2026-11-21)
+
+Specification: `docs/COMBAT_SPEC.md` §27. Reference build for regressions: 0.2.5 (source `b702145`, build `51d2e4d`; `git checkout 51d2e4d` restores it). Before/after comparisons below ran the same Phase 6 tools on both builds (the 0.2.5 tree with the new `tools/` copied in), with the same seeds. Nothing here has been judged by human players (`docs/PLAYTEST.md` is the test plan).
+
+**Baseline reproduced first.** `tools/simulate.mjs 30 0.55 quick` and `30 1.0 regular` on 0.2.5 gave exactly the reported 26/30 (4.6 HP per battle) and 19/30 (9.0); `tools/pacing.mjs 30 --pace=2.5` reproduced the slow player's 0–4% (checking Flow before a Relay) and, with `SB_NAIVE_RELAY=1`, 31% (tutorial) and 26% (two hounds). Every quick-player loss in those 30 runs was in Act III (Signalbreak Core 3, a Signal Hound pack 1); none in Act I.
+
+**Measurement model.** The 0.2.5 pacing bot played the card after a Relay the moment the Relay finished executing (no time to find the incoming hero's basic attack). Phase 6 tools default to model p6, where a Relay is a decision like a card and the next command comes one card-pace later; `--model=p5` reproduces the old figures. Results under both models are given where they matter.
+
+### Relay accessibility
+
+*Diagnosis* (`tools/relaylab.mjs`, opening fights, 2.5s per card, a player who relays whenever another Ready hero has an arte — "active" — 0.2.5): Flow left when the Relay was tapped 2.2–2.5s; the incoming hero's basic attack came 2.0–2.1s after the hand-off (of which 1.2s was held) and their arte 4.4–4.7s after it; only 46–56% of incoming segments reached an arte; 34% of chains with a Relay were dropped, most of them in the second hero's segment (0.45 drops per battle, against 0.15 before any Relay and 0.08 in a third segment). By Flow left at the tap: under 1s 29% of those chains dropped, 1–2s 55%, 2–3s 20%, 3s+ 19% — a Relay with 1–2s left usually leaves time for the incoming basic attack but not for the arte, turning a Perfect into a Dropped combo. Traced chains showed the three causes: Relays with almost no Flow, a mistaken tap, and the incoming segment running out between its basic attack and its arte.
+
+*Controlled experiments* (each one rule changed, nothing shipped this way; 30 battles per fight unless noted, so differences of a few points are noise):
+
+| Change | Active 2.5s dropped (worst fight) | Note |
+|---|---|---|
+| none (0.2.5), 30 / 100 / 200 battles | 26% (35%) / 30% (35%) / 27% (29%) | |
+| Relay hold 1.2 → 2.0s | 25% (31%); 100 battles: 30% (32%) | barely helps: the gap is after the incoming basic attack |
+| Relay hold 2.5s / 3.0s | 22% (30%) / 20% (27%) | |
+| Relay refunds 1.0s | 33% (41%) | worse: the extra time funds a third segment that then drops |
+| Relay hold ends at the incoming hero's first commit (2.5s / 3.0s) | 24% / 25% | |
+| Flow topped up to 1.5 / 2.0 / 2.5s at a Relay | 32% / 28% / 29% | worse, for the same reason |
+| hold 2.0s + top-up 2.0s (100 battles) | 26% (29%) | |
+| **incoming hero's first card opens the opener's 1.2s hold** (100 battles) | **14% (17%)** | |
+| the same + Relay hold 2.0s (100 battles) | 13% (17%) | no meaningful gain over the hold alone |
+
+*Shipped:* `SEGMENT_READ_GRACE` = 1.2s — the hold the chain's first card has always had, given to the first card of each incoming segment (at most twice per chain; holds stay outside the 14s counted cap). The unused experiment switches were removed. Interface: an amber ⇄! (little Flow left; FINISH or CASH OUT is safer) and the *little Flow left* lesson.
+
+*Result* (`tools/relaylab.mjs 200 --seed0=1000 --quick`, 200 battles per fight and player, seeds 1001–1200; dropped = each battle's share of dropped chains, averaged, as in R2):
+
+| Player | 0.2.5 dropped (worst fight) | 0.2.6 dropped (worst fight) | Relays per battle | chains with a Relay | completed multi-hero chains per battle | drops after a Relay |
+|---|---|---|---|---|---|---|
+| active 1.3s | 2% (2%) | 2% (2%) | 2.09 → 2.09 | 70% → 70% | 0.93 → 0.93 | 0% → 0% |
+| active 2.0s | 12% (16%) | 6% (7%) | 2.24 → 2.17 | 67% → 66% | 0.93 → 0.94 | 14% → 5% |
+| **active 2.5s** | **27% (29%)** | **14% (18%)** | **2.31 → 2.22** | **64% → 61%** | **1.06 → 1.11** | **34% → 16%** |
+| active 3.0s | 44% (46%) | 25% (26%) | 2.34 → 2.13 | 58% → 54% | 0.92 → 1.26 | 56% → 26% |
+| careful 2.5s (checks Flow ≥4s) | 5% (6%) | 5% (6%) | 0.15 → 0.15 | 3% → 3% | 0.09 → 0.10 | 15% → 4% |
+| careful 2.0s | 3% (4%) | 2% (3%) | 1.06 → 1.13 | 28% → 26% | 0.75 → 0.69 | 2% → 1% |
+| no Relays 2.5s / 3.0s | 5% / 10% | 5% / 10% | 0 | 0 | 0 | — |
+| quick (0.4s, 3 queued) | 0% | 0% | 3.21 → 3.21 | 100% | 0.85 → 0.85 | 0% |
+
+Active 2.5s, per fight: 24–29% → 11–18%; incoming segments reaching an arte 46–56% → 59–72%. Under the 0.2.5 model (p5, 100 battles): 20% (23%) → 14% (18%). In the pacing tool (p6 model, 60 battles, `SB_NAIVE_RELAY=1`) the same player's drops over every Act I fight went from 23–35% to 12–18%. **R2 now passes for a player who actively relays (14%, worst opening fight 18%, at 2.2 Relays per battle)**; the improvement does not come from fewer Relay attempts (2.31 → 2.22 per battle, 64% → 61% of chains). Remaining limits: a 3.0s active player still drops 25%; a careful slow player rarely relays at all (the bot's rule waits for 4s of Flow); the bots' decision model, not human behaviour, sets these numbers.
+
+### Hound Mother
+
+*Observed (0.2.5, `tools/fightlab.mjs hound_mother 60`):* the very slow player (2.5s) won 2% and lost all HP by 72s; enemies acted 27.6 times a minute for 129 damage a minute (Foundry Warden: 5.4 and 36). The starting hound and the summoned one dealt 110 of 154 damage taken (71%), the Mother 44. Summons: exactly 1 per fight — the whelp rule caps the field at 3 and the bots never kill a hound, because they never change target: they hit the Mother (the default target) all fight.
+
+*Controlled:* with a target habit that taps the enemy dealing the most damage for its HP (hounds first), the learner's HP loss fell 53% → 36% and the ordinary player's 25% → 12%, but the slow player still won only 3%: the Mother whelped every time a hound died, 8.5 times in a 213s fight — new hounds' HP arrived about as fast as the slow player dealt damage (2.3 per second), so she was never reached. Turning hero Recovery off changed nothing for the slow player (2.3 damage per second either way): the cause is the unlimited full-size replacement, not the Phase 5 economy. Variants (60 battles; win / HP lost of max; hounds first):
+
+| Variant | slow 2.5s full HP | slow 2.5s at 70% HP | learner | ordinary | quick |
+|---|---|---|---|---|---|
+| 0.2.5 | 3% / 99% (213s, 8.5 summons) | 0% / 70% | 100% / 36% | 100% / 12% | 100% / 3% |
+| at most 2 litters | 90% / 84% | 27% / 68% | 100% / 39% | 100% / 13% | 100% / 3% |
+| at most 3 litters | 67% / 89% | 12% / 69% | 100% / 38% | 100% / 12% | 100% / 3% |
+| whelps at 60% HP | 100% / 59% (176s, 7.1 summons) | 93% / 45% | 100% / 24% | 100% / 8% | 100% / 2% |
+| **3 litters + whelps at 60% HP** | **98% / 69% (129s, 3.0 summons)** | **75% / 58%** | **100% / 24%** | **100% / 8%** | **100% / 2%** |
+
+*Shipped:* at most 3 litters per fight, whelps at 60% of a Rush Hound's HP. She still opens by whelping, Rallies (+30% ATB) and Mauls; the fight still punishes ignoring the pack: a player who keeps hitting the Mother at 2.5s per card still loses (2%, all HP), unchanged, because the two hounds on the field from the start do the damage. A *summons* lesson (tap a summon to target it, or race the summoner) and the hold-to-read panel are the counters the game now teaches. A unit test kills every whelp at once for 400s: exactly 3 litters, never more than 3 enemies.
+
+### Act I encounters and bosses
+
+All Act I formations, both elites' other numbers and both bosses are unchanged; the formation table still introduces one interference type at depth 0 (unit test). `tools/pacing.mjs 60 --act1 --pace=2.5` (p6 model, bots that never retarget), 0.2.5 → 0.2.6, win / HP lost: learner every fight 100% won, HP lost unchanged within a point (tutorial 3%, d0 two hounds 12%, d4 snare + hound + jammer 21%, Foundry Warden 18%, Hound Mother 52 → 53%, Scrap Tyrant 48%, Clockwork Regent 48 → 49%); ordinary player 1–28%, quick 0–10%, unchanged. Slow 2.5s careful player: opening fights 100% won, 6–25% HP lost, 3–6% dropped, unchanged; Scrap Tyrant 53 → 62% won, Clockwork Regent 27 → 28%.
+
+*Scrap Tyrant* (`tools/fightlab.mjs scrap_tyrant 60`): quick 100% / 10% HP lost, ordinary 100% / 24%, learner 100% / 48%, slow 2.5s 62% won (no Relays 75%, relaying at every chance 2%); starting at 70% HP: slow 25%; with Tactical timing and 70% HP: slow 100% / 16%, learner 100% / 14%. Its Guard (Scrap Barrier 22, Grind Gears 10, regenerating in phase 2 where Pierce hits double) is the fight's identity; the *enemy Guard* lesson and the hold panel explain it. No change: the challenge scales with the player's speed and Tactical timing makes it winnable for the slowest player.
+
+*Clockwork Regent* (`tools/fightlab.mjs clockwork_regent 60`): quick 100% / 6%, ordinary 100% / 28%, learner 100% / 49%, slow 2.5s 28% won (2% relaying at every chance); with Tactical timing slow 100% / 42% (70% HP start: 100% / 23%). Tempo Theft stole Flow 5.2 times (6.2s) per fight from the slow player and 1.0 time from the quick one; the slow player's dropped share was 9% against 7% in the Tyrant fight. The theft is now telegraphed (red end of the Flow bar, "THEFT −1.2s", the *Flow theft* lesson) so it no longer arrives unannounced; its strength is unchanged.
+
+*Competent players:* the quick bot loses 0–12% HP in every Act I fight and the ordinary bot 1–28%; Act I stays a real but beatable challenge for an ordinary player and is easy for the superhuman quick bot (0.4s per decision, 3 commands queued), as before.
+
+### Support and combo balance
+
+Support was not changed. Measured (`tools/fightlab.mjs`, support cards in hand at every decision): playable 17–32% of the time, waiting for a busy or recovering hero 65–83%, short of Momentum 0–5% — the binding cost is the hero's availability (the Phase 5 design), not Momentum, and every support card still gets played (1–8 per fight; Salvage most, Mend Circuit when hurt). Full runs (quick player): 5.9 support, 17.8 basic attacks and 8.6 artes per battle; chains of 1/2/3 heroes 35% / 32% / 34%; 3.68 cards and 1.22 artes per chain; Perfect 60%, Cash Out 37%, Dropped 3% — all within noise of 0.2.5 (3.67 cards, 1.22 artes, Perfect 61%, Cash Out 36%). Perfect, Cash Out and Relays all stay in use; nothing indicates one dominant ending.
+
+### Full runs
+
+`tools/simulate.mjs 30`: quick 26/30 → 28/30 won, 4.6 → 4.3 HP per battle, 36.4 → 36.6s per battle; ordinary 19/30 → 18/30, 9.0 → 9.3 HP, 53.0 → 52.9s. One or two runs in 30 is within noise; no Act I deaths in either build; losses are at Signalbreak Core (Act III) as before. Time per battle (quick): deciding 2.6 → 2.3s, holds 1.7 → 2.3s (the new hold), executing 22.6s, breathers 6.0s. Integrity checks every action: 0 failures.
+
+### Onboarding
+
+The 0.2.5 tutorial was five pause cards in the first battle — "THE RELAY" before the first attack (hand, enemies, targets, hero buttons, arte stars, basic attacks and the queue in one card), then COMBO STARTED, ARTE READY, MORE TOOLS (Recovery, support, Churn, Reserve, Cash Out, next card) and RELAY — plus five interference cards. 0.2.6 replaces them with 27 one-idea lessons triggered by the battle state (§27 lists every trigger), spotlighting the control they explain, at least 2s apart, at most 14 in the first battle and 3 in later ones; late lessons (Cash Out, little Flow left, heavy hit, area attacks, summons, enemy Guard, Flow theft, boss) never appear in the first battle. Skip (a confirming second tap), replay (Settings), rereading (How to Play) and returning-player migration as in §27. A lesson card ignores input for its first 0.45s so a tap meant for a card cannot dismiss or skip it (found by the acceptance run, below).
+
+PHASE6_RESULTS_PLACEHOLDER
+
 ## Version
 
 Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exit gate has passed with evidence here; the patch number counts published builds with changes since that gate; `1.0.0` is the Phase 9 release. The title tagline, the "Patch Notes" event, `package.json` and the iOS project all show the same number (enforced by a test).

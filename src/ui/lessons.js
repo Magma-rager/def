@@ -9,6 +9,7 @@
 //   { slot: i } a hand slot · { reserve: i } a Reserve card · { hero: id } a hero button ·
 //   { fieldHero: id } a hero on the field · { enemy: uid } an enemy · { ui: name } a control
 //   ('cash', 'guard', 'flow', 'momentum', 'reserve', 'queueWait', 'hand').
+// `late` lessons (decisions for later fights and the boss) never appear in the first battle.
 // `need` orders lessons only where one builds on another; a lesson whose moment never comes simply
 // waits for a later battle, so no lesson can block the run. The battle screen decides how many
 // lessons one battle may show and how far apart (LESSON_PACE).
@@ -22,7 +23,7 @@ const playable = (c, u) => c.check(u).ok;
 
 export const LESSON_PACE = {
   gap: 2.0, // seconds of battle time between two lessons
-  perBattle: { tutorial: 8, normal: 3 }, // most lessons one battle shows
+  perBattle: { tutorial: 14, normal: 3 }, // most lessons one battle shows (an upper bound: each needs its moment)
 };
 
 export const LESSONS = [
@@ -149,7 +150,7 @@ export const LESSONS = [
     key: 'reserve', intro: true, need: ['attack'], title: 'RESERVE',
     body: '<b>Swipe a card up</b> to keep it in <b>Reserve</b> (2 slots). It stays out of the hand until you play it — an arte saved for its hero\'s next combo, for instance.',
     when: (c) => {
-      if (c.phase !== 'ACTIVE' || c.history.length < 2 || c.reserve.length >= c.reserveMax() || c.reserveLatchUntil > c.t) return null;
+      if (c.phase !== 'ACTIVE' || !c.history.length || c.reserve.length >= c.reserveMax() || c.reserveLatchUntil > c.t) return null;
       const P = c.proj();
       if (!P.open) return null;
       const u = c.hand.find((x) => x && c.categoryOf(x) === 'arte' && c.def(x).owner !== P.hero && !c.isLocked(x) && !c.relayCheck(c.def(x).owner).ok && c.canStash(x));
@@ -158,7 +159,7 @@ export const LESSONS = [
   },
   // ── Lesson 8: decisions that matter by the Act I boss (also shown to returning players) ──
   {
-    key: 'cashout', need: ['ranks'], title: 'CASH OUT',
+    key: 'cashout', late: true, need: ['ranks'], title: 'CASH OUT',
     body: 'Low on Flow? <b>CASH OUT</b> ends the combo now for a payout (more with 2.5s+ Flow left). A combo that runs out after a basic attack is <b>Dropped</b>: no payout and −2 Momentum.',
     when: (c) => {
       if (c.phase !== 'ACTIVE' || c.executing || c.flowHeld() || c.flowLeft() >= 2.2) return null;
@@ -167,7 +168,7 @@ export const LESSONS = [
     },
   },
   {
-    key: 'lateRelay', need: ['relay'], title: 'LITTLE FLOW LEFT',
+    key: 'lateRelay', late: true, need: ['relay'], title: 'LITTLE FLOW LEFT',
     body: 'A Relay now may not leave the next hero time for a basic attack and an arte. <b>FINISH</b> banks this Perfect — finishing early is often the right call.',
     when: (c) => {
       if (c.phase !== 'ACTIVE' || c.flowHeld() || c.flowLeft() >= 1.6) return null;
@@ -177,7 +178,7 @@ export const LESSONS = [
     },
   },
   {
-    key: 'bigHit', need: ['enemies'], title: 'HEAVY HIT',
+    key: 'bigHit', late: true, need: ['enemies'], title: 'HEAVY HIT',
     body: 'A heavy attack is winding up: the red ring and ▼ show the damage after that hero\'s Defense. <b>Guard</b> absorbs it, <b>Hold the Line</b> braces a hero, and Hessa\'s Cover takes it on her shield.',
     when: (c) => {
       for (const e of c.aliveEnemies()) {
@@ -189,22 +190,22 @@ export const LESSONS = [
     },
   },
   {
-    key: 'area', need: ['enemies'], title: 'HITS EVERY HERO',
+    key: 'area', late: true, need: ['enemies'], title: 'HITS EVERY HERO',
     body: 'This attack hits <b>all three heroes</b>. The bubble shows the hit on each; each hero\'s Defense reduces their part, and Guard absorbs the total once.',
     when: (c) => { const e = c.aliveEnemies().find((x) => x.intent && x.intent.kind === 'aoe' && x.intent.dmg > 0 && x.atb >= 0.5); return e ? { enemy: e.uid } : null; },
   },
   {
-    key: 'summon', title: 'SUMMONS',
+    key: 'summon', late: true, title: 'SUMMONS',
     body: 'A new enemy joined the fight. Summons are small but hit often: <b>tap one</b> to make it your target, or race the summoner — the gold brackets decide who your attacks hit.',
     when: (c) => { const e = c.aliveEnemies().find((x) => x.summoned); return e ? { enemy: e.uid } : null; },
   },
   {
-    key: 'enemyGuard', title: 'ENEMY GUARD',
+    key: 'enemyGuard', late: true, title: 'ENEMY GUARD',
     body: 'This enemy is shielded: its <b>Guard</b> (the number on its bar) absorbs your hits until it breaks. Big hits break it; cards that <b>Pierce</b> ignore it.',
     when: (c) => { const e = c.aliveEnemies().find((x) => x.guard >= 10); return e ? { enemy: e.uid } : null; },
   },
   {
-    key: 'drain', title: 'FLOW THEFT',
+    key: 'drain', late: true, title: 'FLOW THEFT',
     body: 'This enemy is about to <b>steal Flow</b> from your combo (hourglass bubble; the red part of the Flow bar). Finish or Cash Out before it acts, or keep a second to spare.',
     when: (c) => {
       if (!c.combo) return null;
@@ -213,7 +214,7 @@ export const LESSONS = [
     },
   },
   {
-    key: 'boss', title: 'BOSS',
+    key: 'boss', late: true, title: 'BOSS',
     body: 'Bosses change phase (banner) and adapt to your habits. Read each intent bubble, end combos before big hits, Churn dead cards between combos, and keep Guard for the heavy blows.',
     when: (c, x) => (x.kind === 'boss' && c.t < 4 && c.aliveEnemies()[0] ? { enemy: c.aliveEnemies()[0].uid } : null),
   },
@@ -262,12 +263,13 @@ export function migrateLessons(meta) {
 }
 
 // The first lesson that is relevant now and not seen yet, or null. `x`: { seen: Set or object of
-// seen keys, flags: { busyTap }, kind: 'normal' | 'elite' | 'boss' }.
+// seen keys, flags: { busyTap }, kind: 'normal' | 'elite' | 'boss', tutorial: the first battle }.
 export function pickLesson(c, x) {
   if (!c || c.phase === 'END') return null;
   const seen = (k) => (x.seen instanceof Set ? x.seen.has(k) : !!(x.seen && x.seen[k]));
   for (const L of LESSONS) {
     if (seen(L.key)) continue;
+    if (L.late && x.tutorial) continue;
     if (L.need && !L.need.every(seen)) continue;
     const anchor = L.when(c, x);
     if (anchor) return { lesson: L, anchor };

@@ -297,3 +297,13 @@ test('the enemy panel numbers are what the hits take: single hits after Defense,
   assert.equal(hp - c.hp, parts.reduce((a, b) => a + b, 0), 'the area total is the sum of the per-hero parts');
   assert.ok(parts.reduce((a, b) => a + b, 0) < e.intent.dmg * 3, 'and less than the bubble number times three (Defense)');
 });
+
+test('every source file parses (modules the unit tests do not import, such as main.js, included)', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const fs = await import('node:fs');
+  const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(`${d}/${e.name}`) : e.name.endsWith('.js') ? [`${d}/${e.name}`] : []));
+  for (const f of walk(new URL('../src', import.meta.url).pathname)) {
+    const r = spawnSync(process.execPath, ['--check', f], { encoding: 'utf8' });
+    assert.equal(r.status, 0, `${f}: ${r.stderr}`);
+  }
+});

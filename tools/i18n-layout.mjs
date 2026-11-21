@@ -231,6 +231,7 @@ for (const [W, H] of VIEWPORTS) {
   for (const key of lessonKeys) {
     await ev((k) => { const bs = window.__sb.battle; window.__sb.meta.tut[k] = false; bs.showLessonByKey(k); }, key);
     await check(`lesson-${key}`, key === 'ranks');
+    await p.waitForTimeout(480); // a lesson card ignores input for its first moment
     await ev(() => { const btn = document.querySelector('.tut-layer:not([hidden]) .btn'); if (btn) btn.click(); });
   }
   // play into a combo so the "next" hint, flow text and cash-out sub-labels show

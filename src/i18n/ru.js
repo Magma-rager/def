@@ -61,6 +61,7 @@ const ui = {
   'acts in about {s}': 'действует примерно через {s}',
   'Relay to {hero} (key {k}) · little Flow left: FINISH or CASH OUT is safer': 'Эстафета: {hero} (клавиша {k}) · Потока мало: ЗАВЕРШИТЬ или ВЫПЛАТА надёжнее',
   'FLOW {s} · THEFT −{d}': 'ПОТОК {s} · КРАЖА −{d}',
+  'Tap again: no more tips': 'Ещё раз — без подсказок',
   'Skip all tips': 'Пропустить подсказки',
   'Tips are off. Settings → Tutorial hints turns them back on.': 'Подсказки выключены. Включить снова: Настройки → Обучающие подсказки.',
   'All tutorial tips': 'Все подсказки обучения',

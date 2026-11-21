@@ -290,7 +290,7 @@ export class BattleScreen {
   onKey(e) {
     if (this.app.modalOpen() || this.ended) return;
     if (this.lessonOpen) {
-      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') { this.closeLesson(false); e.preventDefault(); }
+      if ((e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') && performance.now() - this.lessonShownAt > 450) { this.closeLesson(false); e.preventDefault(); }
       return;
     }
     const c = this.combat;
@@ -545,7 +545,7 @@ export class BattleScreen {
     const L = this.lessons;
     if (L.shown >= (this.setup.tutorial ? LESSON_PACE.perBattle.tutorial : LESSON_PACE.perBattle.normal)) return;
     if (c.t - L.lastAt < LESSON_PACE.gap) return;
-    const r = pickLesson(c, { seen: this.app.meta.tut, flags: L.flags, kind: this.setup.kind });
+    const r = pickLesson(c, { seen: this.app.meta.tut, flags: L.flags, kind: this.setup.kind, tutorial: !!this.setup.tutorial });
     if (r) this.showLesson(r.lesson, r.anchor);
   }
   // also used by tools (i18n-layout) to show a given lesson
@@ -556,16 +556,27 @@ export class BattleScreen {
   showLesson(L, anchor) {
     const [title, body] = block('lessons', L.key, [L.title, L.body]);
     this.lessonOpen = L.key;
+    this.lessonAnchor = anchor;
+    this.lessonShownAt = performance.now();
     this.updateHud(true);
     this.app.pause(true);
     clear(this.tutEl);
     this.tutEl.hidden = false;
     this.tutEl.classList.add('coach');
     this.tutEl.dataset.lesson = L.key;
+    // a lesson can appear under a finger that was about to tap a card: the card ignores input for a
+    // moment, and turning every tip off takes a second, confirming tap
+    const openedAt = performance.now();
+    const ready = () => performance.now() - openedAt > 450;
     const ok = h('button', { class: 'btn primary', type: 'button' }, t('Got it'));
-    ok.addEventListener('click', () => this.closeLesson(false));
+    ok.addEventListener('click', () => { if (ready()) this.closeLesson(false); });
     const skip = h('button', { class: 'btn small coach-skip', type: 'button' }, t('Skip all tips'));
-    skip.addEventListener('click', () => this.closeLesson(true));
+    skip.addEventListener('click', () => {
+      if (!ready()) return;
+      if (skip.classList.contains('armed')) { this.closeLesson(true); return; }
+      skip.classList.add('armed');
+      skip.textContent = t('Tap again: no more tips');
+    });
     const card = h('div', { class: 'tut-card coach-card', role: 'dialog', 'aria-label': title },
       h('div', { class: 'tut-title' }, title), h('div', { class: 'tut-body', html: body }), h('div', { class: 'coach-btns' }, ok, skip));
     const box = this.root.getBoundingClientRect();

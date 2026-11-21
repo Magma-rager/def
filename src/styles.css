@@ -445,6 +445,7 @@ html.reduced-motion .rotate-phone { animation: none; transform: rotate(-90deg); 
 .coach-card .tut-body { line-height: 1.32; margin-bottom: 7px; }
 .coach-btns { display: flex; align-items: center; gap: 10px; }
 .coach-btns .btn.primary { padding: 5px 16px; }
+.coach-skip.armed { color: #ffb347; text-decoration: none; font-weight: 700; }
 .coach-skip { background: none; border: none; color: var(--dim, #a99); text-decoration: underline; padding: 4px 2px; min-height: 0; font-size: 11px; box-shadow: none; }
 .coach-ring { position: absolute; border: 2px solid var(--brass-hi); border-radius: 8px; box-shadow: 0 0 0 3px rgba(255, 210, 106, 0.25), 0 0 18px rgba(255, 210, 106, 0.55); pointer-events: none; animation: coach-pulse 1.1s ease-in-out infinite; }
 @keyframes coach-pulse { 50% { box-shadow: 0 0 0 5px rgba(255, 210, 106, 0.15), 0 0 26px rgba(255, 210, 106, 0.8); } }

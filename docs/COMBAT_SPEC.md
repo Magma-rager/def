@@ -1,6 +1,6 @@
 # SIGNAL//BREAK — Combat Architecture Specification (Roadmap Phase 2)
 
-Status: specification for Phases 3–8. Written 2026-11-15 against the reference build **0.2.2** (commit `46d01a5`; `git checkout 46d01a5` restores it). Phase 3 shipped in 0.2.3 (`338184c`), Phase 4 in 0.2.4 (`e6a43d1`; §25 lists its interim bridges), Phase 5 in 0.2.5 (§26 describes what was built and replaces most of §25's bridges).
+Status: specification for Phases 3–8. Written 2026-11-15 against the reference build **0.2.2** (commit `46d01a5`; `git checkout 46d01a5` restores it). Phase 3 shipped in 0.2.3 (`338184c`), Phase 4 in 0.2.4 (`e6a43d1`; §25 lists its interim bridges), Phase 5 in 0.2.5 (§26 describes what was built and replaces most of §25's bridges), Phase 6 in 0.2.6 (§27: Act I onboarding, Relay accessibility, Act I tuning, telegraphs).
 Numbers marked *(prototype)* are starting values kept in one configuration table (`RULES` in `src/engine/combat.js`), not approved balance.
 
 Contents: 1 Goals · 2 Regression requirements · 3 Entities · 4 Party and shared resources · 5 Cards · 6 Hand and zones · 7 Hero states and scheduling · 8 Offensive sequences · 9 Relay · 10 Support · 11 Momentum · 12 Chain endings · 13 Timing · 14 Targeting · 15 Damage and mitigation · 16 Cancellation and interruption · 17 Enemy interference · 18 Content migration · 19 Saves · 20 Interface · 21 Prototype values · 22 Dependencies and phase plan · 23 Regression risks · 24 Decisions taken here
@@ -390,6 +390,7 @@ All new text in English and Russian; layout checked at the seven sizes of `tools
 | Participation limit | each hero once per chain | 5 |
 | Relay | +1 Momentum; +10% on the incoming first card per Relay | 5 |
 | Decision window | 5.0s, hold 1.2s at start and after each Relay, hold while executing, refund 1.0s per card (cap 5s), cap 14s, +FLOW 1.5s | 5 |
+| `SEGMENT_READ_GRACE` | 1.2s hold after the incoming hero's first card has executed (at most twice per chain) | 6 |
 | Breather | Perfect 1.0, Cash Out 0.8, Dropped 1.2 | kept |
 | Enemy pace / spacing | ×0.70 / ×0.82 / ×0.90; 1.2s | kept |
 | Tactical mode | enemy ATB ×0.25 while deciding | 5 |
@@ -408,7 +409,7 @@ Phase 9 meta-progression (needs 8) ─► Phase 10 presentation (needs 5–8) �
 | Module | 3 | 4 | 5 | 6 | 7 | 8 |
 |---|---|---|---|---|---|---|
 | `engine/combat.js` (rules) | HP pool, Defense, Cover, no KO | categories, legality, hand, Momentum accounting | heroes' states, queue, Relay, window | — | recipes | remaining effects |
-| `engine/run.js` (party, rewards, events API) | pool, heals, max HP, migration | card rewards and shop pools | — | Act I formations | — | all events, services |
+| `engine/run.js` (party, rewards, events API) | pool, heals, max HP, migration | card rewards and shop pools | — | Act I formations reviewed (unchanged) | — | all events, services |
 | `engine/save.js` | v4 | v5 | — | — | v6 | — |
 | `data/cards.js` + `i18n/ru.js` | one card text (heal) | representative set + starter deck | — | — | combo cards | full catalogue |
 | `data/relics.js`, `mutations.js`, `adaptations.js` | Dead Man's Switch, heal relics, Glass Cannon, Brass Metronome text | role-based relics | Flow wording | — | — | rest |
@@ -522,4 +523,30 @@ Momentum is never projected: an arte needs Momentum the party already has, unres
 **Open design decisions** (unchanged; evidence in `docs/AUDIT.md`, Phase 5)
 - A. Whether a Relay requires an arte in the outgoing segment (implemented: no; `RULES.RELAY_NEEDS_ARTE`).
 - B. Whether a queued attack locks its target at commit (implemented: target at execution; `currentTarget()`).
+
+## 27. Phase 6 as built (0.2.6) — onboarding, Relay accessibility, Act I tuning, telegraphs
+
+Phase 6 changes presentation and Act I balance on top of §26; the scheduling architecture is unchanged. Measurements and the reasoning behind each change are in `docs/AUDIT.md` (Phase 6).
+
+**Progressive lessons (`src/ui/lessons.js`).** The start-of-battle tutorial cards are replaced by 27 short lessons, one idea each (50 words at most), shown once at the moment their mechanic becomes relevant in a real battle and pausing the battle while open. `pickLesson()` reads the engine's public state only (a unit test checks it changes nothing) and returns the first relevant unseen lesson with an anchor the screen spotlights (a hand slot, a hero button, an enemy, a control).
+- First battle (Lessons 1–4 of the plan): *first attack* (a basic attack is playable before any combo; hero buttons and target choice), *enemy turns* (an enemy winding up a hit), *rising ranks* (a combo is open), *no need to wait* (a card executes and another legal card is in hand), *arte* (an arte is playable), *finish* (the projected last card is an arte), *take it back* (a card is waiting in the queue).
+- Relay (Lesson 5): shown only when a Ready hero who has not joined the chain has an arte in hand and the decision window is held or has 2.5s+ left — a realistic opportunity, a two-hero Relay. Three-hero chains are left to play.
+- Recovery and support (Lesson 6): *recovery* (a hero recovering after the first chain, or a tap refused because a hero is busy), *support* (a support card is playable while the party is hurt or an enemy winds up), *cover* (Hessa's Cover is active).
+- The hand (Lesson 7): *churn* (a Glitch or a stranded hand, or no basic attack in hand after the first chains), *reserve* (during a combo, an arte of a hero who cannot act in it), *stumble* (after the first Stumble).
+- Later decisions (Lesson 8, `late`: never in the first battle): *cash out* (a combo ending on a basic attack with under 2.2s of Flow), *little Flow left* (a Relay is possible after an arte with under 1.6s), *heavy hit* (a single hit of 11+ after Defense winding up), *hits every hero*, *summons*, *enemy Guard* (10+), *Flow theft* (a drain intent winding up during a combo), *boss* (the first seconds of a boss fight).
+- Interference, the first time each happens: Lock, Scramble, Jam, Glitch, Reserve latch.
+- Pacing: at least 2.0s of battle time between lessons; at most 14 in the first battle (an upper bound: each needs its moment) and 3 in later battles; lessons that do not fit wait for a later battle. `need` orders lessons only where one builds on another (ranks after the first attack, the queue after ranks, cancel after the queue, FINISH and Relay after the arte, Cover after support, late Relay after Relay, Cash Out after ranks); no lesson gates progress, so a missing card, a dead target, another hero or a lost battle can never block the run.
+- Persistence: a lesson is recorded as seen when it is dismissed (`meta.tut`), so a reload while it is open shows it again. *Skip all tips* (on every lesson card) switches the existing Tutorial hints setting off; it stays off until switched on again. Settings → Replay tutorial hints clears the record (and switches tips on) without touching runs, unlocks or the current run. How to Play lists every lesson for rereading. Returning players: a profile that finished the first battle, or saw the 0.2.5 tutorial cards, has the introductory lessons marked as learned once (`migrateLessons`); newer contextual lessons still appear once.
+- Keyboard: Enter, Space or Escape close a lesson.
+
+**Relay accessibility.** After the incoming hero's first card has executed, the decision window holds `SEGMENT_READ_GRACE` = 1.2s, the same hold the chain's first card has always had: the player reads which of the new hero's artes is now within reach. At most two such holds per chain (two Relays); holds never count against the 14s counted cap, so no sequence of Relays extends a chain without limit. The Relay hold (1.2s) and every other timing value of §21 are unchanged. The interface adds an amber ⇄! on a hero who can take a Relay when under 1.6s of Flow is left (title: FINISH or CASH OUT is safer) and the *little Flow left* lesson; Relay eligibility (`relayCheck`) is unchanged.
+
+**Act I enemies.** Hound Mother summons at most 3 litters per fight (`litters`), and each whelp is a smaller Rush Hound (60% HP, `whelpHp`; `summon(id, src, { hpScale })`); she still opens by whelping, Rallies the pack and Mauls. The other Act I formations, enemies, elites and both bosses are unchanged.
+
+**Telegraphs.**
+- *Hold an enemy* (480ms): the battle pauses and a panel shows its HP, Guard and statuses, its next move with the time until it acts, and the damage in the engine's own numbers — a single hit after the target's Defense (and that Cover moves it to Hessa), an area hit per hero after Defense and in all, both before Guard, which is named separately because it can still change. Special intents show their description (all 50 in English and Russian).
+- *Area attacks* show the hit on each hero with three hero dots instead of "n×3" (which suggested a total before Defense).
+- *Flow theft*: `imminentDrain()` gives the Flow a drain intent winding up (from 55% ATB) would take; the Flow bar shows it as a blinking red end and reads "THEFT −n". Drain intents carry their amount (`flow`).
+
+**Unchanged (open decisions and settings).** Decision A (`RELAY_NEEDS_ARTE` false) and decision B (targets at execution, `currentTarget()`) keep their defaults. Tactical timing stays off by default; Relaxed assist and Reduced motion are unchanged. Save version 5; lesson progress lives in the meta record, which already existed.
 
