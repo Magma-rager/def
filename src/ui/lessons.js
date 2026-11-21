@@ -104,6 +104,15 @@ export const LESSONS = [
     body: 'That card could not follow — the reason is written on it. A wrong tap during a combo costs 0.4s of Flow and 1 Momentum; three in one combo end it.',
     when: (c) => (c.combo && c.combo.stumbles > 0 ? { ui: 'flow' } : null),
   },
+  {
+    key: 'tactical', need: ['ranks'], title: 'TOO LITTLE TIME?',
+    body: 'That combo was <b>Dropped</b>. If choosing feels rushed, <b>Tactical timing</b> (Settings) slows enemies to a quarter while you pick your next card in a combo. It changes nothing else, and it is off unless you turn it on.',
+    when: (c, x) => {
+      if (x.tactical || c.combo || c.phase === 'END') return null;
+      const last = c.history[c.history.length - 1];
+      return last && last.type === 'forced' ? { ui: 'flow' } : null;
+    },
+  },
   // ── Lesson 6: Recovery and support ──
   {
     key: 'recovery', intro: true, need: ['attack'], title: 'RECOVERY',
@@ -263,7 +272,8 @@ export function migrateLessons(meta) {
 }
 
 // The first lesson that is relevant now and not seen yet, or null. `x`: { seen: Set or object of
-// seen keys, flags: { busyTap }, kind: 'normal' | 'elite' | 'boss', tutorial: the first battle }.
+// seen keys, flags: { busyTap }, kind: 'normal' | 'elite' | 'boss', tutorial: the first battle,
+// tactical: Tactical timing is on }.
 export function pickLesson(c, x) {
   if (!c || c.phase === 'END') return null;
   const seen = (k) => (x.seen instanceof Set ? x.seen.has(k) : !!(x.seen && x.seen[k]));

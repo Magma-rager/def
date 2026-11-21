@@ -307,3 +307,18 @@ test('every source file parses (modules the unit tests do not import, such as ma
     assert.equal(r.status, 0, `${f}: ${r.stderr}`);
   }
 });
+
+test('after a Dropped combo the Tactical timing lesson points to the setting, only while it is off', () => {
+  const c = fixed(CHAIN_HAND, CHAIN_DRAW);
+  c.selectHero('V');
+  c.commit(c.hand.find((u) => u && c.def(u).id === 'scrapline'));
+  settle(c);
+  c.combo.deadline = c.t + 0.05;
+  c.combo.graceUntil = 0;
+  advance(c, 0.3);
+  assert.equal(c.history[c.history.length - 1].type, 'forced');
+  const seen = Object.fromEntries(INTRO_KEYS.map((k) => [k, true]));
+  assert.equal(pickLesson(c, { seen, flags: {}, kind: 'normal', tactical: false }).lesson.key, 'tactical');
+  assert.equal((pickLesson(c, { seen, flags: {}, kind: 'normal', tactical: true }) || { lesson: {} }).lesson.key === 'tactical', false, 'not shown to a player who already uses it');
+  assert.equal(c.tactical, false, 'the lesson never switches the setting on');
+});

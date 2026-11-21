@@ -93,9 +93,8 @@ const lessonShots = new Set();
 let stored = null; // the card swiped into Reserve right after the Reserve lesson (a player following the tip)
 async function dismissLesson(s) {
   lessonLog.push({ key: s.lesson, t: s.t, battle: battleNo, tutorial: s.tutorial, cards: s.stats.cards, artes: s.stats.artes, relays: s.stats.relays, churns: s.stats.churns, stashes: s.stats.stashes, supports: s.stats.supports, anchor: s.anchor, hand: s.hand, combo: s.combo });
+  await wait(470); // the lesson card ignores input for its first moment (and has faded in)
   if (!lessonShots.has(s.lesson)) { lessonShots.add(s.lesson); await shot(`lesson-${String(lessonShots.size).padStart(2, '0')}-${s.lesson}`); }
-  // the spotlight must sit on the anchor
-  await wait(470); // the lesson card ignores input for its first moment
   await tapSel('.tut-layer:not([hidden]) .btn.primary');
   await wait(60);
   if (s.lesson === 'reserve' && s.anchor && s.anchor.slot !== undefined && !stored) {
@@ -150,7 +149,13 @@ await p.evaluate(() => {
   const spec = ['scrapline', 'rivet_jab', 'scrapfall', 'salvage', 'piston_strike', 'thermal_lance', 'scrapline', 'rivet_jab', 'bolt_volley', 'hotwire', 'mend_circuit', 'scrapline', 'piston_strike', 'glitch'];
   r.d.deck = spec.map((id, i) => ({ uid: `fx${i}`, id, up: false, ...(i === 1 ? { variant: 'B' } : {}) }));
 });
-const first = await p.evaluate(() => window.__sb.run.availableNodes()[0]);
+// a starting node from which the map reaches an elite (elites are optional: some starts have none)
+const first = await p.evaluate(() => {
+  const r = window.__sb.run;
+  const reach = (id, seen = new Set()) => { if (seen.has(id)) return false; seen.add(id); const n = r.node(id); return n.type === 'elite' || n.edges.some((e) => reach(e, seen)); };
+  const av = r.availableNodes();
+  return av.find((id) => reach(id)) || av[0];
+});
 await tapSel(`.map-node[data-node="${first}"]`);
 await wait(150);
 await clickText('Travel');
@@ -174,6 +179,11 @@ await p.evaluate((slot) => {
 const ring = await p.evaluate(() => { const r = document.querySelector('.coach-ring'); const card = document.querySelector('.coach-card'); return r && card ? { ring: r.getBoundingClientRect().toJSON(), card: card.getBoundingClientRect().toJSON(), vw: innerWidth, vh: innerHeight } : null; });
 check(3, 'The lesson spotlights a basic attack and fits on screen', ring && ring.card.left >= 0 && ring.card.right <= ring.vw && ring.card.top >= 0 && ring.card.bottom <= ring.vh, ring ? `card ${Math.round(ring.card.width)}×${Math.round(ring.card.height)} at ${Math.round(ring.card.left)},${Math.round(ring.card.top)}` : 'no ring');
 await shot('03-first-lesson');
+// combat time stands still while a lesson is open: enemy ATB, Flow and statuses
+const frozen0 = await p.evaluate(() => { const c = window.__sb.battle.combat; return { t: c.t, atb: c.enemies.map((e) => e.atb) }; });
+await wait(700);
+const frozen1 = await p.evaluate(() => { const c = window.__sb.battle.combat; return { t: c.t, atb: c.enemies.map((e) => e.atb) }; });
+check(3, 'Combat time and enemy ATB stand still while a lesson is open', frozen1.t === frozen0.t && JSON.stringify(frozen1.atb) === JSON.stringify(frozen0.atb), `t ${frozen0.t.toFixed(2)} → ${frozen1.t.toFixed(2)} after 0.7s`);
 await dismissLesson(s);
 // 4. choose who attacks: Corvin, then back to Hessa
 await tapHero('C');
@@ -321,6 +331,9 @@ const relayed = s && s.history.find((x) => x.heroes.length >= 2 && x.type !== 'f
 check(13, 'A two-hero combo completed', !!relayed, relayed ? JSON.stringify(relayed) : JSON.stringify(s && s.history.slice(-1)));
 // 15–16. support and Recovery: the lessons came when a support card was playable and a hero recovering
 s = await quiet();
+// the support lesson comes when a support card is playable while the party is hurt or an enemy winds
+// up a hit: wait for that moment, as a player following the tips would
+if (!shown('support')) { await waitLesson('support', 15000); s = await quiet(); }
 const sl = shown('support');
 const guardBefore = s ? s.guard : 0;
 const sup = await legal('support');
@@ -459,13 +472,15 @@ if (!PART_A_ONLY) {
         // one elite while healthy (heading for one the map can still reach), a rest when hurt, a shop
         // with Scrap, otherwise battles and events
         const order = [];
-        if (!elitesTaken && st.hp >= 0.5) {
-          const toward = await p.evaluate(() => {
+        if (!elitesTaken) {
+          // toward an elite the map can still reach; through a rest on the way when hurt
+          const toward = await p.evaluate((hurt) => {
             const r = window.__sb.run;
             const reach = (id, seen = new Set()) => { if (seen.has(id)) return false; seen.add(id); const n = r.node(id); return n.type === 'elite' || n.edges.some((e) => reach(e, seen)); };
-            const av = r.availableNodes();
-            return av.find((id) => r.node(id).type === 'elite') || av.find((id) => reach(id)) || null;
-          });
+            const cand = r.availableNodes().filter((id) => reach(id));
+            const of = (t) => cand.find((id) => r.node(id).type === t);
+            return (hurt ? of('rest') : null) || (hurt ? null : of('elite')) || of('rest') || of('treasure') || of('battle') || of('event') || cand[0] || null;
+          }, st.hp < 0.5);
           if (toward) order.push(`.map-node.avail[data-node="${toward}"]`);
         }
         if (st.hp < 0.55) order.push('.map-node.avail.t-rest');

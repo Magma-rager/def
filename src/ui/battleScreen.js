@@ -545,7 +545,7 @@ export class BattleScreen {
     const L = this.lessons;
     if (L.shown >= (this.setup.tutorial ? LESSON_PACE.perBattle.tutorial : LESSON_PACE.perBattle.normal)) return;
     if (c.t - L.lastAt < LESSON_PACE.gap) return;
-    const r = pickLesson(c, { seen: this.app.meta.tut, flags: L.flags, kind: this.setup.kind, tutorial: !!this.setup.tutorial });
+    const r = pickLesson(c, { seen: this.app.meta.tut, flags: L.flags, kind: this.setup.kind, tutorial: !!this.setup.tutorial, tactical: !!c.tactical });
     if (r) this.showLesson(r.lesson, r.anchor);
   }
   // also used by tools (i18n-layout) to show a given lesson
@@ -736,7 +736,8 @@ export class BattleScreen {
         const hero = ownerName(P.hero);
         if (P.finish) this.setNext(t('Finishing the combo…'));
         else if (P.lastCmd === 'relay') this.setNext(t('<b>{hero}</b>: start with a basic attack ◆', { hero }));
-        else if (P.last === 'arte') this.setNext(c.relayStillPossible() ? t('<b>{hero}</b>: higher arte, RELAY ⇄ or FINISH', { hero }) : t('<b>{hero}</b>: a higher arte, or FINISH', { hero }));
+        // narrow strips (phones) drop "higher arte": the cards say whether one is playable
+        else if (P.last === 'arte') this.setNext(c.relayStillPossible() ? (narrowStrip ? t('<b>{hero}</b>: RELAY ⇄ or FINISH', { hero }) : t('<b>{hero}</b>: higher arte, RELAY ⇄ or FINISH', { hero })) : t('<b>{hero}</b>: a higher arte, or FINISH', { hero }));
         else this.setNext(P.hasBasic && !narrowStrip ? t('NEXT <b>rank {n}+</b> · {hero}\'s arte or a basic attack', { n: Math.min(9, P.rank + 1), hero }) : t('NEXT <b>rank {n}+</b>', { n: Math.min(9, P.rank + 1) }));
       } else {
         const st = c.starter();

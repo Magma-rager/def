@@ -426,9 +426,50 @@ Support was not changed. Measured (`tools/fightlab.mjs`, support cards in hand a
 
 ### Onboarding
 
-The 0.2.5 tutorial was five pause cards in the first battle — "THE RELAY" before the first attack (hand, enemies, targets, hero buttons, arte stars, basic attacks and the queue in one card), then COMBO STARTED, ARTE READY, MORE TOOLS (Recovery, support, Churn, Reserve, Cash Out, next card) and RELAY — plus five interference cards. 0.2.6 replaces them with 27 one-idea lessons triggered by the battle state (§27 lists every trigger), spotlighting the control they explain, at least 2s apart, at most 14 in the first battle and 3 in later ones; late lessons (Cash Out, little Flow left, heavy hit, area attacks, summons, enemy Guard, Flow theft, boss) never appear in the first battle. Skip (a confirming second tap), replay (Settings), rereading (How to Play) and returning-player migration as in §27. A lesson card ignores input for its first 0.45s so a tap meant for a card cannot dismiss or skip it (found by the acceptance run, below).
+The 0.2.5 tutorial was five pause cards in the first battle — "THE RELAY" before the first attack (hand, enemies, targets, hero buttons, arte stars, basic attacks and the queue in one card), then COMBO STARTED, ARTE READY, MORE TOOLS (Recovery, support, Churn, Reserve, Cash Out, next card) and RELAY — plus five interference cards. 0.2.6 replaces them with 28 one-idea lessons triggered by the battle state (§27 lists every trigger), spotlighting the control they explain, at least 2s apart, at most 14 in the first battle and 3 in later ones; late lessons (Cash Out, little Flow left, heavy hit, area attacks, summons, enemy Guard, Flow theft, boss) never appear in the first battle. Skip (a confirming second tap), replay (Settings), rereading (How to Play) and returning-player migration as in §27. A lesson card ignores input for its first 0.45s so a tap meant for a card cannot dismiss or skip it (found by the acceptance run, below).
 
-PHASE6_RESULTS_PLACEHOLDER
+### Interface and telegraphs (implemented)
+
+Hold an enemy for the next move in the engine's numbers (single hits after the target's Defense, with Cover; area hits per hero and in all; both before Guard), 50 intent descriptions in both languages; area-attack bubbles show the per-hero hit with three hero dots instead of "n×3"; the Flow bar shows an imminent Flow theft in red ("THEFT −1.2s"); an amber ⇄! warns of a Relay with little Flow left; lesson cards with a spotlight; How to Play gains "All tutorial tips". Card faces were not changed: the smallest effect text is unchanged from 0.2.5 (below), and the full text stays one hold away.
+
+### Tested
+
+| Check | Result |
+|---|---|
+| Unit tests (`npm test`) | 144/144 — `tests/phase6.test.mjs` (17): lesson order and dependencies, lessons never change combat state (randomized), contextual triggers in any order, a battle won with no lesson shown, returning-player migration and replay, lesson progress saved, short texts, the incoming hero's read hold applied once, holds cannot extend a chain without limit, FINISH instead of a Relay, Act I formations (one interference type at depth 0), Hound Mother's 3 litters of smaller whelps over 400s, both bosses' mechanics, the Flow-theft warning equal to the theft, the enemy panel numbers equal to the damage taken (single and area), every source file parses, the Tactical timing lesson |
+| Acceptance (`tools/accept6.mjs`, taps/holds/swipes after a disclosed fixture) | English 844×390 46/46 and Russian 1194×834 47/47 (first battle, Act I through the elite and the boss into Act II, reload and Continue, skip/replay/returning player); first battle only: Russian 667×375 32/32, English 1194×834 32/32 |
+| Phase 5 acceptance (`tools/accept5.mjs`, English 844×390) | 33/33 (no regression) |
+| Targeting (`tools/targeting.mjs`, 4 sizes, both languages) | 36/36 |
+| Layout (`tools/i18n-layout.mjs`, 7 viewports, every lesson card included) | Russian 1955 screens, English 1957 screens, 0 issues |
+| Readability (`tools/readability.mjs`, smallest effect text) | English 667×375 7.6px, 732×510 7.6, 844×390 7.6, 1194×834 11.6; Russian 7.0, 7.6, 7.6, 12.4 — unchanged from 0.2.5 |
+| Typical encounters (`tools/encounter.mjs`, English 844×390, touch, learner) | 5/5 won, 5–19 of 130 HP lost, enemy actions at least 1.22s apart, none in a breather |
+| Full campaign through the UI (`tools/milestone.mjs`, reload and Continue at every checkpoint) | English 1024×768 43/43: three acts won (Clockwork Regent, Mirror Array, Signalbreak Core), both Act I elites (Foundry Warden, Hound Mother), a shop, the Volatile preparation, the ending, credits, results, the Museum unlock in the next run. Russian 732×510 (defeat flow) 49/49: three acts won, credits, a restarted fight, a lost run with the defeat dialogue, a new run to its first victory; 0 untranslated texts; 2 layout findings (one hint, below), fixed and rechecked |
+| Offline web app (`tools/pwa.mjs`, the built game) | PWA_RESULTS |
+
+**Regression requirements R1–R7**
+| | Requirement | Result |
+|---|---|---|
+| R1 | Enemy pressure | Act multipliers and the 1.2s spacing unchanged (unit tests); 0% of enemy gaps under 1s in every pacing row; encounter minimum 1.22s; enemy ATB stands still while a lesson is open (acceptance step 3) and in breathers; the only enemy change is Hound Mother's litters and whelp HP |
+| R2 | ≤25% dropped at ~2.5s per card in opening fights, **with actual Relay participation** | Passed: a player who relays whenever another hero can follow up drops 14% (worst opening fight 18%) at 2.22 Relays per battle, 61% of chains with a Relay (0.2.5: 27%, worst 29%, 2.31 Relays); a careful player 5%, a player who never relays 5%. At 3.0s per card the active player still drops 25% |
+| R3 | Downtime | Decision, execution, holds, breather, Recovery and pause kept separate (`stats.time`): quick player per battle deciding 2.3s, executing 22.6s, holds 2.3s, breathers 6.0s; Recovery is per hero and never pauses enemies; breathers do |
+| R4 | Targeting | 36/36 including queued attacks; NEW TARGET; hold-to-read added (a tap still targets) |
+| R5 | Early survivability | Learner wins every Act I fight; opening fights cost the learner 3–12% HP and the slow careful player 6–25%; starting party HP not changed |
+| R6 | Readability | Layout 0 issues in both languages at 7 sizes (lessons included); smallest card effect text 7.6px (English) / 7.0px (Russian) at 667×375, unchanged — not a fix, the full text remains a hold away; hold-to-read pauses for cards and now for enemies |
+| R7 | Saves, languages, offline | Unit, migration and save tests; lesson progress in the meta record (save version 5 unchanged); acceptance and campaign runs in both languages with reload and Continue; offline check above |
+
+**Open design decisions (defaults unchanged)**
+- *A. Relays without an arte* (`RULES.RELAY_NEEDS_ARTE`, false). 0.2.6, quick player: 42% of Relays come from a segment without an arte (3.0 per battle). With the alternative rule: 27/30 runs won, 3.6 HP per battle (default 28/30, 4.3), Relays 4.6 per battle (7.1), Cash Out 49% (37%), Dropped 8% (3%), chains of 1/2/3 heroes 56/28/16% (35/32/34%). For the 2.5s active player the alternative gives 11% dropped (default 14%) at 1.55 Relays per battle (2.22). The arte rule makes Relays rarer and safer; neither rule shows a degenerate pattern in the bots. A human decision.
+- *B. Target at execution* (`currentTarget()`). Queued attacks 18.9 per battle; their target changed while waiting only when it died (0.3 per battle). The hold-to-read panel and the summons lesson make the current target more visible; the rule is unchanged.
+
+**Bugs found and fixed during the phase**
+- *A lesson could be dismissed or skipped by a tap meant for a card.* The acceptance run's ordinary play tapped where a lesson had just appeared and hit "Skip all tips": tips were off for the rest of Act I (seen as 15 lessons recorded against 14 seen). Fixed: a lesson card ignores input for its first 0.45s, and skipping takes a confirming second tap; the acceptance run now checks that tips stay on and that every recorded lesson was one the player saw (20 of 20).
+- *main.js failed to load*: an apostrophe in a new How to Play sentence ended its string. The unit tests never import `main.js`, so they passed; the browser run showed it. Fixed, and a test now syntax-checks every source file.
+- *Too many lessons competing in the first battle*: late lessons (Cash Out, heavy hit, …) took first-battle slots before the queue and cancel lessons. Late lessons are now never shown in the first battle; the first-battle limit is 14.
+- *A Russian hint clipped on phones*: in live play at 732×510 the strip hint after an arte ("Корвин: арте выше, ЭСТАФЕТА ⇄ или ЗАВЕРШИТЬ") ended in an ellipsis beside two chips (the static layout sweep had not produced that state). Narrow strips now show the short form ("…: ЭСТАФЕТА ⇄ или ЗАВЕРШИТЬ"; the cards already say whether a higher arte is playable); rechecked in that state at 667×375, 732×510, 844×390 and 900×500: 0 issues.
+- *Tools*: the relay lab's first metric pooled chains across battles (R2 averages per battle; both are now reported); a measurement model that gave the card after a Relay no thinking time (model p5) is kept only for reproducing 0.2.5; acceptance-scenario races (lesson timing, the queue chip render, the elite route) fixed in the tool.
+
+**Still for human judgment:** whether the lessons are understood and arrive at the right moments; whether 10–14 short pauses in the first battle feel like help or interruption; whether players find the Relay and use it on purpose; whether the incoming hero's read hold is noticed or just feels like breathing room; whether the Hound Mother now reads as "deal with the pack" and the bosses as fair; whether holding an enemy is discovered; whether 7.0–7.6px card text is readable on real phones; whether Tactical timing is found and helps. No human has played 0.2.6, and no physical iPhone or iPad has run it.
+
 
 ## Version
 
@@ -443,7 +484,7 @@ Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exi
 
 The table above follows the earlier roadmap. From 2026-11-13 the revised roadmap applies: the number keeps counting from 0.2, the minor number advances when one of the revised roadmap's phase gates is accepted (Phase 1 needs human playtesting for that), and the patch number counts published builds in between.
 
-Current version: **0.2.5** (the beta-feedback patch and its follow-up, plus revised-roadmap Phase 3, shared party HP and individual Defense, Phase 4, basic attacks, artes, support and a persistent hand, and Phase 5, the command queue, hero Recovery and Relays; Phase 1 still waits for human playtesting, so the minor number stays at 2; earlier 0.2.0 passed the old Phase 2 gate). The previous build, 0.2.4, is commit `d5d18c7` (source `e6a43d1`).
+Current version: **0.2.6** (the beta-feedback patch and its follow-up, plus revised-roadmap Phase 3, shared party HP and individual Defense, Phase 4, basic attacks, artes, support and a persistent hand, Phase 5, the command queue, hero Recovery and Relays, and Phase 6, Act I onboarding, Relay accessibility, Act I tuning and telegraphs; Phase 1 still waits for human playtesting, so the minor number stays at 2; earlier 0.2.0 passed the old Phase 2 gate). The previous build, 0.2.5, is commit `51d2e4d` (source `b702145`).
 
 ## Not present in this build
 
