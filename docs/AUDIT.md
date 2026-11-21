@@ -444,7 +444,7 @@ Hold an enemy for the next move in the engine's numbers (single hits after the t
 | Readability (`tools/readability.mjs`, smallest effect text) | English 667×375 7.6px, 732×510 7.6, 844×390 7.6, 1194×834 11.6; Russian 7.0, 7.6, 7.6, 12.4 — unchanged from 0.2.5 |
 | Typical encounters (`tools/encounter.mjs`, English 844×390, touch, learner) | 5/5 won, 5–19 of 130 HP lost, enemy actions at least 1.22s apart, none in a breather |
 | Full campaign through the UI (`tools/milestone.mjs`, reload and Continue at every checkpoint) | English 1024×768 43/43: three acts won (Clockwork Regent, Mirror Array, Signalbreak Core), both Act I elites (Foundry Warden, Hound Mother), a shop, the Volatile preparation, the ending, credits, results, the Museum unlock in the next run. Russian 732×510 (defeat flow) 49/49: three acts won, credits, a restarted fight, a lost run with the defeat dialogue, a new run to its first victory; 0 untranslated texts; 2 layout findings (one hint, below), fixed and rechecked |
-| Offline web app (`tools/pwa.mjs`, the built game) | PWA_RESULTS |
+| Offline web app (`tools/pwa.mjs`, the built game, source `0bfcf8f`) | 16/16 under the GitHub Pages path and 15/15 at the site root as on the storage mirror (offline launch from every start URL, the saved run offered, a battle and a card played offline, nothing requested from the network, update to a new build) |
 
 **Regression requirements R1–R7**
 | | Requirement | Result |
