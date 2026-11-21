@@ -10,6 +10,7 @@
 // Reports enemy action frequency, incoming damage, Flow timeouts, chain length, heroes per chain,
 // Relays, time deciding versus executing, hero Recovery and survival.
 // Usage: node tools/pacing.mjs [battles per encounter = 40] [--json] [--act1] [--pace=2.5] [--only-slow]
+//        [--fights=text] [--model=p6|p5] [--relay=careful|active|none]
 import { Run } from '../src/engine/run.js';
 import { Combat, RULES } from '../src/engine/combat.js';
 import { RNG } from '../src/core/rng.js';
@@ -18,6 +19,9 @@ import { decide, perform } from './lib/bot.mjs';
 const N = +(process.argv[2] || 40);
 if (process.env.SB_RELAY_NEEDS_ARTE === '1') RULES.RELAY_NEEDS_ARTE = true; // open decision A's alternative
 const JSON_OUT = process.argv.includes('--json');
+const argOpt = (k, d) => { const a = process.argv.find((x) => x.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
+const MODEL = argOpt('model', 'p6');
+const RELAY = process.env.SB_NAIVE_RELAY === '1' ? 'active' : argOpt('relay', 'careful'); // careful | active | none (tools/lib/bot.mjs)
 
 // Opening encounters: the tutorial fight and the Act I formations available at depths 0-2.
 // Opening encounters (the tutorial fight and Act I formations at depths 0-2); --act1 adds Act I's
@@ -51,6 +55,8 @@ const PLAYERS = {
 // --pace=2.5 adds a slower reader (seconds per card) to study where combos stop being buildable
 for (const a of process.argv) if (a.startsWith('--pace=')) for (const v of a.slice(7).split(',')) PLAYERS[`slow${v}`] = { read: 2.5, card: +v, misTap: 0.08, profile: 'learner' };
 if (process.argv.includes('--only-slow')) { delete PLAYERS.learner; delete PLAYERS.regular; }
+// --fights=text keeps only the encounters whose name contains it (e.g. --fights=boss)
+for (const a of process.argv) if (a.startsWith('--fights=')) { const f = a.slice(9); for (let i = ENCOUNTERS.length - 1; i >= 0; i--) if (!ENCOUNTERS[i].name.includes(f)) ENCOUNTERS.splice(i, 1); }
 
 function setupFor(enc, seed) {
   const run = Run.create({ seed, tutorial: false });
@@ -110,9 +116,12 @@ function play(enc, player, seed) {
       const bad = c.hand.find((u) => u && !c.check(u).ok && c.categoryOf(u) !== 'junk');
       if (bad) { c.playCard(bad); continue; }
     }
-    const a = decide(c, { profile: P.profile, rng: () => rng.next() });
-    // the selector and Finish/Cash Out are quick taps; reading a card is what takes time
-    if (a.type === 'select' || a.type === 'finish') think = Math.min(think, 0.35);
+    const a = decide(c, { profile: P.profile, rng: () => rng.next(), relay: RELAY });
+    // the selector and Finish/Cash Out are quick taps; reading a card is what takes time. A Relay is a
+    // decision like a card (model p6, the default since Phase 6): the incoming hero's basic attack has
+    // to be found first. Model p5 (--model=p5) reproduces the 0.2.5 measurements, where the card after
+    // a Relay came the moment the Relay finished executing.
+    if (a.type === 'finish' || (a.type === 'select' && (!c.combo || MODEL === 'p5'))) think = Math.min(think, 0.35);
     const res = perform(c, a);
     if (a.type === 'play' && res && res.ok) m.cards++;
     if (a.type === 'wait') think = 0.15;

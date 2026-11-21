@@ -25,6 +25,10 @@ export const RULES = {
   RELAY_MOMENTUM: 1, // Momentum a Relay gives when it executes (none under the Relay Jammer adaptation)
   RELAY_FIRST_BONUS: 0.1, // the incoming hero's first card: +10% damage per Relay so far in the chain
   RELAY_HOLD: 1.2, // the decision window holds this long after a Relay
+  // Phase 6 (docs/AUDIT.md, Relay accessibility): after the incoming hero's first card has executed the
+  // decision window holds this long, as it does after a chain's first card — the player reads which of
+  // the new hero's artes is now within reach. At most twice per chain (two Relays).
+  SEGMENT_READ_GRACE: 1.2,
   RELAY_NEEDS_ARTE: false, // open design decision A (spec §25): false = a Relay may follow any card
   TACTICAL_ATB: 0.25, // Tactical timing (optional setting): enemy ATB speed while the player decides
   FLOW_REFUND: 1.0, // prototype (was 0.18, then 0.8): per valid card
@@ -900,8 +904,8 @@ export class Combat {
     else if (cmd.type === 'relay') this.resolveRelay(cmd);
     else if (cmd.type === 'finish') this.resolveFinish(cmd);
   }
-  // Execution complete: a support performer starts Recovery; the first card of a chain and each
-  // Relay open a short hold of the decision window; a requested ending happens now; otherwise a
+  // Execution complete: a support performer starts Recovery; the first card of a chain, each Relay
+  // and the incoming hero's first card open a short hold of the decision window; a requested ending happens now; otherwise a
   // chain that cannot continue at all (no higher card, no hero left to Relay to) ends as a Perfect.
   completeCmd(cmd) {
     this.emit({ type: 'execEnd', id: cmd.id, cmdType: cmd.type, hero: cmd.hero });
@@ -911,6 +915,9 @@ export class Combat {
     if (cmd.type === 'card' && cmd.chainFirst) {
       c.graceUntil = Math.max(c.graceUntil, this.t + RULES.FLOW_READ_GRACE);
       this.emit({ type: 'flowHold', until: c.graceUntil });
+    } else if (cmd.type === 'card' && cmd.relayFirst && RULES.SEGMENT_READ_GRACE > 0) {
+      c.graceUntil = Math.max(c.graceUntil, this.t + RULES.SEGMENT_READ_GRACE);
+      this.emit({ type: 'flowHold', until: c.graceUntil, segment: true });
     } else if (cmd.type === 'relay') {
       c.graceUntil = Math.max(c.graceUntil, this.t + RULES.RELAY_HOLD);
       this.emit({ type: 'flowHold', until: c.graceUntil, relay: true });
@@ -1072,6 +1079,7 @@ export class Combat {
     };
     c.cards.push(entry);
     cmd.chainFirst = c.cards.length === 1;
+    cmd.relayFirst = relayCard;
     c.len = c.cards.length;
     c.segCards++;
     c.lastCmd = 'card';
@@ -1862,9 +1870,9 @@ export class Combat {
     return e;
   }
 
-  summon(id, src) {
+  summon(id, src, { hpScale = 1 } = {}) {
     if (this.aliveEnemies().length >= 4) return null;
-    const e = this.spawnEnemy(id, { hpMult: this.hpMult, dmgMult: this.dmgMultBase, summoned: true });
+    const e = this.spawnEnemy(id, { hpMult: this.hpMult * hpScale, dmgMult: this.dmgMultBase, summoned: true });
     e.atb = 0;
     this.emit({ type: 'summon', uid: e.uid, src: src ? src.uid : null });
     return e;
@@ -2007,6 +2015,19 @@ export class Combat {
     this.noteInterference();
   }
 
+  // Flow the enemies winding up a Flow theft would take from the running combo (the Flow bar shows it
+  // in red): drain intents tagged with `flow`, from 55% ATB, never more than drainFlow would remove.
+  imminentDrain() {
+    if (!this.combo) return 0;
+    let sec = 0;
+    for (const e of this.enemies) {
+      const it = e.alive && e.intent;
+      if (!it || it.kind !== 'drain' || e.atb < 0.55) continue;
+      if (this.trait === 'BLACKOUT' && e.atb < 0.75) continue;
+      sec += (ENEMIES[e.id].intents[it.key] || {}).flow || 0;
+    }
+    return Math.max(0, Math.min(sec, this.flowLeft() - 0.5));
+  }
   drainFlow(e, sec) {
     if (!this.combo) return;
     this.combo.deadline = Math.max(this.t + 0.5, this.combo.deadline - sec); // never below 0.5s (spec §17)

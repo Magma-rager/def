@@ -175,6 +175,8 @@ export function enemyName(id, lvl = 0) {
 }
 export const enemyLore = (id) => enemyT(id).lore || ENEMIES[id].lore;
 export const intentName = (id, key) => ((enemyT(id).intents || {})[key]) || ENEMIES[id].intents[key].name;
+// An intent's own description (shown when an enemy is held); plain attacks are described by the UI.
+export const intentDesc = (id, key) => pick('intentDesc', `${id}.${key}`) || ENEMIES[id].intents[key].desc;
 export const phaseName = (id, i) => ((enemyT(id).phases || [])[i] || {}).name || ENEMIES[id].phases[i].name;
 export const phaseText = (id, i) => ((enemyT(id).phases || [])[i] || {}).text || ENEMIES[id].phases[i].text;
 

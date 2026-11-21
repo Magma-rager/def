@@ -4,11 +4,12 @@ import { Combat, RULES } from '../engine/combat.js';
 import { CARDS, isOffensive } from '../data/cards.js';
 import { DEV_REMARKS } from '../data/story.js';
 import { TRAITS } from '../data/traits.js';
-import { t, msg, num, secs, block, cardName, enemyName, traitName, traitText, adaptName, adaptDesc, adaptBreak, relicName, remark, ownerName, ownerInitial, strengthName } from '../i18n/index.js';
+import { t, msg, num, secs, block, cardName, enemyName, intentName, intentDesc, traitName, traitText, adaptName, adaptDesc, adaptBreak, relicName, remark, ownerName, ownerInitial, strengthName } from '../i18n/index.js';
 import { BattleView } from '../render/battleView.js';
 import { drawPortrait } from '../render/rig.js';
-import { h, clear } from './dom.js';
+import { h, clear, btn } from './dom.js';
 import { cardEl, cardTooltip, fitText, CAT_GLYPH } from './cardView.js';
+import { LESSONS, LESSON_PACE, pickLesson } from './lessons.js';
 
 const OWNER_COL = { V: '#d0603f', C: '#b48cf0', S: '#e6c25a' };
 const HERO_KEYS = { KeyQ: 'V', KeyW: 'C', KeyE: 'S' };
@@ -55,7 +56,9 @@ export class BattleScreen {
     this.cashStreak = 0;
     this.perfectStreak = 0;
     this.saidOnce = new Set();
-    this.tutorialQueue = [];
+    // progressive lessons (src/ui/lessons.js): how many this battle has shown, when the last closed
+    this.lessons = { flags: {}, shown: 0, lastAt: -99, kind: setup.kind, poll: 0 };
+    this.lessonOpen = null;
     this.lastFlowWarn = 0;
     this.pick = null; // a hero-targeted support (Braced) waiting for the player to choose its hero
   }
@@ -78,7 +81,9 @@ export class BattleScreen {
     this.flowFill = h('div', { class: 'flow-fill' });
     this.flowCap = h('div', { class: 'flow-cap' });
     this.flowText = h('div', { class: 'flow-text' });
-    this.flowBar = h('div', { class: 'flow-bar' }, this.flowCap, this.flowFill, this.flowText);
+    // the Flow an enemy is about to steal (Tempo Theft): the end of the fill, in red
+    this.flowThreat = h('div', { class: 'flow-threat' });
+    this.flowBar = h('div', { class: 'flow-bar' }, this.flowCap, this.flowFill, this.flowThreat, this.flowText);
     // who the next attack hits; tap to switch to the next enemy (enemies can also be tapped directly)
     this.targetChip = h('button', { class: 'target-chip', type: 'button' }, h('span', { class: 'tc-ico', 'aria-hidden': 'true' }, '⌖'), h('span', { class: 'tc-name' }), h('span', { class: 'tc-cycle', 'aria-hidden': 'true' }, '⟳'));
     this.targetChip.addEventListener('click', () => this.cycleTarget());
@@ -140,14 +145,24 @@ export class BattleScreen {
     this.view.reducedMotion = this.app.settings.reducedMotion;
     this.view.shakeEnabled = this.app.settings.shake;
     this.view.setCombat(c, this.setup.act, this.setup.kind === 'boss' ? 1 : 0);
+    // tap an enemy: make it the target; hold it: read what it will do (the battle pauses)
+    let hold = null;
+    const endHold = () => { if (hold) clearTimeout(hold.timer); hold = null; };
     this.canvas.addEventListener('pointerdown', (e) => {
       const r = this.canvas.getBoundingClientRect();
       const hero = this.view.heroHitTest(e.clientX - r.left, e.clientY - r.top);
       if (hero) { this.doSelectHero(hero); return; }
       if (this.pick) { this.endPick(true); return; }
       const uid = this.view.hitTest(e.clientX - r.left, e.clientY - r.top);
-      if (uid) { c.setTarget(uid); this.app.audio.sfx('click'); }
+      if (uid) {
+        c.setTarget(uid);
+        this.app.audio.sfx('click');
+        endHold();
+        hold = { x: e.clientX, y: e.clientY, timer: setTimeout(() => { hold = null; this.showEnemyDetail(uid); }, 480) };
+      }
     });
+    this.canvas.addEventListener('pointermove', (e) => { if (hold && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 12) endHold(); });
+    for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) this.canvas.addEventListener(ev, endHold);
     this.keyHandler = (e) => this.onKey(e);
     window.addEventListener('keydown', this.keyHandler);
     this.renderTop();
@@ -157,7 +172,7 @@ export class BattleScreen {
     this.app.audio.music(isBoss ? 'boss' : `battle${this.setup.act}`);
     if (this.setup.trait) this.banner(traitName(this.setup.trait).toUpperCase(), traitText(this.setup.trait), 'info');
     if (c.adapt) this.banner(t('ADAPTATION'), `${adaptName(c.adapt)}: ${adaptDesc(c.adapt)}`, 'bad');
-    if (this.setup.tutorial) this.tutorial('start');
+    this.maybeLesson();
   }
 
   // Fixed labels; called on mount and after a language switch.
@@ -274,6 +289,10 @@ export class BattleScreen {
 
   onKey(e) {
     if (this.app.modalOpen() || this.ended) return;
+    if (this.lessonOpen) {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') { this.closeLesson(false); e.preventDefault(); }
+      return;
+    }
     const c = this.combat;
     if (e.key === 'Escape' && this.pick) { this.endPick(true); e.preventDefault(); return; }
     if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') { this.app.pause(); e.preventDefault(); return; }
@@ -324,8 +343,6 @@ export class BattleScreen {
     if (res.ok) {
       this.causes[uid] = 'play';
       this.app.audio.sfx('cardPlay', { rank: def ? Math.max(1, def.rank) : 1 });
-      if (this.setup.tutorial && res.kind === 'open') this.tutorial('opened');
-      if (res.category === 'support' && this.setup.tutorial) this.tutorial('afterCombo');
     } else if (res.reason === 'locked' || res.reason === 'junk' || res.reason === 'recover' || res.reason === 'latched') {
       this.app.audio.sfx('reject');
     } else this.app.audio.sfx(c.phase === 'ACTIVE' || (c.combo && c.combo.stumbles) ? 'stumble' : 'reject');
@@ -366,7 +383,6 @@ export class BattleScreen {
     }
     const r = this.combat.selectHero(id);
     this.app.audio.sfx(r.ok ? (r.cmd ? 'relay' : 'click') : 'reject');
-    if (r.ok && r.cmd) this.tutorial('relay');
     this.afterAction();
   }
 
@@ -414,6 +430,7 @@ export class BattleScreen {
   afterAction() {
     this.consumeEvents(this.combat.drainEvents());
     this.updateHud(true);
+    this.maybeLesson();
   }
 
   // ───────────────────────── frame ─────────────────────────
@@ -424,6 +441,8 @@ export class BattleScreen {
       this.consumeEvents(c.drainEvents());
       this.view.update(dt);
       this.remarkCooldown = Math.max(0, this.remarkCooldown - dt);
+      this.lessons.poll -= dt;
+      if (this.lessons.poll <= 0) { this.lessons.poll = 0.2; this.maybeLesson(); }
     }
     this.view.draw();
     this.updateHud(false);
@@ -445,25 +464,23 @@ export class BattleScreen {
         case 'churn': this.causes[ev.uid] = 'churn'; break;
         case 'tuck': this.causes[ev.uid] = 'tuck'; break;
         case 'stash': this.causes[ev.uid] = 'stash'; break;
-        case 'lock': this.app.audio.sfx('lock'); if (this.setup.tutorial || !this.app.meta.tut.lock) this.tutorial('lock'); break;
+        case 'lock': this.app.audio.sfx('lock'); break;
         case 'unlock': this.app.audio.sfx('unlock'); break;
-        case 'scramble': if (!this.app.meta.tut.scramble) this.tutorial('scramble'); break;
-        case 'jam': if (!this.app.meta.tut.jam) this.tutorial('jam'); break;
-        case 'glitch': if (!this.app.meta.tut.glitch) this.tutorial('glitch'); break;
-        case 'latch': if (!this.app.meta.tut.latch) this.tutorial('latch'); break;
         case 'stumble': this.flashNote(t('STUMBLE {n}/{max}', { n: ev.n, max: RULES.MAX_STUMBLES })); break;
-        case 'reject': if (ev.text && ev.reason !== 'zone') this.flashNote(msg(ev.text)); break;
+        case 'reject':
+          if (ev.text && ev.reason !== 'zone') this.flashNote(msg(ev.text));
+          // a tap refused because a hero is busy is the moment Recovery needs explaining
+          if (['hero', 'busy', 'recover', 'heroes'].includes(ev.reason)) this.lessons.flags.busyTap = true;
+          break;
         case 'comboEnd': this.onComboEnd(ev); break;
         case 'banner': if (ev.text === 'ADAPTATION BROKEN') this.remark('adaptBroken', true); break;
         case 'phase': this.app.audio.music('boss'); break;
         default: break;
       }
     }
-    if (this.setup.tutorial && c.phase === 'ACTIVE' && [...c.hand, ...c.reserve].some((u) => u && c.categoryOf(u) === 'arte' && c.check(u).ok)) this.tutorial('closer');
   }
 
   onComboEnd(ev) {
-    if (this.setup.tutorial) this.tutorial('afterCombo');
     if (ev.kind === 'cashout') this.cashStreak++;
     else this.cashStreak = 0;
     if (ev.kind === 'perfect') this.perfectStreak++;
@@ -519,32 +536,130 @@ export class BattleScreen {
     setTimeout(() => band.remove(), 1100);
   }
 
-  tutorial(key) {
-    const meta = this.app.meta;
-    if (!this.app.settings.hints || meta.tut[key]) return;
-    const TXT = {
-      start: ['THE RELAY', 'Your three heroes share one hand of six cards. Enemies act in real time — watch their ATB bars and intent bubbles. A <b>red ring</b> under a hero shows who an enemy is about to hit.<br><br>Your attacks hit the enemy in <b>gold brackets</b> (TARGET). <b>Tap an enemy</b> to choose another.<br><br>Pick the hero who starts with the buttons above the hand (or tap a hero). A ★ on a button means that hero has an <b>arte</b> in hand. Then <b>tap a basic attack ◆</b> to start a combo. You can tap the next cards while the first one plays out: they wait in the <b>queue</b> and execute in order.'],
-      opened: ['COMBO STARTED', 'Each next attack needs a <b>higher rank</b> (skipping ranks is fine). Basic attacks give <b>Momentum</b> when they land: Weak and Medium +1, Strong +2, and changing suit (a <b>Cross</b>) +1 more.<br><br>Flow counts down from 5 seconds only while you are choosing: it <b>holds while your attacks play out</b> and for a moment after the first one. Each valid card gives back 1s.<br><br>Queued cards wait beside the combo (dashed) and leave a placeholder in the hand: <b>tap one to take it back</b>. <b>Hold a card</b> to read it in full: the battle pauses while you read.'],
-      closer: ['ARTE READY', 'This hero\'s <b>arte ★</b> is playable. Artes cost Momentum (the number in the corner) and need a basic attack earlier in the hero\'s part of the combo.<br><br>After an arte, <b>tap another hero to RELAY</b>: they take over the same combo, starting again from a basic attack, and the combo keeps everything it has built. Each hero joins a combo once. Or press <b>FINISH</b> for a <b>PERFECT</b>: +2 Momentum and a Churn charge.'],
-      afterCombo: ['MORE TOOLS', 'A hero who has attacked or used <b>support ✚</b> needs a moment to <b>recover</b> (the bar under the hero button); the others can act meanwhile.<br><b>Support</b> cards (healing, Guard, utility) can be played any time, even during another hero\'s combo; some cost Momentum.<br><b>Swipe a card DOWN</b> to Churn it (uses a charge, replaces it). <b>Swipe UP</b> to stash it in Reserve.<br><b>CASH OUT</b> ends a combo that ends with a basic attack for a payout (bonus if 2.5s+ Flow remains).<br><b>NEXT CARD</b> beside the hand is the card you will draw next.'],
-      relay: ['RELAY', 'The Relay waits in the queue like a card. When it runs, the hero who attacked <b>recovers</b> and the new hero takes over the combo: Momentum +1, and their first attack deals +10% for every Relay so far.<br><br>Start their part with a <b>basic attack ◆</b>, then their arte. Each hero joins a combo once, so three heroes can build one long combo together.'],
-      lock: ['CARD LOCKED', 'An enemy <b>Locked</b> a card (chain icon). Locks show their source and expire after their timer runs out — even between combos. Plan around them.'],
-      scramble: ['SCRAMBLED', 'A <b>Scramble</b> temporarily changed a card\'s rank or suit (glitch stripes). The card shows its current values; it reverts in a few seconds.'],
-      jam: ['SLOT JAMMED', 'Static jammed a hand slot. No card can fill it until the static clears.'],
-      glitch: ['GLITCH CARDS', 'Glitch cards were shuffled into your deck. They are unplayable — <b>swipe them down</b> to delete them for free.'],
-      latch: ['RESERVE LATCHED', 'A Latch Wisp grabbed your Reserve. It steals a stored card, or seals the Reserve for a few seconds.'],
-    };
-    if (!TXT[key]) return;
-    const [title, body] = block('tutorial', key, TXT[key]);
-    meta.tut[key] = true;
-    this.app.saveMeta();
+  // ───────────────────────── lessons ─────────────────────────
+  // The first relevant lesson not seen yet (src/ui/lessons.js), at most LESSON_PACE.perBattle per
+  // battle and LESSON_PACE.gap seconds of battle time apart. It pauses the battle while open.
+  maybeLesson() {
+    const c = this.combat;
+    if (!this.app.settings.hints || this.lessonOpen || this.ended || this.app.paused || this.pick || c.phase === 'END') return;
+    const L = this.lessons;
+    if (L.shown >= (this.setup.tutorial ? LESSON_PACE.perBattle.tutorial : LESSON_PACE.perBattle.normal)) return;
+    if (c.t - L.lastAt < LESSON_PACE.gap) return;
+    const r = pickLesson(c, { seen: this.app.meta.tut, flags: L.flags, kind: this.setup.kind });
+    if (r) this.showLesson(r.lesson, r.anchor);
+  }
+  // also used by tools (i18n-layout) to show a given lesson
+  showLessonByKey(key) {
+    const L = LESSONS.find((x) => x.key === key);
+    if (L) this.showLesson(L, L.when(this.combat, { seen: {}, flags: { busyTap: true }, kind: this.setup.kind }) || null);
+  }
+  showLesson(L, anchor) {
+    const [title, body] = block('lessons', L.key, [L.title, L.body]);
+    this.lessonOpen = L.key;
+    this.updateHud(true);
     this.app.pause(true);
     clear(this.tutEl);
     this.tutEl.hidden = false;
+    this.tutEl.classList.add('coach');
+    this.tutEl.dataset.lesson = L.key;
     const ok = h('button', { class: 'btn primary', type: 'button' }, t('Got it'));
-    ok.addEventListener('click', () => { this.tutEl.hidden = true; this.app.resume(); });
-    this.tutEl.append(h('div', { class: 'tut-card' }, h('div', { class: 'tut-title' }, title), h('div', { class: 'tut-body', html: body }), ok));
+    ok.addEventListener('click', () => this.closeLesson(false));
+    const skip = h('button', { class: 'btn small coach-skip', type: 'button' }, t('Skip all tips'));
+    skip.addEventListener('click', () => this.closeLesson(true));
+    const card = h('div', { class: 'tut-card coach-card', role: 'dialog', 'aria-label': title },
+      h('div', { class: 'tut-title' }, title), h('div', { class: 'tut-body', html: body }), h('div', { class: 'coach-btns' }, ok, skip));
+    const box = this.root.getBoundingClientRect();
+    const r = this.anchorRect(anchor);
+    if (r) {
+      const pad = 4;
+      const ring = h('div', { class: 'coach-ring' });
+      Object.assign(ring.style, { left: `${r.left - box.left - pad}px`, top: `${r.top - box.top - pad}px`, width: `${r.width + pad * 2}px`, height: `${r.height + pad * 2}px` });
+      this.tutEl.append(ring);
+    }
+    this.tutEl.append(card);
+    // beside the spotlight: above it in the lower half of the screen, below it in the upper half
+    const cw = card.offsetWidth, ch = card.offsetHeight, W = box.width, H = box.height;
+    let x = (W - cw) / 2, y = (H - ch) / 2;
+    if (r) {
+      const cx = r.left - box.left + r.width / 2;
+      x = Math.max(8, Math.min(W - cw - 8, cx - cw / 2));
+      const top = r.top - box.top, bottom = r.bottom - box.top;
+      if (top + r.height / 2 > H / 2) y = top - ch - 12 >= 4 ? top - ch - 12 : Math.max(4, (top - ch) / 2);
+      else y = bottom + 12 + ch <= H - 4 ? bottom + 12 : Math.min(H - ch - 4, bottom + (H - bottom - ch) / 2);
+      if (y < 4) y = 4;
+    }
+    Object.assign(card.style, { left: `${Math.round(x)}px`, top: `${Math.round(y)}px` });
     setTimeout(() => ok.focus(), 50);
+  }
+  closeLesson(skipAll) {
+    const key = this.lessonOpen;
+    if (!key) return;
+    this.app.meta.tut[key] = true;
+    this.app.saveMeta();
+    if (skipAll) {
+      this.app.settings.hints = false;
+      this.app.saveSettings();
+      this.app.toast(t('Tips are off. Settings → Tutorial hints turns them back on.'));
+    }
+    this.lessonOpen = null;
+    this.lessons.shown++;
+    this.lessons.lastAt = this.combat.t;
+    this.tutEl.hidden = true;
+    this.tutEl.classList.remove('coach');
+    clear(this.tutEl);
+    this.app.resume();
+  }
+  // Where a lesson's anchor is on screen (viewport coordinates), or null.
+  anchorRect(a) {
+    if (!a) return null;
+    const cv = this.canvas.getBoundingClientRect();
+    const field = (r) => (r ? { left: cv.left + r.x, top: cv.top + r.y, width: r.w, height: r.h, right: cv.left + r.x + r.w, bottom: cv.top + r.y + r.h } : null);
+    if (a.slot !== undefined) return this.slots[a.slot] ? this.slots[a.slot].box.getBoundingClientRect() : null;
+    if (a.reserve !== undefined) { const el = this.reserveSlots.children[a.reserve]; return (el || this.reserveEl).getBoundingClientRect(); }
+    if (a.hero) return this.heroBtns[a.hero].getBoundingClientRect();
+    if (a.fieldHero) return field(this.view.heroRect(a.fieldHero));
+    if (a.enemy) return field(this.view.enemyRect(a.enemy));
+    const el = { cash: this.cashBtn, guard: this.guardBtn, flow: this.flowBar, momentum: this.momEl, reserve: this.reserveEl, hand: this.handEl,
+      queueWait: this.chipsEl.querySelector('.chip.q.wait') || this.chipsEl }[a.ui];
+    return el ? el.getBoundingClientRect() : null;
+  }
+
+  // What an enemy is about to do, in numbers the engine will use: single hits after the target's
+  // Defense (Cover moves them to Hessa), area hits per hero and in all — both before Guard, which the
+  // panel names separately because it can still change before the hit lands.
+  showEnemyDetail(uid) {
+    const c = this.combat;
+    const e = c.enemies.find((x) => x.uid === uid && x.alive);
+    if (!e || this.ended) return;
+    const it = e.intent;
+    const lines = [];
+    if (it) {
+      const left = Math.max(0, ((1 - e.atb) * e.actTime) / Math.max(0.01, c.enemySpeed(e)));
+      lines.push(h('p', {}, h('b', {}, intentName(e.id, it.key)), ' · ', t('acts in about {s}', { s: secs(left, 1) })));
+      if (it.dmg && it.kind === 'aoe') {
+        const parts = c.party.map((p) => ({ id: p.id, n: c.mitigate(e, it.dmg, p, {}) }));
+        const total = parts.reduce((a, x) => a + x.n, 0);
+        lines.push(h('p', {}, t('Hits every hero after Defense: {list} — {n} in all, before Guard.', { list: parts.map((x) => `${ownerName(x.id)} ${x.n}`).join(' · '), n: total })));
+      } else if (it.dmg && it.target) {
+        const tgt = c.hitTarget(it.target);
+        const n = c.mitigate(e, it.dmg, tgt, {});
+        lines.push(h('p', {}, tgt.id !== it.target
+          ? t('Hits {hero} for {n} after Defense, before Guard (Cover: aimed at {aimed}).', { hero: ownerName(tgt.id), n, aimed: ownerName(it.target) })
+          : t('Hits {hero} for {n} after Defense, before Guard.', { hero: ownerName(tgt.id), n })));
+      }
+      const plain = (it.kind === 'atk' && /^Strike one ally for \d+\.$/.test(it.desc || '')) || (it.kind === 'aoe' && /^Hit every ally for \d+\.$/.test(it.desc || ''));
+      if (!plain) lines.push(h('p', { class: 'dim' }, intentDesc(e.id, it.key)));
+      if (c.guard >= 1 && it.dmg) lines.push(h('p', { class: 'dim small' }, t('Your Guard {n} absorbs what gets through Defense.', { n: Math.floor(c.guard) })));
+    }
+    const st = [];
+    if (e.guard >= 1) st.push(t('Guard {n}', { n: Math.floor(e.guard) }));
+    for (const k of ['exposed', 'weak', 'shock', 'parry']) if (e.st[k] > 0) st.push(`${t(k === 'exposed' ? 'Exposed' : k === 'weak' ? 'Weak' : k === 'shock' ? 'Shock' : 'Parry')} ${secs(e.st[k], 0)}`);
+    const close = this.app.modal(h('div', { class: 'panel enemy-detail' },
+      h('h2', {}, enemyName(e.id, e.lvl)),
+      h('p', { class: 'dim' }, `${t('HP {a}/{b}', { a: Math.ceil(e.hp), b: e.maxHp })}${st.length ? ' · ' + st.join(' · ') : ''}`),
+      ...lines,
+      h('p', { class: 'dim small' }, t('Tap an enemy to make it your target · hold it to read it')),
+      btn(t('Close'), () => close(), 'primary')), { dismiss: true });
   }
 
   showDetail(uid) {
@@ -577,12 +692,17 @@ export class BattleScreen {
       const cap = c.flowCap() - c.t;
       set('_ff', (v) => (this.flowFill.style.width = v), `${Math.min(100, (left / RULES.FLOW_BAR_SECONDS) * 100).toFixed(1)}%`);
       set('_fc', (v) => (this.flowCap.style.width = v), `${Math.min(100, (cap / RULES.FLOW_BAR_SECONDS) * 100).toFixed(1)}%`);
+      const drain = c.imminentDrain();
+      const fill = Math.min(100, (left / RULES.FLOW_BAR_SECONDS) * 100);
+      const dw = Math.min(fill, (drain / RULES.FLOW_BAR_SECONDS) * 100);
+      set('_fd', (v) => { const [l, w] = v.split('|'); this.flowThreat.style.left = l; this.flowThreat.style.width = w; }, `${(fill - dw).toFixed(1)}%|${dw.toFixed(1)}%`);
       const held = c.flowHeld();
-      set('_ft', (v) => (this.flowText.textContent = v), c.executing ? t('FLOW {s} · EXECUTING', { s: secs(left, 1) }) : held ? t('FLOW {s} · HOLDING', { s: secs(left, 1) }) : t('FLOW {s}', { s: secs(left, 1) }));
+      set('_ft', (v) => (this.flowText.textContent = v), drain > 0.05 ? t('FLOW {s} · THEFT −{d}', { s: secs(left, 1), d: secs(drain, 1) }) : c.executing ? t('FLOW {s} · EXECUTING', { s: secs(left, 1) }) : held ? t('FLOW {s} · HOLDING', { s: secs(left, 1) }) : t('FLOW {s}', { s: secs(left, 1) }));
       set('_fb', (v) => (this.flowBar.className = v), `flow-bar active${held ? ' held' : left < 1.5 ? ' low' : ''}${c.executing ? ' exec' : ''}`);
     } else {
       set('_ff', (v) => (this.flowFill.style.width = v), '0%');
       set('_fc', (v) => (this.flowCap.style.width = v), '0%');
+      set('_fd', (v) => { this.flowThreat.style.width = v; }, '0%');
       const stranded = c.stranded();
       const starter = c.starter();
       const soonest = Math.min(...c.party.map((p) => c.recoverLeft(p.id)));
@@ -769,13 +889,16 @@ export class BattleScreen {
       const picking = !!this.pick;
       const left = c.recoverLeft(id);
       const mark = picking ? '' : st === 'ACTING' ? '▶' : st === 'RECOVERING' ? num(left, 1) : st === 'COMMITTED' ? '…' : rel && rel.ok ? '⇄' : '';
-      const sig = `${st}|${artes}|${mark}|${rel ? rel.ok + String(rel.reason) : '-'}|${P.open && P.hero === id}|${c.starter() === id}|${picking}|${this.pick && this.pick.def === id}`;
+      // a Relay with little Flow left may not leave the new hero time for an arte: the ⇄ turns amber
+      const late = !!(rel && rel.ok) && !c.flowHeld() && c.flowLeft() < 1.6;
+      const sig = `${st}|${artes}|${mark}|${rel ? rel.ok + String(rel.reason) : '-'}|${P.open && P.hero === id}|${c.starter() === id}|${picking}|${this.pick && this.pick.def === id}|${late}`;
       if (b._sig !== sig) {
         b._sig = sig;
         b.className = `hero-btn owner-${id} st-${st.toLowerCase()}`;
         const sel = picking ? this.pick.def === id : P.open ? P.hero === id : c.starter() === id;
         b.classList.toggle('sel', sel);
         b.classList.toggle('relay', !!(rel && rel.ok) && !picking);
+        b.classList.toggle('relay-late', late && !picking);
         b.classList.toggle('locked', !picking && ((P.open && id !== P.hero && !(rel && rel.ok)) || (!P.open && st !== 'READY')));
         b.classList.toggle('pick', picking);
         b.querySelector('.hb-a').textContent = '★'.repeat(Math.min(3, artes));
@@ -783,7 +906,7 @@ export class BattleScreen {
         b.setAttribute('aria-pressed', String(sel));
         const state = { READY: t('Ready'), ACTIVE: t('Active'), ACTING: t('Acting'), COMMITTED: t('Committed'), RECOVERING: t('Recovering') }[st];
         b.title = picking ? t('Brace {hero}', { hero: ownerName(id) })
-          : P.open ? (id === P.hero ? t('{hero} · {s} · attacking', { hero: ownerName(id), s: state }) : rel && rel.ok ? t('Relay to {hero} (key {k})', { hero: ownerName(id), k: KEY_OF[id] }) : `${ownerName(id)} · ${rel ? msg(rel.text) : state}`)
+          : P.open ? (id === P.hero ? t('{hero} · {s} · attacking', { hero: ownerName(id), s: state }) : rel && rel.ok ? (late ? t('Relay to {hero} (key {k}) · little Flow left: FINISH or CASH OUT is safer', { hero: ownerName(id), k: KEY_OF[id] }) : t('Relay to {hero} (key {k})', { hero: ownerName(id), k: KEY_OF[id] })) : `${ownerName(id)} · ${rel ? msg(rel.text) : state}`)
             : t('{hero} · {s} · starts the next combo (key {k})', { hero: ownerName(id), s: state, k: KEY_OF[id] });
       }
       const bar = b.querySelector('.hb-bar');

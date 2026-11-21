@@ -23,6 +23,10 @@ export const QUEUE_AHEAD = { quick: 3, regular: 2, learner: 0 };
 // the Flow bar shows it). SB_NAIVE_RELAY=1 drops the check, to measure a player who relays regardless.
 export const RELAY_MIN_FLOW = { quick: 1.2, regular: 2.0, learner: 4.0, naive: 0 };
 const naiveRelay = () => typeof process !== 'undefined' && process.env && process.env.SB_NAIVE_RELAY === '1';
+// Relay policies (tools/relaylab.mjs, docs/AUDIT.md Phase 6): 'careful' checks the Flow bar first
+// (RELAY_MIN_FLOW by profile, the default), 'active' relays whenever another hero can follow up,
+// whatever Flow is left, 'none' never relays.
+export const RELAY_POLICIES = ['careful', 'active', 'none'];
 
 // The hero who should start the next chain: a Ready hero whose artes (hand + Reserve) can be reached
 // with the basic attacks in hand. Score = cheapest reachable arte, more artes as a tie-break.
@@ -84,10 +88,11 @@ function pendingGain(c) {
 // A hero to hand the chain to: Ready, eligible (relayCheck), with an arte in hand or Reserve and a basic
 // attack left to open their segment. The quick player also relays to a hero who only has basics when
 // the current one has nothing left (Relays pay Momentum and hold the decision window).
-function relayTarget(c, profile) {
+function relayTarget(c, profile, policy = 'careful') {
+  if (policy === 'none') return null;
   const basicsLeft = cards(c).filter((u) => cat(c, u) === 'basic' && !c.isLocked(u)).length;
   if (!basicsLeft) return null;
-  const minFlow = naiveRelay() ? 0 : RELAY_MIN_FLOW[profile] !== undefined ? RELAY_MIN_FLOW[profile] : 2;
+  const minFlow = naiveRelay() || policy === 'active' ? 0 : RELAY_MIN_FLOW[profile] !== undefined ? RELAY_MIN_FLOW[profile] : 2;
   if (c.flowLeft() < minFlow) return null;
   let best = null;
   for (const id of ['V', 'C', 'S']) {
@@ -102,7 +107,7 @@ function relayTarget(c, profile) {
   return best ? best.id : null;
 }
 
-export function decide(c, { profile = 'regular', rng = Math.random } = {}) {
+export function decide(c, { profile = 'regular', rng = Math.random, relay = 'careful' } = {}) {
   if (c.phase === 'END' || c.phase === 'RECOVER') return { type: 'wait' };
   const tools = profile !== 'learner';
   const ahead = QUEUE_AHEAD[profile] !== undefined ? QUEUE_AHEAD[profile] : 1;
@@ -156,7 +161,7 @@ export function decide(c, { profile = 'regular', rng = Math.random } = {}) {
   }
   if (P.last === 'arte') {
     // after an arte: hand over to a hero who can follow up, otherwise FINISH (a Perfect)
-    const to = relayTarget(c, profile);
+    const to = relayTarget(c, profile, relay);
     if (to) return { type: 'select', hero: to };
     if (busy) return { type: 'wait' };
     if (c.canFinish()) return { type: 'finish' };
@@ -182,7 +187,7 @@ export function decide(c, { profile = 'regular', rng = Math.random } = {}) {
   }
   // no arte coming for this hero: hand over to one who has one (a Relay may follow any card)
   if (!pending.length && P.seg >= 1) {
-    const to = relayTarget(c, profile);
+    const to = relayTarget(c, profile, relay);
     if (to && (profile !== 'learner' || P.seg >= 2)) return { type: 'select', hero: to };
   }
   if (basics.length) {

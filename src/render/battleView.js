@@ -176,6 +176,20 @@ export class BattleView {
     return best;
   }
 
+  // Screen rectangles (canvas CSS pixels) of an enemy and of a hero, for the lesson spotlight.
+  enemyRect(uid) {
+    const a = [...this.enemyActors.values()].find((x) => x.uid === uid);
+    if (!a) return null;
+    const [ex, ey, sc, b] = this.enemyPos(a);
+    return { x: ex + b[0] * sc, y: ey + b[1] * sc - 30, w: (b[2] - b[0]) * sc, h: (b[3] - b[1]) * sc + 30 };
+  }
+  heroRect(id) {
+    const k = this.unit();
+    const [hx, hy] = this.partyPos(id);
+    const s = k * LOOKS[id].scale;
+    return { x: hx - 34 * s, y: hy - 115 * s, w: 68 * s, h: 115 * s + 24 };
+  }
+
   // A hero under the pointer (tap a hero to select who attacks next).
   heroHitTest(x, y) {
     const k = this.unit();
@@ -1064,10 +1078,22 @@ export class BattleView {
       ctx.textBaseline = 'middle';
       ctx.lineWidth = 3;
       ctx.strokeStyle = '#1a0a10';
-      const txt = it.kind === 'aoe' ? `${it.dmg}×3` : String(it.dmg);
+      // an area attack shows its hit on EACH hero (before Defense) with a dot per hero, never a
+      // multiplied total: Defense differs by hero and Guard is taken once (the ▼ rings show each part)
+      const txt = String(it.dmg);
       ctx.strokeText(txt, x + r, y + r * 1.62);
       ctx.fillStyle = '#ffd36a';
       ctx.fillText(txt, x + r, y + r * 1.62);
+    }
+    if (it.kind === 'aoe' && it.dmg) {
+      ['V', 'C', 'S'].forEach((id, k) => {
+        circle(ctx, x + r * 1.75, y + r * (0.05 + k * 0.62), compact ? 3.2 : 3.8);
+        ctx.fillStyle = OWNER_COLORS[id];
+        ctx.fill();
+        ctx.strokeStyle = '#1a0a10';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      });
     }
     if (it.target) {
       circle(ctx, x + r * 1.8, y + r * 0.2, compact ? 5 : 6);

@@ -155,15 +155,19 @@ export const ENEMIES = {
   hound_mother: {
     name: 'Hound Mother', act: 1, tier: 'elite', hp: 92, actTime: 5.0, art: 'houndmother', size: 1.45,
     lore: 'The spawner node. Every litter is a bug report.',
+    // Phase 6 (docs/AUDIT.md): at most 3 litters per fight, and a whelp is a smaller Rush Hound (60% HP).
+    // Unlimited full-size replacements let her summon as fast as a slow player could kill them.
+    litters: 3, whelpHp: 0.6,
     intents: {
-      whelp: { kind: 'summon', name: 'Whelp', desc: 'Summon a Rush Hound.', exec: (e, c) => c.summon('rush_hound', e) },
+      whelp: { kind: 'summon', name: 'Whelp', desc: 'Summon a whelp: a smaller Rush Hound (3 litters per fight).', exec: (e, c) => { e.flags.whelps = (e.flags.whelps || 0) + 1; c.summon('rush_hound', e, { hpScale: ENEMIES.hound_mother.whelpHp }); } },
       rally: { kind: 'buff', name: 'Rally', desc: 'All other enemies gain +30% ATB.', exec: (e, c) => c.enemies.filter((x) => x.alive && x !== e).forEach((x) => (x.atb = Math.min(0.95, x.atb + 0.3))) },
       maul: atk('Maul', 11),
     },
     startWith: ['rush_hound'],
     ai: (e, c) => {
       const alive = c.enemies.filter((x) => x.alive).length;
-      if (alive < 3 && e.actCount % 3 === 0) return 'whelp';
+      const left = ENEMIES.hound_mother.litters - (e.flags.whelps || 0);
+      if (alive < 3 && left > 0 && e.actCount % 3 === 0) return 'whelp';
       return e.actCount % 3 === 1 && alive > 1 ? 'rally' : 'maul';
     },
   },
@@ -182,7 +186,7 @@ export const ENEMIES = {
     name: 'Choir Engine', act: 2, tier: 'elite', hp: 140, actTime: 5.2, art: 'choir', size: 1.45,
     lore: 'Sings the error log. In harmony.',
     intents: {
-      feedback: { kind: 'drain', name: 'Feedback', desc: 'If a combo is active: drain 1.0s of Flow. Otherwise hit every ally for 5.', exec: (e, c) => { if (c.combo) c.drainFlow(e, 1.0); else c.hitAll(e, c.edmg(e, 5)); } },
+      feedback: { kind: 'drain', name: 'Feedback', flow: 1.0, desc: 'If a combo is active: drain 1.0s of Flow. Otherwise hit every ally for 5.', exec: (e, c) => { if (c.combo) c.drainFlow(e, 1.0); else c.hitAll(e, c.edmg(e, 5)); } },
       chorus: aoe('Chorus', 5),
       harmonize: { kind: 'heal', name: 'Harmonize', desc: 'All enemies heal 8 and gain 6 Guard.', exec: (e, c) => c.enemies.filter((x) => x.alive).forEach((x) => { c.healEnemy(x, 8); c.enemyGuard(x, 6); }) },
       solo: atk('Solo', 12),
@@ -226,7 +230,7 @@ export const ENEMIES = {
     intents: {
       decree: lock('Royal Decree', 2),
       hourhand: atk('Hour Hand', 13),
-      tempo: { kind: 'drain', name: 'Tempo Theft', desc: 'If a combo is active, steal 1.2s of Flow. Otherwise Lock 1 card and strike for 6.', exec: (e, c, it) => { if (c.combo) c.drainFlow(e, 1.2); else { c.lockCards(e, 1); c.hitParty(e, it.target, c.edmg(e, 6)); } } },
+      tempo: { kind: 'drain', name: 'Tempo Theft', flow: 1.2, desc: 'If a combo is active, steal 1.2s of Flow. Otherwise Lock 1 card and strike for 6.', exec: (e, c, it) => { if (c.combo) c.drainFlow(e, 1.2); else { c.lockCards(e, 1); c.hitParty(e, it.target, c.edmg(e, 6)); } } },
       toll: aoe('Midnight Toll', 9),
       decree3: lock('Absolute Decree', 3),
     },
@@ -291,7 +295,7 @@ export const ENEMIES = {
     lore: 'The heart of the game. It knows every rule you broke.',
     intents: {
       clock: lock('Clock Protocol', 2, 6),
-      tempo: { kind: 'drain', name: 'Tempo Theft', desc: 'If a combo is active, steal 1.2s of Flow. Otherwise strike for 10.', exec: (e, c, it) => { if (c.combo) c.drainFlow(e, 1.2); else c.hitParty(e, it.target, c.edmg(e, 10)); } },
+      tempo: { kind: 'drain', name: 'Tempo Theft', flow: 1.2, desc: 'If a combo is active, steal 1.2s of Flow. Otherwise strike for 10.', exec: (e, c, it) => { if (c.combo) c.drainFlow(e, 1.2); else c.hitParty(e, it.target, c.edmg(e, 10)); } },
       audit: { kind: 'special', name: 'Audit Protocol', dmg: 8, desc: 'Checks your last two combos for repetition: issue a Citation. Strikes for 8.', exec: (e, c, it) => { c.auditPatterns(e); c.hitParty(e, it.target, c.edmg(e, 8)); } },
       barrier: guardSelf('Signal Barrier', 24),
       adapt: { kind: 'special', name: 'Counter-Strategy', desc: 'Targets your dominant strategy (see Adaptation).', exec: (e, c, it) => c.coreCounter(e, it) },

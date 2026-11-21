@@ -226,9 +226,11 @@ for (const [W, H] of VIEWPORTS) {
   });
   await p.waitForTimeout(1200);
   await check('battle-boss', true);
-  for (const key of ['start', 'opened', 'closer', 'afterCombo', 'lock', 'scramble', 'jam', 'glitch', 'latch']) {
-    await ev((k) => { const bs = window.__sb.battle; window.__sb.meta.tut[k] = false; bs.tutorial(k); }, key);
-    await check(`tutorial-${key}`, key === 'opened');
+  // every lesson card (src/ui/lessons.js), anchored where its moment would put it when possible
+  const lessonKeys = await ev(async () => (await import('/src/ui/lessons.js')).LESSON_KEYS);
+  for (const key of lessonKeys) {
+    await ev((k) => { const bs = window.__sb.battle; window.__sb.meta.tut[k] = false; bs.showLessonByKey(k); }, key);
+    await check(`lesson-${key}`, key === 'ranks');
     await ev(() => { const btn = document.querySelector('.tut-layer:not([hidden]) .btn'); if (btn) btn.click(); });
   }
   // play into a combo so the "next" hint, flow text and cash-out sub-labels show

@@ -16,6 +16,7 @@ import { TRAITS, NODE_TYPES } from '../src/data/traits.js';
 import { SCENES, SPEAKERS, DEFEAT_LINES, DEV_REMARKS } from '../src/data/story.js';
 import { PREPARED_PLANS, VOLATILE_OUTCOMES, THEME_NAMES } from '../src/data/acts.js';
 import { Run } from '../src/engine/run.js';
+import { LESSONS } from '../src/ui/lessons.js';
 
 const holes = (s) => new Set([...String(s).matchAll(/\{(\w+)/g)].map((m) => m[1]));
 const sameHoles = (a, b, what) => assert.deepEqual([...holes(b)].sort(), [...holes(a)].sort(), `placeholders differ: ${what}`);
@@ -90,8 +91,13 @@ test('story, dialogue, tutorial and help are translated line for line', () => {
   for (const m of main.matchAll(/line\('([\w.]+)', '((?:[^'\\]|\\.)*)'/g)) { filled(RU.lines[m[1]], `line ${m[1]}`); sameHoles(m[2], RU.lines[m[1]], m[1]); }
   for (const m of main.matchAll(/^\s{8}(\w+): '/gm)) if (main.includes('quip.${arch}')) filled(RU.lines[`quip.${m[1]}`], `quip ${m[1]}`);
   for (const m of main.matchAll(/sec\('(\w+)', /g)) { filled(RU.howto[m[1]][0], `howto ${m[1]}`); filled(RU.howto[m[1]][1], `howto ${m[1]}`); }
-  const battle = fs.readFileSync(new URL('../src/ui/battleScreen.js', import.meta.url), 'utf8');
-  for (const m of battle.matchAll(/^\s{6}(\w+): \['/gm)) { filled(RU.tutorial[m[1]][0], `tutorial ${m[1]}`); filled(RU.tutorial[m[1]][1], `tutorial ${m[1]}`); }
+  for (const L of LESSONS) {
+    const r = RU.lessons[L.key];
+    filled(r && r[0], `lesson ${L.key} title`);
+    filled(r[1], `lesson ${L.key} text`);
+    sameHoles(L.body, r[1], `lesson ${L.key}`);
+  }
+  assert.deepEqual(Object.keys(RU.lessons).sort(), LESSONS.map((l) => l.key).sort(), 'lesson translations match the lessons');
 });
 
 test('Russian plural forms and number formatting', () => {

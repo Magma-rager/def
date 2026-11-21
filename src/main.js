@@ -12,6 +12,7 @@ import { ICON_PATHS } from './render/icons.js';
 import { h, clear, btn } from './ui/dom.js';
 import { cardEl, cardTooltip, cardText } from './ui/cardView.js';
 import { BattleScreen } from './ui/battleScreen.js';
+import { LESSONS, migrateLessons } from './ui/lessons.js';
 import * as S from './ui/screens.js';
 import { museumModal } from './ui/museum.js';
 
@@ -35,6 +36,8 @@ class App {
     setLang(this.settings.lang || detectLang(typeof navigator !== 'undefined' ? navigator.languages || [navigator.language] : []));
     this.meta = Save.loadMeta();
     if (!this.meta.tut) this.meta.tut = {};
+    // players who finished the earlier tutorial keep its lessons marked as learned (src/ui/lessons.js)
+    if (migrateLessons(this.meta)) Save.saveMeta(this.meta);
     this.audio = new AudioEngine(this.settings);
     this.run = null;
     this.offline = null; // web app offline cache: null (none), 'caching' or 'ready'
@@ -508,7 +511,14 @@ class App {
       toggle('relaxed', t('Assist: relaxed enemy speed (−25% enemy ATB; Flow rules unchanged)')),
       toggle('tactical', t('Tactical timing: enemies slow to 25% while you choose your next command in a combo'), () => { if (this.battle) this.battle.combat.tactical = !!s.tactical; }),
       h('div', { class: 'row-btns' },
-        btn(t('Replay tutorial hints'), () => { this.meta.tut = {}; this.saveMeta(); this.toast(t('Tutorial hints reset.')); }, 'small'),
+        btn(t('Replay tutorial hints'), () => {
+          // every lesson shows again at its moment in the next battles; runs, unlocks and records stay
+          this.meta.tut = {};
+          this.meta.lessonsMigrated = true;
+          this.saveMeta();
+          if (!s.hints) { s.hints = true; this.saveSettings(); const box = document.getElementById('set-hints'); if (box) box.checked = true; }
+          this.toast(t('Tutorial hints reset.'));
+        }, 'small'),
         btn(t('Erase all data'), () => this.confirm(t('Erase everything?'), t('Deletes the current run, Museum records and settings on this device.'), t('Erase'), () => {
           Save.clearRun();
           try { localStorage.clear(); } catch (e) { /* storage unavailable */ }
@@ -524,16 +534,19 @@ class App {
     const close = this.modal(h('div', { class: 'panel wide htp' },
       h('h2', {}, t('How to Relay')),
       sec('hand', 'The hand', 'Your three heroes — <b>Hessa</b> (Vanguard), <b>Corvin</b> (Channeler) and <b>Pin</b> (Striker) — share one deck and one hand of <b>six cards</b>. The hand stays as it is: only the card you play (or Churn) is replaced, from the top of the deck. <b>NEXT CARD</b>, beside the hand, is the card you will draw next. Enemies act in real time: their ATB bar fills and they execute the intent shown in their bubble. Two enemies never act in the same moment.'),
-      sec('target', 'Targets', 'Your attacks hit the enemy in <b>gold brackets</b>, labeled TARGET; its name is also on the ⌖ button above your hand. <b>Tap an enemy</b> (or that button) to switch. If your target falls, the next enemy is chosen and labeled NEW TARGET. A <b>red ring</b> under a hero, with ▼ and a number by their name, shows who an enemy is about to hit and for how much.'),
+      sec('target', 'Targets', 'Your attacks hit the enemy in <b>gold brackets</b>, labeled TARGET; its name is also on the ⌖ button above your hand. <b>Tap an enemy</b> (or that button) to switch. If your target falls, the next enemy is chosen and labeled NEW TARGET. A <b>red ring</b> under a hero, with ▼ and a number by their name, shows who an enemy is about to hit and for how much. <b>Hold an enemy</b> to read its next move, with the damage each hero would take after Defense (the battle pauses while you read).'),
       sec('party', 'Party HP, Defense, Cover', 'The three heroes share <b>one HP bar</b> (top left); the battle is lost only when it reaches 0, and no hero is ever knocked out. Each hero has a <b>Defense</b> % (the shield on their name plate) that reduces hits aimed at them: <b>Hessa 30%</b>, <b>Pin 15%</b>, <b>Corvin 0%</b>. Shared <b>Guard</b> absorbs what is left. An attack on every hero is reduced by each one\'s own Defense, and Guard absorbs it once. When Hessa plays a <b>Guard</b> card she <b>covers</b> the party for 4s: hits aimed at Corvin or Pin land on her instead (the COVER badge over her shows the time left).'),
       sec('sequence', 'Basic attacks, artes, support', '<b>Basic attacks ◆</b> (Weak 1, Medium 2, Strong 3) belong to no one: the hero who is attacking performs them. A combo starts with a basic attack by the hero you choose with the buttons above the hand (or by tapping a hero). <b>Artes ★</b> (ranks 4–6) belong to one hero: only that hero can use them, after at least one basic attack in that hero\'s part of the combo, and they cost Momentum (the number in the card\'s corner). <b>Support ✚</b> cards (healing, Guard, utility) have no rank and can be played any time, even during another hero\'s combo; the hero who performs one then recovers. A ★ on a hero button means that hero has an arte in hand.'),
       sec('queue', 'The queue and Recovery', 'Tapping a card <b>commits</b> it: it plays out over a moment (its effect lands mid-animation) and you can keep tapping cards meanwhile — up to three wait in order beside the combo (dashed chips), each leaving a placeholder in its hand slot. <b>Tap a waiting card</b> (chip or placeholder) to take it back; its Momentum is returned. A card that has started cannot be taken back. Momentum is spent when a card starts and gained when it lands, so an arte needs Momentum you already have. Each hero has a state on their button: Ready, Active (attacking), Acting, Committed (waiting to act) or <b>Recovering</b> — after their part of a combo (1.5s + 0.3s per card) or a support action (2s), shown by a bar. Enemies keep acting while heroes recover.'),
       sec('ranks', 'Ranks & suits', 'Within a combo every attack needs a <b>higher rank</b> than the last; skipping ranks is fine (Weak 1 → Strong 3 → arte 5). Suits never block a card. Exactly +1 rank is a <b>Step</b>; a different suit from the last card is a <b>Cross</b> (+1 Momentum); one card can be both. <b>EX</b> differs from A and B.'),
-      sec('flow', 'Flow', 'The first attack starts <b>5s of Flow</b>. Flow only counts down while you are choosing: it <b>holds while any command plays out</b>, and for a moment after the first card and after each Relay. Each valid card refunds 1s when it lands (up to 5s per combo). A combo lasts at most 14s, not counting the holds. If Flow runs out after a basic attack the combo is <b>Dropped</b> (−2 Momentum; waiting cards return to your hand); after an arte it counts as a Perfect. Wrong cards cause a <b>Stumble</b> (−0.4s, −1 Momentum; three stumbles end the combo). After every combo comes a short <b>breather</b>: enemies wait. The optional <b>Tactical timing</b> setting slows enemies to 25% while you choose.'),
+      sec('flow', 'Flow', 'The first attack starts <b>5s of Flow</b>. Flow only counts down while you are choosing: it <b>holds while any command plays out</b>, and for a moment after the first card, after each Relay and after the new hero's first card. Each valid card refunds 1s when it lands (up to 5s per combo). A combo lasts at most 14s, not counting the holds. An enemy about to steal Flow shows the amount in red at the end of the bar. If Flow runs out after a basic attack the combo is <b>Dropped</b> (−2 Momentum; waiting cards return to your hand); after an arte it counts as a Perfect. Wrong cards cause a <b>Stumble</b> (−0.4s, −1 Momentum; three stumbles end the combo). After every combo comes a short <b>breather</b>: enemies wait. The optional <b>Tactical timing</b> setting slows enemies to 25% while you choose.'),
       sec('relay', 'Relay & Echo', 'During a combo, <b>tap another Ready hero</b> to queue a <b>Relay</b> (heroes who can take it show ⇄). When it runs, the attacking hero recovers and the new hero continues the <b>same combo</b>: ranks start again (open with a basic attack), everything else carries on — cards, damage, Steps, Crosses. A Relay gives +1 Momentum and the new hero\'s first attack +10% per Relay so far. Each hero joins a combo once, so a combo has at most three parts. Echo effects repeat earlier cards\' damage, Guard, healing and statuses at reduced power (never Flow, Momentum, rank changes, Relays or other Echoes).'),
       sec('momentum', 'Momentum, Guard, Finish, Cash Out', '<b>Momentum</b> comes from basic attacks (Weak and Medium +1, Strong +2), Crosses, Perfect combos and cards. It pays for artes and some support, or buys <b>+1.5s Flow</b> or <b>+8 Guard</b> (3 each). Guard is shared by the party and fades slowly. Ending a combo with an arte is a <b>PERFECT</b> (+2 Momentum, +1 Churn charge): after an arte the button reads <b>FINISH</b>; the combo finishes by itself only when no higher arte is playable and every hero has already joined it. <b>CASH OUT</b> ends a combo of 2+ cards that ends with a basic attack for a payout (+25% if 2.5s+ Flow is left).'),
       sec('churn', 'Churn & Reserve', '<b>Swipe a card down</b> to Churn it (uses a charge; charges refill over time; outside a combo it also nudges every enemy\'s ATB forward, and their bars flash). <b>Swipe up</b> to stash it in Reserve (2 slots); Reserve cards can be played whenever they are legal. If nothing in your hand can be played before a combo, Churn is <b>free</b>. <b>Hold</b> a card to read it in full; the battle pauses while you read.'),
       sec('interference', 'Interference', 'Enemies Lock cards (3s), Scramble ranks/suits, jam slots, snare Churn, latch your Reserve and steal Flow. Every effect shows its source and timer and always expires.'),
+      h('div', { class: 'htp-sec htp-tips' }, h('h3', {}, t('All tutorial tips')),
+        h('p', { class: 'dim' }, t('The tips appear once each, when they become useful in a battle. Settings → Replay tutorial hints shows them again.')),
+        ...LESSONS.map((L) => { const [tl, bd] = block('lessons', L.key, [L.title, L.body]); return h('details', { class: 'htp-tip' }, h('summary', {}, tl), h('div', { html: bd })); })),
       sec('keyboard', 'Keyboard', '<b>Q / W / E</b> choose Hessa / Corvin / Pin (during a combo: Relay to them; for Braced: the hero to protect) · <b>1–6</b> play · <b>Shift+1–6</b> Churn · <b>Alt+1–6</b> Reserve · <b>7/8</b> play Reserve · <b>Backspace</b> take back the last waiting card · <b>Space</b> Finish / Cash Out · <b>F</b> +Flow · <b>G</b> +Guard · <b>Tab</b> cycle target · <b>Esc</b> pause'),
       h('div', { class: 'row-btns end' }, btn(t('Close'), () => close(), 'primary'))), { dismiss: true });
   }
