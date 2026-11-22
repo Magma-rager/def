@@ -1,7 +1,7 @@
 // Offline cache for SIGNAL//BREAK. Installed on the first online launch; afterwards the game
 // starts from the cache, with or without a connection. A new build installs in the background
 // and is used from the next launch.
-const CACHE = 'signalbreak-f0508056404a';
+const CACHE = 'signalbreak-5628ed6efa99';
 const CORE = ["./index.html","./manifest.webmanifest","./icon.svg","./icon-180.png","./icon-192.png","./icon-512.png"];
 self.addEventListener('install', (e) => {
   // bypass the HTTP cache so a new build never stores a stale copy of the page
