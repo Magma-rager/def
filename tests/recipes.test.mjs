@@ -690,3 +690,21 @@ test('EX damage carries the completing card\'s suit into the boss Suit Filter; i
   const arte = c.combo.cards[3];
   assert.equal(c.adapt.progress, arte.dmg, `progress ${c.adapt.progress} = the arte's own damage ${arte.dmg}, not the strike's ${c.ex[0].sum.dmg}`);
 });
+
+test('the first-EX lesson waits for the first battle\'s queue and cancel lessons, and for the banner to fade', async () => {
+  const { pickLesson } = await import('../src/ui/lessons.js');
+  const c = fixed(['scrapline', 'rivet_jab', 'piston_strike']);
+  const base = { flags: {}, kind: 'normal', tutorial: true, tactical: false, exKnown: 1, exBanner: false };
+  // every other lesson seen except queue and cancel: exCombo is not offered yet
+  const { LESSON_KEYS } = await import('../src/ui/lessons.js');
+  const seen = Object.fromEntries(LESSON_KEYS.filter((k) => !['exCombo', 'queue', 'cancel'].includes(k)).map((k) => [k, true]));
+  let r = pickLesson(c, { ...base, seen });
+  assert.ok(!r || r.lesson.key !== 'exCombo');
+  seen.queue = true; seen.cancel = true;
+  r = pickLesson(c, { ...base, seen, exBanner: true });
+  assert.ok(!r || r.lesson.key !== 'exCombo', 'not while the EX banner shows');
+  r = pickLesson(c, { ...base, seen });
+  assert.equal(r && r.lesson.key, 'exCombo');
+  r = pickLesson(c, { ...base, seen, exKnown: 0 });
+  assert.ok(!r || r.lesson.key !== 'exCombo', 'only after a discovery');
+});

@@ -196,6 +196,7 @@ check(10, 'A first discovery: recorded in the Museum at once, marked NEW', a && 
 s = await finishChain();
 check(11, 'The chain finishes normally (FINISH: a Perfect)', s && s.history.length === 1 && s.history[0].type === 'perfect' && s.history[0].ex.includes('straight_circuit'), s ? JSON.stringify(s.history[0]) : '');
 check(12, 'Card zones and Momentum intact', integrity(s), `zones ${s && s.zones}, Momentum ${s && s.mom}/${s && s.momMax}, reserved ${s && s.reserved}`);
+await until(() => lessons.some((l) => l.key === 'exCombo'), 6000); // it waits for the EX banner to fade
 const exLesson = lessons.find((l) => l.key === 'exCombo');
 check('12a', 'The first-EX lesson explains it once, after the discovery', exLesson && exLesson.ex >= 1 && lessons.filter((l) => l.key === 'exCombo').length === 1, exLesson ? `shown after ${exLesson.ex} activation(s)` : `lessons: ${lessons.map((l) => l.key).join(', ') || 'none'}`);
 

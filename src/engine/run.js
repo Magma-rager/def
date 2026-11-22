@@ -17,7 +17,7 @@ export const PARTY_BASE = { V: 46, C: 34, S: 38 };
 export const PARTY_HP_BONUS = 12;
 export const PARTY_MAX_HP = PARTY_BASE.V + PARTY_BASE.C + PARTY_BASE.S + PARTY_HP_BONUS;
 export const MAP_DEPTHS = 8; // depths 0..7, boss at depth 8
-const SAVE_VERSION = 6;
+export const SAVE_VERSION = 6;
 
 // Save version 5 (docs/COMBAT_SPEC.md §19): card ids of the old Opener/Converter/Closer catalogue that
 // Phase 4 withholds (they need Relays) become a converted card of the same hero and rarity; unknown ids

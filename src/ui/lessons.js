@@ -229,7 +229,9 @@ export const LESSONS = [
   },
   // ── Phase 7: the first EX Combo ──
   {
-    key: 'exCombo', title: 'EX COMBO',
+    // after the first battle's core lessons: its condition stays true once a recipe is known, so without
+    // `need` it would take the next free moment ahead of the transient queue and cancel lessons
+    key: 'exCombo', need: ['queue', 'cancel'], title: 'EX COMBO',
     body: 'That sequence was an <b>EX Combo</b>: a recipe made of cards and actions you already use, with an extra effect on top. There are more to find. The Museum\'s <b>Combo Journal</b> records every one you discover and how to repeat it.',
     when: (c, x) => (x.exKnown > 0 && !x.exBanner ? { ui: 'none' } : null), // once the EX banner has had its moment
   },
