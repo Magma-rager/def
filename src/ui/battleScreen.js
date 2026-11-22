@@ -4,12 +4,14 @@ import { Combat, RULES } from '../engine/combat.js';
 import { CARDS, isOffensive } from '../data/cards.js';
 import { DEV_REMARKS } from '../data/story.js';
 import { TRAITS } from '../data/traits.js';
-import { t, msg, num, secs, block, cardName, enemyName, intentName, intentDesc, traitName, traitText, adaptName, adaptDesc, adaptBreak, relicName, remark, ownerName, ownerInitial, strengthName } from '../i18n/index.js';
+import { t, msg, num, secs, block, cardName, enemyName, intentName, intentDesc, recipeName, traitName, traitText, adaptName, adaptDesc, adaptBreak, relicName, remark, ownerName, ownerInitial, strengthName } from '../i18n/index.js';
 import { BattleView } from '../render/battleView.js';
 import { drawPortrait } from '../render/rig.js';
 import { h, clear, btn } from './dom.js';
 import { cardEl, cardTooltip, fitText, CAT_GLYPH } from './cardView.js';
 import { LESSONS, LESSON_PACE, pickLesson } from './lessons.js';
+import { recordCombo } from '../engine/save.js';
+import { knownDiscoveries } from '../data/recipes.js';
 
 const OWNER_COL = { V: '#d0603f', C: '#b48cf0', S: '#e6c25a' };
 const HERO_KEYS = { KeyQ: 'V', KeyW: 'C', KeyE: 'S' };
@@ -59,6 +61,7 @@ export class BattleScreen {
     // progressive lessons (src/ui/lessons.js): how many this battle has shown, when the last closed
     this.lessons = { flags: {}, shown: 0, lastAt: -99, kind: setup.kind, poll: 0 };
     this.lessonOpen = null;
+    this.exLog = []; // EX Combos shown in this battle: { id, fresh } (also read by tools)
     this.lastFlowWarn = 0;
     this.pick = null; // a hero-targeted support (Braced) waiting for the player to choose its hero
   }
@@ -459,8 +462,10 @@ export class BattleScreen {
     if (!events.length) return;
     this.view.consume(events);
     const c = this.combat;
+    const ex = new Map(); // EX Combos completed by the same command are shown together
     for (const ev of events) {
       switch (ev.type) {
+        case 'exCombo': { if (!ex.has(ev.group)) ex.set(ev.group, []); ex.get(ev.group).push(ev); break; }
         case 'churn': this.causes[ev.uid] = 'churn'; break;
         case 'tuck': this.causes[ev.uid] = 'tuck'; break;
         case 'stash': this.causes[ev.uid] = 'stash'; break;
@@ -478,6 +483,7 @@ export class BattleScreen {
         default: break;
       }
     }
+    for (const list of ex.values()) this.onExCombo(list);
   }
 
   onComboEnd(ev) {
@@ -493,6 +499,44 @@ export class BattleScreen {
     if (this.combat.stats.churns >= 6) this.remark('churnSpam', true);
     const low = this.combat.hp < this.combat.maxHp * 0.25;
     if (low) this.remark('lowHp', true);
+  }
+
+  // EX Combos (Phase 7). A discovery is recorded in the Museum's Combo Journal the moment the recipe
+  // activates and saved at once — whatever happens to the battle afterwards (docs/COMBAT_SPEC.md §28).
+  // One banner per command: the recipes in priority order and what their effects actually gave.
+  onExCombo(list) {
+    const fresh = [];
+    for (const ev of list) {
+      const isNew = recordCombo(this.app.meta, ev.id);
+      if (isNew) fresh.push(ev.id);
+      this.exLog.push({ id: ev.id, fresh: isNew, applied: ev.applied });
+    }
+    this.app.saveMeta();
+    const sum = {};
+    for (const ev of list) for (const [k, v] of Object.entries(ev.sum)) sum[k] = typeof v === 'boolean' ? sum[k] || v : (sum[k] || 0) + v;
+    const parts = [];
+    if (sum.dmg) parts.push(t('{n} damage', { n: sum.dmg }));
+    if (sum.guard) parts.push(t('+{n} Guard', { n: sum.guard }));
+    if (sum.heal) parts.push(t('+{n} HP', { n: sum.heal }));
+    if (sum.momentum) parts.push(t('+{n} Momentum', { n: sum.momentum }));
+    if (sum.flow) parts.push(t('+{s} Flow', { s: secs(sum.flow, 1) }));
+    if (sum.churn) parts.push(t('+{n} Churn', { n: sum.churn }));
+    if (sum.exposed) parts.push(t('Exposed {s}', { s: secs(sum.exposed, 0) }));
+    if (sum.counter) parts.push(t('Counter {n}', { n: sum.counter }));
+    if (sum.cover) parts.push(t('Cover +{s}', { s: secs(sum.cover, 0) }));
+    if (sum.unlocked) parts.push(t('{n} unlocked', { n: sum.unlocked }));
+    if (sum.echo) parts.push(t('Echo'));
+    if (list.some((ev) => !ev.applied)) parts.push(t('the battle was already won'));
+    const text = h('div', { class: 'banner-text' }, h('span', { class: 'ex-plate' }, 'EX'), list.map((ev) => recipeName(ev.id)).join(' + '));
+    const b = h('div', { class: 'banner tone-ex', 'data-ex': list.map((ev) => ev.id).join(',') }, text,
+      parts.length ? h('div', { class: 'banner-sub' }, parts.join(' · ')) : null,
+      fresh.length ? h('div', { class: 'banner-sub banner-new' }, t('NEW EX COMBO DISCOVERED')) : null);
+    this.bannerEl.append(b);
+    while (this.bannerEl.children.length > 2) this.bannerEl.firstChild.remove();
+    const hold = fresh.length ? 2600 : 1700;
+    setTimeout(() => b.classList.add('out'), hold);
+    setTimeout(() => b.remove(), hold + 700);
+    this.app.audio.sfx(fresh.length ? 'exNew' : 'ex');
   }
 
   remark(key, once) {
@@ -545,7 +589,7 @@ export class BattleScreen {
     const L = this.lessons;
     if (L.shown >= (this.setup.tutorial ? LESSON_PACE.perBattle.tutorial : LESSON_PACE.perBattle.normal)) return;
     if (c.t - L.lastAt < LESSON_PACE.gap) return;
-    const r = pickLesson(c, { seen: this.app.meta.tut, flags: L.flags, kind: this.setup.kind, tutorial: !!this.setup.tutorial, tactical: !!c.tactical });
+    const r = pickLesson(c, { seen: this.app.meta.tut, flags: L.flags, kind: this.setup.kind, tutorial: !!this.setup.tutorial, tactical: !!c.tactical, exKnown: knownDiscoveries(this.app.meta.combos).length });
     if (r) this.showLesson(r.lesson, r.anchor);
   }
   // also used by tools (i18n-layout) to show a given lesson

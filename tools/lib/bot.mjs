@@ -13,6 +13,12 @@
 //   'learner' — waits for each command to finish before choosing the next, no Momentum shortcuts,
 //               Churn only for Glitch, support only when obviously useful, picks the first hero
 //               showing a ★, Relays only to a hero whose arte is in hand
+//
+// `ex: true` (Phase 7) is a player who has read the Combo Journal (src/data/recipes.js): with the same
+// hand it orders its legal choices towards EX Combo recipes — climbing W→M→S before the arte, Cashing
+// Out quickly, buying Flow to reach 6 cards, a heal or Hessa's Cover from another hero mid-chain, a
+// Churn before the arte. It never builds a recipe the engine has not seen executed, and plays nothing
+// check() would refuse; recipes trigger only through the engine (tools/recipelab.mjs counts them).
 import { CARDS } from '../../src/data/cards.js';
 
 const def = (c, u) => CARDS[c.cards.get(u).id];
@@ -107,7 +113,66 @@ function relayTarget(c, profile, policy = 'careful') {
   return best ? best.id : null;
 }
 
-export function decide(c, { profile = 'regular', rng = Math.random, relay = 'careful' } = {}) {
+// The cards of the projected current part of the chain (executed ones, then the executing and queued
+// commands after the last Relay): printed strength (basic attacks 1-3), category and suit.
+function projSeg(c) {
+  const cm = c.combo;
+  let seg = cm ? cm.cards.slice(cm.cards.length - cm.segCards).map((e) => ({ s: e.strength || 0, cat: e.category, v: e.variant })) : [];
+  const cmds = [...(c.executing && !c.executing.resolved ? [c.executing.cmd] : []), ...c.queue];
+  for (const q of cmds) {
+    if (q.type === 'relay') seg = [];
+    else if (q.type === 'card' && q.category !== 'support') { const d = def(c, q.uid); seg.push({ s: d.category === 'basic' ? d.rank : 0, cat: q.category, v: q.variant }); }
+  }
+  return seg;
+}
+const chainHas = (c, k) => !!(c.combo && c.combo.log && c.combo.log.some((l) => l.k === k));
+const QUICK_LEFT = 2.5; // RULES.QUICK_CASH_LEFT (Flow left for a Quick Cash Out)
+
+// A recipe-minded move inside a chain (not right after a Relay), or null to fall back to the base policy.
+function exMove(c, P, hero, artes, basics, busy) {
+  const seg = projSeg(c);
+  const left = c.flowLeft();
+  const mine = cards(c).filter((u) => cat(c, u) === 'arte' && def(c, u).owner === hero && !c.isLocked(u));
+  const ok = (u) => c.check(u).ok;
+  const sup = cards(c).filter((u) => cat(c, u) === 'support' && ok(u));
+  // Healing Cadence: another hero's heal during the chain, when the party is hurt
+  if (P.seg >= 1 && left > 1.5 && c.hp < c.maxHp * 0.9) {
+    const h = sup.find((u) => def(c, u).id === 'mend_circuit' && def(c, u).owner !== hero);
+    if (h) return { type: 'play', uid: h };
+  }
+  // Iron Harmony: Hessa's Guard support (her Cover) during another hero's chain, before that hero's arte
+  if (hero !== 'V' && P.seg >= 1 && mine.length && left > 1.8 && !chainHas(c, 'support')) {
+    const g = sup.find((u) => def(c, u).owner === 'V' && (def(c, u).tags || []).includes('guard'));
+    if (g) return { type: 'play', uid: g };
+  }
+  // Second Wind: buy Flow once when the hand can carry the chain to 6 cards
+  const left6 = 6 - P.cards;
+  const fuel = cards(c).filter((u) => cat(c, u) !== 'support' && cat(c, u) !== 'junk' && !c.isLocked(u)).length;
+  if (P.cards >= 2 && left6 > 0 && fuel >= left6 && !chainHas(c, 'flow') && left < 3 && c.available() >= c.momentumCostFlow() + 2 && c.combo.deadline < c.flowCap() - 1) return { type: 'spend', what: 'flow' };
+  // Straight Circuit: one hero's part opens Weak, Medium, Strong before their arte
+  const ladder = seg.length < 3 && seg.every((e, i) => e.cat === 'basic' && e.s === i + 1);
+  if (ladder && seg.length && mine.length && left > 1.2 + 0.6 * (3 - seg.length)) {
+    const next = basics.find((u) => def(c, u).rank === seg.length + 1);
+    const reach = c.available() + pendingGain(c) + (next ? def(c, next).gain || 0 : 0);
+    if (next && mine.some((u) => def(c, u).cost <= reach + 2)) return { type: 'play', uid: next };
+  }
+  // Salvage Circuit: dig with a Churn while no arte is playable, then play what it brought in
+  const drew = c.combo && c.combo.log ? c.combo.log.filter((l) => l.k === 'churn' && l.drew).map((l) => l.drew) : [];
+  const found = drew.find((u) => (c.hand.includes(u) || c.reserve.includes(u)) && ok(u) && cat(c, u) !== 'support');
+  if (found && !(cat(c, found) === 'basic' && artes.length && left < 1.5)) return { type: 'play', uid: found };
+  if (!artes.length && mine.length && c.churn.charges > 0 && !drew.length && left > 2 && c.churnJamUntil <= c.t) {
+    const dead = c.hand.find((u) => u && cat(c, u) === 'basic' && !ok(u) && !c.isLocked(u)); // a basic attack too low to follow
+    if (dead) return { type: 'churn', uid: dead };
+  }
+  // Cross Current: with two basic attacks to choose from and no arte yet, switch suits
+  if (!artes.length && basics.length > 1 && !busy) {
+    const other = basics.filter((u) => c.effVariant(u) !== P.variant).sort((a, b) => c.effRank(a) - c.effRank(b));
+    if (other.length && mine.length) return { type: 'play', uid: other[0] };
+  }
+  return null;
+}
+
+export function decide(c, { profile = 'regular', rng = Math.random, relay = 'careful', ex = false } = {}) {
   if (c.phase === 'END' || c.phase === 'RECOVER') return { type: 'wait' };
   const tools = profile !== 'learner';
   const ahead = QUEUE_AHEAD[profile] !== undefined ? QUEUE_AHEAD[profile] : 1;
@@ -155,6 +220,7 @@ export function decide(c, { profile = 'regular', rng = Math.random, relay = 'car
     }
     return { type: 'wait' };
   }
+  if (ex) { const m = exMove(c, P, hero, artes, basics, busy); if (m) return m; }
   if (artes.length) {
     artes.sort((a, b) => c.effRank(b) - c.effRank(a));
     return { type: 'play', uid: artes[0] };
@@ -190,6 +256,8 @@ export function decide(c, { profile = 'regular', rng = Math.random, relay = 'car
     const to = relayTarget(c, profile, relay);
     if (to && (profile !== 'learner' || P.seg >= 2)) return { type: 'select', hero: to };
   }
+  // Quick Settlement: a Cash Out of 3+ cards with Flow to spare
+  if (ex && !pending.length && P.cards >= 3 && c.canCashOut() && c.flowLeft() >= QUICK_LEFT && !busy && c.combo && c.combo.cards.some((e) => e.cross)) return { type: 'finish' };
   if (basics.length) {
     if (P.cards >= 3 && c.canCashOut() && rng() < 0.5) return { type: 'finish' };
     basics.sort((a, b) => c.effRank(a) - c.effRank(b));

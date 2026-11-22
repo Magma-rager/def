@@ -678,7 +678,8 @@ export function resultsScreen(app, root, summary) {
     h('div', { class: 'stats-grid' },
       stat(t('Act reached'), summary.act), stat(t('Floors'), summary.floors), stat(t('Bosses defeated'), bosses), stat(t('Elites'), summary.elites),
       stat(t('Build'), archName(summary.archetype)), stat(t('Deck size'), summary.deckSize), stat(t('Combos'), summary.combos), stat(t('Perfects'), summary.perfect),
-      stat(t('Cash Outs'), summary.cashouts), stat(t('Finishers'), summary.finishers), stat(t('Longest combo'), t('{n} {n|card|cards}', { n: summary.longest })), stat(t('Biggest hit'), summary.maxHit)),
+      stat(t('Cash Outs'), summary.cashouts), stat(t('Finishers'), summary.finishers), stat(t('Longest combo'), t('{n} {n|card|cards}', { n: summary.longest })), stat(t('Biggest hit'), summary.maxHit),
+      stat(t('EX Combos'), t('{n} · {r} {r|recipe|recipes}', { n: summary.ex || 0, r: (summary.exRecipes || []).length }))),
     decisions,
     h('div', { class: 'row-btns' }, btn(t('Museum'), () => app.openMuseum(), ''), btn(t('Title'), () => app.toTitle(), ''), btn(t('New Run'), () => app.newRunFlow(), 'primary')));
   clear(root).append(h('div', { class: 'results screen' }, canvas, body));

@@ -2,23 +2,26 @@
 import { h, clear, btn } from './dom.js';
 import { ENEMIES } from '../data/enemies.js';
 import { RELICS, RELIC_IDS, STARTER_OPTIONS } from '../data/relics.js';
-import { CARD_LIST } from '../data/cards.js';
+import { CARD_LIST, ARCHETYPES } from '../data/cards.js';
+import { RECIPES, RECIPE_TIERS, RECIPE_KINDS, knownDiscoveries } from '../data/recipes.js';
 import { drawEnemyStill } from './scene.js';
 import { unlocks } from '../engine/save.js';
-import { t, lang, archName, enemyName, enemyLore, relicName, relicText, starterHint, mutName, cardName, categoryName, ownerName, rarityName, tierName } from '../i18n/index.js';
+import { t, lang, archName, recipeField, enemyName, enemyLore, relicName, relicText, starterHint, mutName, cardName, categoryName, ownerName, rarityName, tierName } from '../i18n/index.js';
 
 export function museumModal(app) {
   const m = app.meta;
-  const tabs = ['Records', 'Runs', 'Bestiary', 'Relics', 'Cards'];
-  let cur = 'Records';
-  const tabLabel = { Records: t('Records'), Runs: t('Runs'), Bestiary: t('Bestiary'), Relics: t('Relics'), Cards: t('Cards') };
+  const tabs = ['Records', 'Runs', 'Bestiary', 'Relics', 'Cards', 'Journal'];
+  let cur = app.museumTab && tabs.includes(app.museumTab) ? app.museumTab : 'Records';
+  const tabLabel = { Records: t('Records'), Runs: t('Runs'), Bestiary: t('Bestiary'), Relics: t('Relics'), Cards: t('Cards'), Journal: t('Combo Journal') };
+  const jf = { kind: 'all', build: 'all' }; // Combo Journal filters
   const body = h('div', { class: 'museum-body' });
   const tabRow = h('div', { class: 'tabs' });
   const render = () => {
     clear(tabRow);
     for (const tab of tabs) {
       const b = h('button', { class: `tab ${tab === cur ? 'on' : ''}`, type: 'button' }, tabLabel[tab]);
-      b.addEventListener('click', () => { cur = tab; app.audio.sfx('click'); render(); });
+      b.dataset.tab = tab;
+      b.addEventListener('click', () => { cur = tab; app.museumTab = tab; app.audio.sfx('click'); render(); });
       tabRow.append(b);
     }
     clear(body);
@@ -61,6 +64,8 @@ export function museumModal(app) {
         grid.append(h('div', { class: `relic-cell ${f ? '' : 'unseen'}` }, h('span', { class: 'rb-ico', html: app.relicIconSvg(id) }), h('b', {}, f ? relicName(id) : '???'), h('span', {}, f ? relicText(id) : rarityName(RELICS[id].rarity))));
       }
       body.append(grid);
+    } else if (cur === 'Journal') {
+      body.append(comboJournal(app, m, jf, render));
     } else {
       const grid = h('div', { class: 'relic-grid' });
       for (const c of CARD_LIST) {
@@ -74,4 +79,73 @@ export function museumModal(app) {
   };
   render();
   const close = app.modal(h('div', { class: 'panel wide museum' }, h('h2', {}, t('The Museum of Broken Things')), tabRow, body, h('div', { class: 'row-btns end' }, btn(t('Close'), () => close(), 'primary'))), { dismiss: true });
+}
+
+// ───────────────────────── Combo Journal (Phase 7) ─────────────────────────
+// Every EX Combo recipe: discovered ones in full (sequence, conditions, effect, purpose, how often it
+// activated), undiscovered ones as a mystery with their category and a hint. Filters: kind (offence,
+// defence, utility, Relay, support), difficulty, build.
+const SEQ = () => ({
+  W: ['◆1', t('Weak')], M: ['◆2', t('Medium')], S: ['◆3', t('Strong')], B: ['◆', t('Basic')], A: ['★', t('Arte')], A5: ['★5+', t('Arte')], A6: ['★6', t('Arte')],
+  R: ['⇄', t('Relay')], HEAL: ['✚', t('Heal')], COVER: ['▣', t('Cover')], CHURN: ['↓', t('Churn')], NEW: ['↺', t('Card drawn')], RES: ['↑', t('Reserve')], X: ['✕', t('Cross')], STEP: ['+1', t('Step')],
+  LOCK: ['⛓', t('Locked card')], FLOW: ['+', t('Flow')], CASH: ['$', t('Cash Out')], SA: ['A', t('suit')], SB: ['B', t('suit')], SEX: ['EX', t('suit')], '6+': ['6+', t('cards')], '8M': ['8', t('Momentum')],
+});
+const KIND_LABEL = () => ({ all: t('All'), offense: t('Offense'), defense: t('Defense'), utility: t('Utility'), relay: t('Relay'), support: t('Support'), accessible: t('Accessible'), intermediate: t('Intermediate'), advanced: t('Advanced') });
+
+export function seqChips(r) {
+  const seq = SEQ();
+  return h('div', { class: 'seq' }, ...r.seq.map((k, i) => {
+    const [g, word] = seq[k] || [k, ''];
+    return h('span', { class: `seq-chip k-${k.replace(/[^A-Za-z0-9]/g, '_')}` }, h('b', {}, g), word ? h('span', {}, word) : null, i < r.seq.length - 1 ? h('i', { 'aria-hidden': 'true' }, '›') : null);
+  }));
+}
+
+function comboJournal(app, m, jf, rerender) {
+  const known = new Set(knownDiscoveries(m.combos));
+  const KL = KIND_LABEL();
+  const wrap = h('div', { class: 'journal' });
+  wrap.append(h('div', { class: 'jr-head' },
+    h('b', {}, t('{a} of {b} EX Combos discovered', { a: known.size, b: RECIPES.length })),
+    h('span', { class: 'dim' }, known.size < RECIPES.length ? t('{n} still undiscovered — they work before you find them.', { n: RECIPES.length - known.size }) : t('Every recipe found.'))));
+  const chip = (key, val) => {
+    const b = h('button', { class: `tagchip jf ${jf.kind === val ? 'on' : ''}`, type: 'button', 'data-filter': val }, KL[val]);
+    b.addEventListener('click', () => { jf.kind = val; app.audio.sfx('click'); rerender(); });
+    return b;
+  };
+  const sel = h('select', { class: 'jf-build', 'aria-label': t('Build') }, h('option', { value: 'all' }, t('All builds')), ...Object.keys(ARCHETYPES).map((k) => h('option', { value: k }, archName(k))));
+  sel.value = jf.build;
+  sel.addEventListener('change', () => { jf.build = sel.value; rerender(); });
+  wrap.append(h('div', { class: 'jr-filters' }, ...['all', 'offense', 'defense', 'utility', 'relay', 'support', 'accessible', 'intermediate', 'advanced'].map((v) => chip('kind', v)), sel));
+  const pass = (r) => {
+    const k = jf.kind;
+    if (k !== 'all' && !(r.kind === k || r.tier === k || (k === 'relay' && r.tags.includes('relay')) || (k === 'support' && r.support))) return false;
+    return jf.build === 'all' || r.tags.includes(jf.build);
+  };
+  const list = h('div', { class: 'jr-list' });
+  let shown = 0;
+  for (const r of RECIPES) {
+    if (!pass(r)) continue;
+    shown++;
+    const got = known.has(r.id);
+    const meta = [KL[r.tier], KL[r.kind], ...r.tags.map((x) => archName(x))].join(' · ');
+    if (got) {
+      const rec = m.combos[r.id];
+      list.append(h('div', { class: `jr-card found t-${r.tier}`, 'data-recipe': r.id },
+        h('div', { class: 'jr-top' }, h('span', { class: 'ex-plate' }, 'EX'), h('b', { class: 'jr-name' }, recipeField(r.id, 'name')), h('span', { class: 'jr-count' }, t('×{n}', { n: rec.count || 1 }))),
+        h('div', { class: 'jr-meta dim' }, meta),
+        seqChips(r),
+        h('div', { class: 'jr-how' }, recipeField(r.id, 'how')),
+        h('div', { class: 'jr-fx' }, h('b', {}, t('Effect')), ' ', recipeField(r.id, 'effect')),
+        h('div', { class: 'jr-why dim' }, recipeField(r.id, 'purpose'))));
+    } else {
+      list.append(h('div', { class: `jr-card locked t-${r.tier}`, 'data-recipe': r.id },
+        h('div', { class: 'jr-top' }, h('span', { class: 'ex-plate off' }, 'EX'), h('b', { class: 'jr-name' }, '???')),
+        h('div', { class: 'jr-meta dim' }, meta),
+        h('div', { class: 'seq' }, ...r.seq.map(() => h('span', { class: 'seq-chip q' }, h('b', {}, '?')))),
+        h('div', { class: 'jr-hint' }, h('b', {}, t('Hint')), ' ', recipeField(r.id, 'hint'))));
+    }
+  }
+  if (!shown) list.append(h('p', { class: 'dim' }, t('No recipe matches this filter.')));
+  wrap.append(list);
+  return wrap;
 }

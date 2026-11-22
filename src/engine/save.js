@@ -1,4 +1,5 @@
 // Local persistence (localStorage with in-memory fallback) for the run, the Museum, and settings.
+import { normalizeCombos } from '../data/recipes.js';
 const KEYS = { run: 'signalbreak.run.v3', meta: 'signalbreak.meta.v1', settings: 'signalbreak.settings.v1' };
 const memory = {};
 
@@ -43,7 +44,7 @@ export const Save = {
   saveRun: (data) => write(KEYS.run, data),
   clearRun: () => { try { S.removeItem(KEYS.run); } catch (e) { /* ignore */ } },
   hasRun: () => !!read(KEYS.run),
-  loadMeta: () => read(KEYS.meta) || defaultMeta(),
+  loadMeta: () => normalizeMeta(read(KEYS.meta)),
   saveMeta: (m) => write(KEYS.meta, m),
   loadSettings: () => ({ ...defaultSettings(), ...(read(KEYS.settings) || {}) }),
   saveSettings: (s) => write(KEYS.settings, s),
@@ -72,7 +73,35 @@ export function defaultMeta() {
     tutorialDone: false,
     defeats: 0,
     devTrust: 0,
+    combos: {}, // Combo Journal (Phase 7): { [recipe id]: { at, count } }
   };
+}
+
+// Museum record version 2 (Phase 7; docs/COMBAT_SPEC.md §19): the Combo Journal (`combos`). An older
+// record keeps every field it has; a missing or damaged field gets its default, `combos` is validated
+// (see normalizeCombos). Idempotent, so it runs on every load.
+export function normalizeMeta(raw) {
+  const d = defaultMeta();
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return d;
+  const m = { ...d, ...raw };
+  const arr = (k) => { if (!Array.isArray(m[k])) m[k] = d[k]; };
+  const obj = (k) => { if (!m[k] || typeof m[k] !== 'object' || Array.isArray(m[k])) m[k] = d[k]; };
+  const num = (k) => { if (!Number.isFinite(m[k])) m[k] = d[k]; };
+  for (const k of ['runs', 'relicsFound', 'cardsSeen', 'endings']) arr(k);
+  for (const k of ['bossesDefeated', 'enemiesSeen', 'archetypes']) obj(k);
+  for (const k of ['totalRuns', 'wins', 'bestCombo', 'maxHit', 'bestScore', 'defeats', 'devTrust']) num(k);
+  m.combos = normalizeCombos(raw.combos);
+  m.version = Math.max(2, Number.isFinite(raw.version) ? raw.version : 1);
+  return m;
+}
+
+// Records one EX Combo activation in the Journal; returns true the first time (a discovery).
+export function recordCombo(meta, id, now = Date.now()) {
+  if (!meta.combos || typeof meta.combos !== 'object') meta.combos = {};
+  const had = meta.combos[id];
+  if (had) { had.count = (had.count || 0) + 1; return false; }
+  meta.combos[id] = { at: now, count: 1 };
+  return true;
 }
 
 // Record a finished run into the Museum. Cross-run memory is separate from current-run adaptation.

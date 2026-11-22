@@ -17,7 +17,7 @@ export const PARTY_BASE = { V: 46, C: 34, S: 38 };
 export const PARTY_HP_BONUS = 12;
 export const PARTY_MAX_HP = PARTY_BASE.V + PARTY_BASE.C + PARTY_BASE.S + PARTY_HP_BONUS;
 export const MAP_DEPTHS = 8; // depths 0..7, boss at depth 8
-const SAVE_VERSION = 5;
+const SAVE_VERSION = 6;
 
 // Save version 5 (docs/COMBAT_SPEC.md §19): card ids of the old Opener/Converter/Closer catalogue that
 // Phase 4 withholds (they need Relays) become a converted card of the same hero and rarity; unknown ids
@@ -39,7 +39,9 @@ const migrateSpec = (spec) => (spec && spec.id ? { ...spec, id: migrateCardId(sp
 // Older saves are converted once when loaded, one version at a time.
 // v3 → v4: per-hero HP becomes the shared pool (a knocked-out hero counts 0), plus the same bonus a
 // new run has.  v4 → v5: the card catalogue (above), including cards offered by a pending reward,
-// shop or event.
+// shop or event.  v5 → v6 (Phase 7): the run gains its EX Combo record — the recipes activated in this
+// run (`exFound`) and activation counts in `stats` — starting empty; nothing else changes. The
+// permanent Combo Journal lives in the Museum record (src/engine/save.js), not in the run.
 function migrate(obj) {
   if (obj.version === 3) {
     const party = obj.party || [];
@@ -57,6 +59,18 @@ function migrate(obj) {
     if (p && p.result && Array.isArray(p.result.offer)) p.result.offer = p.result.offer.map(migrateSpec);
     obj.version = 5;
   }
+  if (obj.version === 5) {
+    obj.exFound = [];
+    obj.stats = { ...emptyStats(), ...(obj.stats || {}) };
+    obj.version = 6;
+  }
+  if (obj.version === 6) {
+    if (!Array.isArray(obj.exFound)) obj.exFound = [];
+    obj.exFound = obj.exFound.filter((id) => typeof id === 'string');
+    obj.stats = obj.stats || emptyStats();
+    if (!obj.stats.exByRecipe || typeof obj.stats.exByRecipe !== 'object') obj.stats.exByRecipe = {};
+    if (!Number.isFinite(obj.stats.exActivations)) obj.stats.exActivations = 0;
+  }
   return obj;
 }
 
@@ -69,6 +83,7 @@ export function emptyStats() {
     guardAbsorbed: 0, relays: 0, crosses: 0, steps: 0, variantPlays: { A: 0, B: 0, EX: 0 }, momentumSpent: 0,
     flowGained: 0, reservePlays: 0, interferencePayoffs: 0, damage: 0, maxHit: 0, longest: 0, finishers: 0,
     damageTaken: 0, interference: 0, elites: 0, cardsPlayed: 0, bestComboDamage: 0,
+    exActivations: 0, exByRecipe: {}, exOverlaps: 0, exDamage: 0,
   };
 }
 
@@ -112,6 +127,7 @@ export class Run {
       bossesDefeated: [],
       enemiesSeen: [],
       relicsSeen: [starterRelic],
+      exFound: [],
     };
     const run = new Run(d);
     for (const spec of STARTER_DECK) run.addCard(spec);
@@ -427,7 +443,12 @@ export class Run {
     // stats
     const S = this.d.stats, B = outcome.stats;
     S.battles++;
-    for (const k of ['combos', 'perfect', 'cashouts', 'forced', 'longCombos', 'churns', 'guardGained', 'guardAbsorbed', 'relays', 'crosses', 'steps', 'momentumSpent', 'flowGained', 'reservePlays', 'interferencePayoffs', 'damage', 'finishers', 'damageTaken', 'interference', 'cardsPlayed']) S[k] += B[k] || 0;
+    for (const k of ['combos', 'perfect', 'cashouts', 'forced', 'longCombos', 'churns', 'guardGained', 'guardAbsorbed', 'relays', 'crosses', 'steps', 'momentumSpent', 'flowGained', 'reservePlays', 'interferencePayoffs', 'damage', 'finishers', 'damageTaken', 'interference', 'cardsPlayed', 'exActivations', 'exOverlaps', 'exDamage']) S[k] = (S[k] || 0) + (B[k] || 0);
+    // EX Combos of a finished battle count for the run (a restarted or abandoned battle's do not)
+    S.exByRecipe = S.exByRecipe || {};
+    for (const [id, n] of Object.entries(B.exByRecipe || {})) S.exByRecipe[id] = (S.exByRecipe[id] || 0) + n;
+    if (!Array.isArray(this.d.exFound)) this.d.exFound = [];
+    for (const id of outcome.exFound || []) if (!this.d.exFound.includes(id)) this.d.exFound.push(id);
     for (const v of ['A', 'B', 'EX']) S.variantPlays[v] += B.variantPlays[v] || 0;
     S.maxHit = Math.max(S.maxHit, B.maxHit);
     S.longest = Math.max(S.longest, B.longest);
@@ -938,6 +959,7 @@ export class Run {
       deckSize: this.d.deck.length, relics: this.d.relics.slice(), mutations: this.d.mutations.slice(),
       archetype: this.archetypeKey(), longest: S.longest, maxHit: S.maxHit, damage: S.damage, combos: S.combos,
       perfect: S.perfect, cashouts: S.cashouts, finishers: S.finishers, score, seed: this.d.seed,
+      ex: S.exActivations || 0, exRecipes: (this.d.exFound || []).slice(),
       decisions: this.d.bossDecisions.slice(), date: Date.now(), flags: { ...this.d.flags },
     };
   }

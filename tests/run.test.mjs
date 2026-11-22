@@ -173,7 +173,7 @@ test('saving during a battle never keeps the action queue: Continue restarts the
   const saved = JSON.parse(JSON.stringify(run.serialize()));
   assert.ok(!JSON.stringify(saved).includes('"queue"') && !JSON.stringify(saved).includes('recoverUntil'), 'no combat scheduling state in the save');
   const re = Run.load(saved);
-  assert.equal(re.d.version, 5, 'the save version is unchanged (5)');
+  assert.equal(re.d.version, 6, 'the current save version (6)');
   const again = new Combat(re.battleSetup());
   assert.deepEqual(['V', 'C', 'S'].map((h) => again.heroState(h)), ['READY', 'READY', 'READY']);
   assert.deepEqual([again.queue.length, again.executing, again.reserved, again.combo, again.momentum], [0, null, 0, null, c.opts.relics && c.opts.relics.includes('pressure_gauge') ? 2 : 0]);
@@ -201,7 +201,7 @@ test('a version-3 save converts once to the shared pool (a knocked-out hero coun
   delete v3.hp; delete v3.maxHp;
   const run = Run.load(JSON.parse(JSON.stringify(v3)));
   assert.ok(run, 'loads');
-  assert.equal(run.d.version, 5, 'converted through version 4 to the current version 5');
+  assert.equal(run.d.version, 6, 'converted through versions 4 and 5 to the current version 6');
   assert.deepEqual([run.d.hp, run.d.maxHp], [58 + 12, 124 + 12], 'sum of the old pools plus the shared-pool bonus');
   assert.deepEqual(run.d.party, [{ id: 'V' }, { id: 'C' }, { id: 'S' }]);
   const again = Run.load(JSON.parse(JSON.stringify(run.serialize())));
@@ -250,7 +250,11 @@ test('events take HP from and give HP to the pool', () => {
 import fs from 'node:fs';
 import { CARDS as CARDDEFS, MIGRATE_CARDS, rewardPool as pool, graftPool } from '../src/data/cards.js';
 const fixture = (name) => JSON.parse(fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url), 'utf8'));
-const strip = (d) => { const { deck, version, hp, maxHp, party, ...rest } = d; return rest; };
+const strip = (d) => {
+  const { deck, version, hp, maxHp, party, exFound, ...rest } = d;
+  if (rest.stats) { const { exActivations, exByRecipe, exOverlaps, exDamage, ...st } = rest.stats; rest.stats = st; }
+  return rest;
+};
 const mods = (c) => ({ uid: c.uid, up: c.up, graft: c.graft, rankMod: c.rankMod, variant: c.variant });
 
 function checkCardMigration(before, after) {
@@ -266,12 +270,12 @@ function checkCardMigration(before, after) {
   }
 }
 
-test('a genuine 0.2.2 save (version 3, Act I) loads as version 5: pool HP, cards and every modifier kept', () => {
+test('a genuine 0.2.2 save (version 3, Act I) loads as version 6: pool HP, cards and every modifier kept', () => {
   const v3 = fixture('save-v3-0.2.2-act1.json');
   assert.equal(v3.version, 3);
   const run = Run.load(JSON.parse(JSON.stringify(v3)));
   assert.ok(run);
-  assert.equal(run.d.version, 5);
+  assert.equal(run.d.version, 6);
   assert.deepEqual([run.d.hp, run.d.maxHp], [38 + 22 + 38 + 12, 46 + 34 + 38 + 12]);
   checkCardMigration(v3, run.d);
   const ids = run.d.deck.map((c) => c.id);
@@ -282,11 +286,11 @@ test('a genuine 0.2.2 save (version 3, Act I) loads as version 5: pool HP, cards
   assert.deepEqual(strip(run.d), strip(v3), 'map, position, relics, Scrap, stats, flags and pending state untouched');
 });
 
-test('a genuine 0.2.3 save (version 4, Act II) loads as version 5 and plays on', () => {
+test('a genuine 0.2.3 save (version 4, Act II) loads as version 6 and plays on', () => {
   const v4 = fixture('save-v4-0.2.3-act2.json');
   assert.equal(v4.version, 4);
   const run = Run.load(JSON.parse(JSON.stringify(v4)));
-  assert.equal(run.d.version, 5);
+  assert.equal(run.d.version, 6);
   assert.deepEqual([run.d.hp, run.d.maxHp, run.d.act], [v4.hp, v4.maxHp, 2]);
   checkCardMigration(v4, run.d);
   assert.deepEqual(strip(run.d), strip(v4));
@@ -304,12 +308,12 @@ test('a genuine 0.2.3 save (version 4, Act II) loads as version 5 and plays on',
   }
 });
 
-test('loading is idempotent; a fresh version-5 run round-trips unchanged', () => {
+test('loading is idempotent; a fresh version-6 run round-trips unchanged', () => {
   const once = Run.load(fixture('save-v3-0.2.2-act1.json')).serialize();
   const twice = Run.load(JSON.parse(JSON.stringify(once))).serialize();
   assert.deepEqual(twice, once);
   const fresh = Run.create({ seed: 91 }).serialize();
-  assert.equal(fresh.version, 5);
+  assert.equal(fresh.version, 6);
   assert.deepEqual(Run.load(JSON.parse(JSON.stringify(fresh))).serialize(), fresh);
 });
 
@@ -358,4 +362,37 @@ test('rewards keep a deck playable: under 40% basic attacks, the first card offe
   const kinds = new Set();
   for (let i = 0; i < 40; i++) kinds.add(CARDDEFS[fresh.cardChoices(fresh.rng('h', i), 3)[0].id].category);
   assert.ok(kinds.size > 1, 'a balanced deck gets ordinary offers');
+});
+
+// ── Phase 7: save version 6 ──
+test('a genuine 0.2.6 save (version 5) loads as version 6: everything kept, an empty EX Combo record added', () => {
+  const v5 = fixture('save-v5-0.2.6-act1.json');
+  assert.equal(v5.version, 5);
+  const run = Run.load(JSON.parse(JSON.stringify(v5)));
+  assert.ok(run);
+  assert.equal(run.d.version, 6);
+  assert.deepEqual(run.d.exFound, []);
+  assert.equal(run.d.stats.exActivations, 0);
+  assert.deepEqual(run.d.stats.exByRecipe, {});
+  assert.deepEqual(run.d.deck, v5.deck, 'deck, upgrades and grafts unchanged');
+  assert.deepEqual([run.d.hp, run.d.maxHp, run.d.scrap, run.d.act, run.d.floors, run.d.position], [v5.hp, v5.maxHp, v5.scrap, v5.act, v5.floors, v5.position]);
+  assert.deepEqual(run.d.relics, v5.relics);
+  assert.deepEqual(run.d.pending, v5.pending, 'the pending reward survives');
+  assert.deepEqual(strip(run.d), strip(v5));
+  for (const k of Object.keys(v5.stats)) assert.deepEqual(run.d.stats[k], v5.stats[k], `stat ${k} kept`);
+  // idempotent: loading the converted save again changes nothing
+  const once = run.serialize();
+  assert.deepEqual(Run.load(JSON.parse(JSON.stringify(once))).serialize(), once);
+});
+
+test('a version-6 save with a damaged EX record loads safely', () => {
+  const d = Run.create({ seed: 93 }).serialize();
+  d.exFound = 'garbage';
+  d.stats.exByRecipe = null;
+  delete d.stats.exActivations;
+  const run = Run.load(d);
+  assert.ok(run);
+  assert.deepEqual(run.d.exFound, []);
+  assert.deepEqual(run.d.stats.exByRecipe, {});
+  assert.equal(run.d.stats.exActivations, 0);
 });

@@ -1,6 +1,8 @@
 // Headless full-run simulator: a heuristic bot plays complete runs through the real engine
 // (Run + Combat) to verify progression integrity and gather balance data.
-// Usage: node tools/simulate.mjs [runs=20] [reaction=0.55] [profile=quick|regular|learner] [-v]
+// Usage: node tools/simulate.mjs [runs=20] [reaction=0.55] [profile=quick|regular|learner] [--ex] [-v]
+// --ex: the recipe-aware policy (tools/lib/bot.mjs `ex`); SB_EX=off turns EX Combo recipes off in the
+// engine (RULES.EX_COMBOS, a measurement switch the game never exposes) to compare with the 0.2.6 rules.
 // The bot is tools/lib/bot.mjs: it picks the hero, commits basic attacks, artes, support and Relays
 // through the engine's own legality checks (queueing ahead as its profile allows), and uses Churn,
 // Reserve and Momentum shortcuts. 'quick' at 0.55s is the quick player, 'regular' at 1.0s the
@@ -18,6 +20,8 @@ const PROFILE = ['quick', 'regular', 'learner'].includes(process.argv[4]) ? proc
 // SB_RELAY_NEEDS_ARTE=1 measures open decision A's alternative (a Relay only after an arte)
 if (process.env.SB_RELAY_NEEDS_ARTE === '1') RULES.RELAY_NEEDS_ARTE = true;
 const VERBOSE = process.argv.includes('-v');
+const EX = process.argv.includes('--ex');
+if (process.env.SB_EX === 'off') RULES.EX_COMBOS = false;
 
 function botBattle(setup, rng) {
   const c = new Combat(setup);
@@ -29,7 +33,7 @@ function botBattle(setup, rng) {
     think -= dt;
     if (think > 0 || c.phase === 'END') continue;
     think = REACT * (0.7 + rng.next() * 0.6);
-    const a = decide(c, { profile: PROFILE, rng: r });
+    const a = decide(c, { profile: PROFILE, rng: r, ex: EX });
     perform(c, a);
     // queueing is a quick tap: a player who just committed may commit the next card sooner
     if (a.type === 'play' || a.type === 'select') think = Math.min(think, REACT * 0.5);
@@ -78,7 +82,11 @@ function playRun(seed) {
         if (setup.kind === 'elite') log.elites++;
         log.durations.push(t);
         log.combos += out.stats.combos;
-        for (const k of ['basics', 'artes', 'supports', 'momentumGained', 'momentumSpent', 'rejected', 'perfect', 'cashouts', 'forced', 'churns', 'stashes', 'reservePlays', 'relays', 'cancelled', 'chainCards', 'chainArtes', 'damage', 'recoverTime', 'allRecovering', 'relayMomentum', 'finishers', 'combos', 'relaysNoArte', 'relayMomentumNoArte', 'queuedAttacks', 'targetChangedByPlayer', 'targetChangedByDeath']) log.k[k] = (log.k[k] || 0) + (out.stats[k] || 0);
+        for (const [k, v] of Object.entries(out.stats.exByRecipe || {})) log.k[`ex_${k}`] = (log.k[`ex_${k}`] || 0) + v;
+        log.exFound = [...new Set([...(log.exFound || []), ...(out.exFound || [])])];
+        log.k[`exKind_${setup.kind}`] = (log.k[`exKind_${setup.kind}`] || 0) + (out.stats.exActivations || 0);
+        log.k[`battles_${setup.kind}`] = (log.k[`battles_${setup.kind}`] || 0) + 1;
+        for (const k of ['basics', 'artes', 'supports', 'momentumGained', 'momentumSpent', 'rejected', 'perfect', 'cashouts', 'forced', 'churns', 'stashes', 'reservePlays', 'relays', 'cancelled', 'chainCards', 'chainArtes', 'damage', 'recoverTime', 'allRecovering', 'relayMomentum', 'finishers', 'combos', 'relaysNoArte', 'relayMomentumNoArte', 'queuedAttacks', 'targetChangedByPlayer', 'targetChangedByDeath', 'exActivations', 'exOverlaps', 'exDamage', 'exGuard', 'exHeal', 'exMomentum', 'exFlow', 'exChurn', 'exChainCards', 'exRelay', 'exSupport', 'exUnapplied']) log.k[k] = (log.k[k] || 0) + (out.stats[k] || 0);
         for (const n of [1, 2, 3]) log.k[`chain${n}`] = (log.k[`chain${n}`] || 0) + out.stats.chainHeroes[n];
         for (const [k, v] of Object.entries(out.stats.time)) log.k[`time_${k}`] = (log.k[`time_${k}`] || 0) + v;
         log.k.longest = Math.max(log.k.longest || 0, out.stats.longest);
@@ -87,6 +95,7 @@ function playRun(seed) {
         const after = out.hp;
         log.hpLoss.push(before - after);
         if (VERBOSE) console.log(`  act${setup.act} d${setup.depth} ${setup.kind} ${setup.enemies.join('+')} ${out.victory ? 'WIN' : 'LOSS'} t=${t.toFixed(1)}s hp ${before}->${after} combos ${out.stats.combos} perfect ${out.stats.perfect} co ${out.stats.cashouts} forced ${out.stats.forced}`);
+        log.arch = run.dominantTags()[0] || '-';
         if (!out.victory) log.deaths = `act${setup.act} ${setup.kind} ${setup.enemies.join('+')}`;
         if (setup.kind === 'boss' && out.victory) log.bosses++;
         void c;
@@ -186,3 +195,12 @@ console.log(`endings: Perfect ${Math.round((sum('perfect') / chains) * 100)}% ·
 const tt = ['decide', 'execute', 'grace', 'breather', 'idle', 'wait'].map((k) => [k, sum('time_' + k) / battles]);
 console.log(`time per battle (s): ${tt.map(([k, v]) => `${k} ${v.toFixed(1)}`).join(' · ')} · hero Recovery ${per('recoverTime')} hero-s (all three recovering ${per('allRecovering')}s)`);
 console.log(`open decisions: Relays without an arte in the outgoing segment ${per('relaysNoArte')}/battle (${Math.round((sum('relaysNoArte') / Math.max(1, sum('relays'))) * 100)}% of Relays, ${per('relayMomentumNoArte')} Momentum) · queued attacks ${per('queuedAttacks')}/battle, target changed while waiting: by the player ${per('targetChangedByPlayer')}, by a death ${per('targetChangedByDeath')}${RULES.RELAY_NEEDS_ARTE ? ' · RULES.RELAY_NEEDS_ARTE = true' : ''}`);
+// Phase 7: EX Combo recipes (docs/AUDIT.md Phase 7)
+const exAct = sum('exActivations');
+const recipeIds = [...new Set(all.flatMap((r) => Object.keys(r.k).filter((k) => k.startsWith('ex_')).map((k) => k.slice(3))))].sort((a, b) => sum('ex_' + b) - sum('ex_' + a));
+console.log(`EX combos: ${RULES.EX_COMBOS ? 'on' : 'OFF (SB_EX=off)'}${EX ? ' · recipe-aware policy (--ex)' : ''} · ${(exAct / battles).toFixed(2)}/battle (${Math.round((exAct / chains) * 100)} per 100 chains) · overlaps ${per('exOverlaps')} · after the battle was won ${per('exUnapplied')} · relay recipes ${per('exRelay')} · support recipes ${per('exSupport')} · chain length when triggered ${(sum('exChainCards') / Math.max(1, exAct)).toFixed(1)}`);
+console.log(`EX effects per battle: damage ${per('exDamage')} (${Math.round((sum('exDamage') / Math.max(1, sum('damage') + sum('exDamage'))) * 100)}% of chain damage) · Guard ${per('exGuard')} · HP ${per('exHeal')} · Momentum ${per('exMomentum')} · Flow ${per('exFlow')}s · Churn ${per('exChurn')}`);
+console.log(`EX by recipe (per battle): ${recipeIds.map((k) => `${k} ${(sum('ex_' + k) / battles).toFixed(2)}`).join(' · ') || 'none'}`);
+console.log(`EX by encounter (per battle): ${['battle', 'elite', 'boss'].map((k) => `${k} ${(sum('exKind_' + k) / Math.max(1, sum('battles_' + k))).toFixed(2)}`).join(' · ')} · distinct recipes per run ${avg(all.map((r) => (r.exFound || []).length)).toFixed(1)} (all runs: ${new Set(all.flatMap((r) => r.exFound || [])).size} of 15)`);
+const archs = [...new Set(all.map((r) => r.arch))];
+console.log(`by build (dominant tag at the end): ${archs.map((a) => { const rs = all.filter((r) => r.arch === a); const b = rs.reduce((x, r) => x + r.battles, 0); return `${a} ${rs.length} runs, ${rs.filter((r) => r.result === 'victory').length} wins, EX ${(rs.reduce((x, r) => x + (r.k.exActivations || 0), 0) / Math.max(1, b)).toFixed(2)}/battle`; }).join(' · ')}`);

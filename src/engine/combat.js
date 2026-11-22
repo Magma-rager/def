@@ -1,6 +1,7 @@
 // SIGNAL//BREAK — authoritative Relay combat engine.
 // Pure logic: no DOM, no rendering. The view reads state and drains `events` for presentation.
 // All timing uses this.t (combat seconds), advanced only by update(); pausing = not calling update().
+import { RECIPES } from '../data/recipes.js';
 import { CARDS, cardValue, HERO_ANIM, isOffensive } from '../data/cards.js';
 import { ENEMIES } from '../data/enemies.js';
 import { RNG } from '../core/rng.js';
@@ -35,6 +36,7 @@ export const RULES = {
   FLOW_REFUND_MAX: 5.0, // prototype (was 1.2): per combo
   FLOW_ABS_MAX: 14, // prototype (was 6.2): longest combo, counted from the opener, not counting the grace
   FLOW_BAR_SECONDS: 8, // the Flow bar's full width
+  EX_COMBOS: true, // Phase 7: EX Combo recipes on. A measurement switch only (tools/simulate.mjs SB_EX=off); no setting exposes it
   QUICK_CASH_LEFT: 2.5, // prototype (was 1.5): Flow left for a Quick Cash Out
   MOMENTUM_COST: 3,
   FLOW_SPEND: 1.5, // prototype (was 0.6)
@@ -183,7 +185,13 @@ export class Combat {
       // evidence for the two open design decisions (docs/COMBAT_SPEC.md §26): Relays from a segment
       // without an arte (A), and queued attacks whose target changed between commit and execution (B)
       relaysNoArte: 0, relayMomentumNoArte: 0, queuedAttacks: 0, targetChangedByPlayer: 0, targetChangedByDeath: 0,
+      // Phase 7 EX Combos: activations (a recipe triggering in a chain, any number of times per battle),
+      // commands that completed two or more recipes, and what the EX effects actually gave
+      exActivations: 0, exByRecipe: {}, exOverlaps: 0, exDamage: 0, exGuard: 0, exHeal: 0, exMomentum: 0, exFlow: 0, exChurn: 0,
+      exChainCards: 0, exRelay: 0, exSupport: 0, exUnapplied: 0,
     };
+    this.exFound = new Set(); // recipes that activated at least once in this battle
+    this.exSeq = 0;
 
     // ── battle-start effects ──
     if (this.relics.has('pressure_gauge')) this.momentum += 2;
@@ -846,7 +854,9 @@ export class Combat {
       if (x) {
         if (!x.resolved && this.t >= x.resolveAt - 1e-9) {
           x.resolved = true;
+          this.resolvingCmd = true;
           this.resolveCmd(x.cmd);
+          this.resolvingCmd = false;
           if (this.phase === 'END') { this.executing = null; return; }
           if (this.queue.length) this.revalidateQueue(); // an effect may have changed the chain
           continue;
@@ -982,6 +992,9 @@ export class Combat {
       relayEcho: 0, relayEchoUsed: false, nextRelayEcho: 0, cashPct: 0, cashPerCard: 0, stored: [], pendingBonus: 0,
       harness: 0, relayBoost: 0, closeAsCashOut: false, churned: false, len: 0, pendingEnd: null, stopwatch: extra > 0,
       segments: [{ hero, cards: 0, basics: 0, artes: 0 }],
+      // EX Combos (Phase 7): the chain's executed events in order, the recipes already triggered in it,
+      // and the Cash Out payout dealt (docs/COMBAT_SPEC.md §28)
+      log: [], ex: new Set(), payout: 0, quick: false,
     };
     this.phase = 'ACTIVE';
     this.emit({ type: 'comboStart', deadline: this.combo.deadline, hero });
@@ -989,6 +1002,7 @@ export class Combat {
 
   naturalRefund(entryIndex, times = 1) {
     const c = this.combo;
+    if (!c) return 0; // the card's own damage may already have ended the battle (e.g. a lethal Slipstream)
     let per = RULES.FLOW_REFUND * (this.relics.has('brass_metronome') ? 1.33 : 1) + c.refundBonus;
     if (this.mutations.has('ascendant_ladder') && c.cards[entryIndex] && c.cards[entryIndex].step) per += 0.06;
     if (this.adaptOn('long_chain') && entryIndex >= 4) per *= 0.5;
@@ -1000,8 +1014,11 @@ export class Combat {
     return c.deadline - before;
   }
 
-  addFlow(sec) {
+  // `src` ('card' or 'buy') marks Flow the player gained during a chain (EX Combos read it); Flow from
+  // EX effects passes none, so an EX reward can never complete another recipe
+  addFlow(sec, src) {
     if (!this.combo) return 0;
+    if (src && this.phase === 'ACTIVE') this.combo.log.push({ k: 'flow', src });
     if (this.adaptOn('flow_clamp')) sec *= 0.5;
     const before = this.combo.deadline;
     this.combo.deadline = Math.min(this.combo.deadline + sec, this.flowCap());
@@ -1076,8 +1093,10 @@ export class Combat {
     const entry = {
       uid, id: d.id, name: d.name, owner: hero, cardOwner: d.owner, category: d.category, rank, variant, seg: c.segments.length - 1,
       kind: seq.kind, step: !!seq.step, cross: !!seq.cross, relay: relayCard, fromReserve, dmg: 0, spent: cmd.cost, wasLocked, index: c.cards.length,
+      strength: d.category === 'basic' ? d.rank : 0, disrupted: !!(wasLocked || scrambledAtPlay), coverUp: false,
     };
     c.cards.push(entry);
+    c.log.push({ k: 'card', i: entry.index });
     cmd.chainFirst = c.cards.length === 1;
     cmd.relayFirst = relayCard;
     c.len = c.cards.length;
@@ -1134,7 +1153,7 @@ export class Combat {
     if (d.category === 'basic') this.gainMomentum(d.gain || 0, 'Basic');
     if (entry.cross) this.gainMomentum(1 + (this.relics.has('twin_dials') ? 1 : 0) + (this.mutations.has('duality_engine') ? 1 : 0), 'Cross');
     if (inst.graft === 'spark') this.gainMomentum(1, 'Spark');
-    if (inst.graft === 'quick') this.addFlow(0.5);
+    if (inst.graft === 'quick') this.addFlow(0.5, 'card');
     if (inst.graft === 'plated') this.addGuard(3);
     if (fromReserve && this.mutations.has('deep_pockets')) this.gainMomentum(1, 'Reserve');
     if (d.category === 'basic' && this.relics.has('iron_filings')) this.addGuard(1);
@@ -1149,12 +1168,17 @@ export class Combat {
     // card to discard (temp cards are deleted); its slot refills now that it has resolved
     if (d.temp) this.exhaust.push(uid);
     else this.discard.push(uid);
+    // EX Combos complete on the card that has just resolved — also when it ended the battle (the
+    // activation is recorded, its effect is not applied after the end; docs/COMBAT_SPEC.md §28)
+    entry.coverUp = this.coverActive();
+    this.evalRecipes(c, { kind: 'card', entry });
     if (this.phase === 'END' || this.combo !== c) return; // fx may have ended the battle or the chain
     this.refill();
     // Clean Exit: the chain ends as a Cash Out once this card has finished executing
     if (d.category === 'arte' && c.closeAsCashOut) {
       this.payout(1);
       if (this.phase !== 'END') this.requestEnd('cashout');
+      else this.evalRecipes(c, { kind: 'end', end: 'cashout' });
     }
   }
 
@@ -1176,11 +1200,17 @@ export class Combat {
     let mult = 1;
     if (fromReserve && inst.graft === 'cached') mult *= 1.5;
     const api = this.makeApi(entry, inst, d, { mult, bonus: 0, echoing: false, ctx });
+    const hp0 = this.hp, guard0 = Math.floor(this.guard), cover0 = this.coverActive();
     d.fx(api);
     this.coverCheck(d);
     if (inst.graft === 'spark') this.gainMomentum(1, 'Spark');
-    if (inst.graft === 'quick') this.addFlow(0.5);
+    if (inst.graft === 'quick') this.addFlow(0.5, 'card');
     if (inst.graft === 'plated') this.addGuard(3);
+    // a support action executed while a chain runs is part of that chain's record (EX Combos): what it
+    // actually did — healing, Guard, Cover — and whose combo it happened in; outside a chain it is not
+    if (this.combo && this.phase === 'ACTIVE') {
+      this.combo.log.push({ k: 'support', id: d.id, hero, attacker: this.combo.hero, heal: Math.max(0, this.hp - hp0), guard: Math.max(0, Math.floor(this.guard) - guard0), cover: !cover0 && this.coverActive() || (d.owner === 'V' && (d.tags || []).includes('guard')) });
+    }
     if (d.temp) this.exhaust.push(uid);
     else this.discard.push(uid);
     if (this.phase === 'END') return;
@@ -1211,6 +1241,7 @@ export class Combat {
     c.lastCmd = 'relay';
     c.relayBoost = RULES.RELAY_FIRST_BONUS * c.relays;
     c.segments.push({ hero: to, cards: 0, basics: 0, artes: 0 });
+    c.log.push({ k: 'relay', from, to });
     this.emit({ type: 'relay', from, to, n: c.relays, bonus: Math.round(c.relayBoost * 100) });
     if (!this.adaptOn('relay_jam')) {
       const before = this.momentum;
@@ -1244,6 +1275,7 @@ export class Combat {
     if (cmd.mode === 'cashout') {
       this.payout(1);
       if (this.phase !== 'END' && this.combo === c) this.finishCombo('cashout');
+      else if (this.phase === 'END') this.evalRecipes(c, { kind: 'end', end: 'cashout' }); // the payout won the battle
     } else this.finishCombo('perfect');
   }
 
@@ -1329,7 +1361,7 @@ export class Combat {
         for (const t of targets) if (t) self.applyStatus(t, kind, kind === 'scorch' || kind === 'mark' ? scale(n) || 1 : n);
       },
       mom: (n) => { if (!echoing) self.gainMomentum(n, def.name); },
-      flow: (s) => { if (!echoing) self.addFlow(s); },
+      flow: (s) => { if (!echoing) self.addFlow(s, 'card'); },
       rewind: (n) => { if (!echoing) { c.rank = Math.max(0, c.rank - n); self.emit({ type: 'rewind', rank: c.rank }); } },
       setVariant: (v) => { if (!echoing) { c.variant = v; self.emit({ type: 'suit', variant: v }); } },
       flipVariant: () => { if (!echoing && c.variant !== 'EX') { c.variant = c.variant === 'A' ? 'B' : 'A'; self.emit({ type: 'suit', variant: c.variant }); } },
@@ -1431,9 +1463,10 @@ export class Combat {
     this.hand[slot] = null;
     if (junk || d.temp) this.exhaust.push(uid);
     else this.discard.push(uid);
+    let churnLog = null;
     if (!junk) {
       this.stats.churns++;
-      if (this.combo) this.combo.churned = true;
+      if (this.combo) { this.combo.churned = true; if (this.phase === 'ACTIVE') { churnLog = { k: 'churn', drew: null }; this.combo.log.push(churnLog); } }
       if (!this.relics.has('oiled_bearings')) {
         if (this.phase === 'ACTIVE') this.combo.deadline = Math.max(this.t + 0.2, this.combo.deadline - 0.3);
         else {
@@ -1454,6 +1487,7 @@ export class Combat {
     }
     this.emit({ type: 'churn', uid, slot, junk });
     this.refill(uid);
+    if (churnLog) churnLog.drew = this.hand[slot] || null; // the card that Churn brought in (Salvage Circuit)
     this.checkEnd();
     return { ok: true };
   }
@@ -1474,6 +1508,7 @@ export class Combat {
     this.hand[slot] = null;
     this.reserve.push(uid);
     this.stats.stashes++;
+    if (this.combo && this.phase === 'ACTIVE') this.combo.log.push({ k: 'stash' });
     this.emit({ type: 'stash', uid, slot });
     this.refill(uid); // the hand keeps six cards: the slot refills from the draw pile
     return { ok: true };
@@ -1493,7 +1528,7 @@ export class Combat {
     this.stats.momentumSpent += cost;
     if (this.adaptOn('momentum_drain')) this.adaptProgress(cost);
     this.emit({ type: 'momentum', delta: -cost, why: 'Flow' });
-    this.addFlow(this.flowSpendAmount());
+    this.addFlow(this.flowSpendAmount(), 'buy');
     return { ok: true };
   }
 
@@ -1539,6 +1574,7 @@ export class Combat {
     const p = this.payoutAmount(scale);
     const tgt = this.currentTarget();
     c.quick = p.quick;
+    c.payout = p.amount;
     this.emit({ type: 'cashout', amount: p.amount, quick: p.quick, scale, who: c.owner });
     if (tgt) this.dealDamage(tgt, p.amount, { src: c.owner, tag: 'cashout', pierce: false, cashout: true });
     this.addGuard(p.guard);
@@ -1592,7 +1628,9 @@ export class Combat {
         this.emit({ type: 'momentum', delta: -loss, why: 'Dropped' });
       }
     }
+    this.evalRecipes(c, { kind: 'end', end: type });
     const summary = {
+      ex: [...c.ex],
       type, len: c.cards.length, relays: c.relays, crosses: c.crosses, steps: c.steps, damage: c.damage,
       openerSuit: c.cards[0] ? c.cards[0].variant : null,
       openerStrength: c.cards[0] && c.cards[0].category === 'basic' ? CARDS[c.cards[0].id].rank : null,
@@ -1609,6 +1647,82 @@ export class Combat {
     if (this.phase === 'END') return;
     this.phase = 'RECOVER';
     this.breatherUntil = this.t + RULES.RECOVER[type];
+  }
+
+  // ───────────────────────── EX Combos (Phase 7) ─────────────────────────
+  // Evaluates the recipe catalogue for one executed moment of a chain: a card that has resolved
+  // (`kind: 'card'`) or the chain's ending (`kind: 'end'`). Every recipe satisfied now and not yet
+  // triggered in this chain is collected first, then resolved in priority order, each once. Effects
+  // use the chain's damage before any EX effect of this moment as their base, so one recipe's damage
+  // never inflates another's. When the battle is already over (the card or payout won or lost it), the
+  // activation is recorded but no effect is applied; the same holds for the rest of a batch once an
+  // effect ends the battle. EX effects never pass through here again (no card resolves, no chain ends
+  // because of them), so they cannot complete further recipes.
+  evalRecipes(c, ev) {
+    if (!c || !c.ex || !RULES.EX_COMBOS) return [];
+    const e = ev.entry || null;
+    const logPos = e ? c.log.findIndex((l) => l.k === 'card' && l.i === e.index) : c.log.length;
+    const x = { c, e, end: ev.end || null, logPos: logPos < 0 ? c.log.length : logPos };
+    const hits = [];
+    for (const r of RECIPES) {
+      if (r.on !== ev.kind || c.ex.has(r.id)) continue;
+      let ok = false;
+      try { ok = !!r.match(x); } catch (err) { ok = false; }
+      if (ok) hits.push(r);
+    }
+    if (!hits.length) return hits;
+    const group = ++this.exSeq;
+    const base = c.damage;
+    if (hits.length > 1) this.stats.exOverlaps++;
+    hits.forEach((r, k) => {
+      c.ex.add(r.id);
+      const sum = { dmg: 0, guard: 0, heal: 0, momentum: 0, flow: 0, churn: 0, unlocked: 0, exposed: 0, counter: 0, cover: 0, echo: false };
+      const applied = this.phase !== 'END';
+      if (applied) r.fx(this.exApi(c, base, sum, e));
+      const st = this.stats;
+      st.exActivations++;
+      st.exByRecipe[r.id] = (st.exByRecipe[r.id] || 0) + 1;
+      st.exDamage += sum.dmg; st.exGuard += sum.guard; st.exHeal += sum.heal; st.exMomentum += sum.momentum; st.exFlow += sum.flow; st.exChurn += sum.churn;
+      st.exChainCards += c.cards.length;
+      if (r.tags.includes('relay')) st.exRelay++;
+      if (r.support) st.exSupport++;
+      if (!applied) st.exUnapplied++;
+      this.exFound.add(r.id);
+      this.emit({ type: 'exCombo', id: r.id, group, order: k, of: hits.length, sum, applied, len: c.cards.length, heroes: c.owners.length, hero: c.hero });
+    });
+    return hits;
+  }
+  // The bounded effects a recipe may use; each records what it actually changed in `sum`.
+  exApi(c, base, sum, entry = null) {
+    const live = () => this.phase !== 'END';
+    const pool = () => this.enemies.reduce((a, e) => a + Math.max(0, e.hp) + (e.alive ? Math.max(0, Math.floor(e.guard)) : 0), 0);
+    const hit = (fn) => { if (!live()) return; const b = pool(); fn(); sum.dmg += Math.max(0, b - pool()); };
+    const one = (n) => hit(() => { const t = this.currentTarget(); if (t && n > 0) this.dealDamage(t, n, { src: c.hero, tag: 'ex' }); });
+    const all = (n) => hit(() => { for (const t of this.aliveEnemies()) { if (!live()) break; if (n > 0) this.dealDamage(t, n, { src: c.hero, tag: 'ex', all: true }); } });
+    const share = (pct, min) => Math.max(min, Math.round(pct * base));
+    return {
+      base,
+      crosses: () => c.crosses,
+      payout: () => c.payout || 0,
+      strike: (pct, min) => one(share(pct, min)),
+      strikeFlat: (n) => one(n),
+      strikeAll: (pct, min) => all(share(pct, min)),
+      strikeAllFlat: (n) => all(n),
+      guard: (n) => { if (!live()) return; const b = Math.floor(this.guard); this.addGuard(n); sum.guard += Math.floor(this.guard) - b; },
+      heal: (n) => { if (!live()) return; const b = this.hp; this.healParty(n); sum.heal += this.hp - b; },
+      momentum: (n) => { if (!live()) return; const b = this.momentum; this.gainMomentum(n, 'EX'); sum.momentum += this.momentum - b; },
+      // Flow only within the running chain and its counted cap (Flow Clamp halves it, as for cards)
+      flow: (sec) => { if (!live() || this.combo !== c) return; const b = c.deadline; this.addFlow(sec); sum.flow += Math.max(0, c.deadline - b); },
+      churn: (n) => { if (!live()) return; const b = this.churn.charges; this.gainChurn(n); sum.churn += Math.max(0, this.churn.charges - b); },
+      expose: (sec) => { if (!live()) return; const t = this.currentTarget(); if (t) { t.st.exposed = Math.max(t.st.exposed || 0, sec); sum.exposed = sec; this.emit({ type: 'status', uid: t.uid, kind: 'exposed' }); } },
+      counter: (n) => { if (!live()) return; this.counter += n; sum.counter += n; this.emit({ type: 'counter', amount: this.counter }); },
+      cover: (sec) => { if (!live() || !this.coverActive()) return; this.coverUntil += sec; sum.cover += sec; this.emit({ type: 'cover', until: this.coverUntil }); },
+      chain: () => c,
+      entry: () => entry,
+      echoArte: (i, mult) => { if (i >= 0 && c.cards[i]) hit(() => { if (this.combo === c) { this.echo(i, mult, null); sum.echo = true; } }); },
+      echoFirstArte: (mult) => { const i = c.cards.findIndex((x) => x.category === 'arte'); if (i >= 0) hit(() => { if (this.combo === c) { this.echo(i, mult, null); sum.echo = true; } }); },
+      unlockAll: () => { if (!live()) return; for (const uid of Object.keys(this.locks)) { this.unlock(uid); sum.unlocked++; } },
+    };
   }
 
   trackAdaptation(s) {
@@ -2257,7 +2371,9 @@ export class Combat {
       if (x.cmd.slot >= 0) this.heldSlots.delete(x.cmd.slot);
       this.discard.push(x.cmd.uid);
     }
-    if (x && !x.resolved) this.executing = null; // (a resolving command is cleared by processQueue)
+    // a command still in its follow-through when the battle ends (e.g. a support whose effect landed
+    // before an enemy's final hit) is over too; one resolving right now is cleared by processQueue
+    if (x && (!x.resolved || !this.resolvingCmd)) this.executing = null;
   }
 
   // Summary for run bookkeeping after the battle.
@@ -2269,6 +2385,7 @@ export class Combat {
       stats: this.stats,
       scrapBonus: this.scrapEarned,
       enemies: this.enemies.map((e) => e.id),
+      exFound: [...this.exFound],
     };
   }
 }

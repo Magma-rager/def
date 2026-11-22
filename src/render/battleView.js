@@ -361,6 +361,7 @@ export class BattleView {
     if (tag === 'counter' || tag === 'bastion') color = '#e6c779';
     if (tag === 'cashout') { color = '#ffe08a'; size = 22; }
     if (tag === 'step') { color = '#8fd0ff'; size = 12; }
+    if (tag === 'ex') { color = '#6ff3ff'; size = 20; } // EX Combo damage
     const text = ev.amount > 0 ? String(ev.amount) : ev.blocked > 0 ? '0' : tr('MISS');
     this.enemyNumber(a, text, color, size);
     if (ev.blocked > 0) this.enemyNumber(a, `▣${ev.blocked}`, '#9ec4d8', 11);

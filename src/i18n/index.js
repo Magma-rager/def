@@ -8,6 +8,7 @@
 // and save data are identical in every language.
 import { CARDS, GRAFTS, CATEGORY_NAMES, STRENGTH_NAMES, OWNER_NAMES, ARCHETYPES } from '../data/cards.js';
 import { RELICS, STARTER_OPTIONS } from '../data/relics.js';
+import { RECIPE_MAP } from '../data/recipes.js';
 import { ENEMIES } from '../data/enemies.js';
 import { EVENT_MAP } from '../data/events.js';
 import { MUTATIONS } from '../data/mutations.js';
@@ -175,6 +176,9 @@ export function enemyName(id, lvl = 0) {
 }
 export const enemyLore = (id) => enemyT(id).lore || ENEMIES[id].lore;
 export const intentName = (id, key) => ((enemyT(id).intents || {})[key]) || ENEMIES[id].intents[key].name;
+// EX Combo recipes (Phase 7): name and texts (how, effect, hint, purpose).
+export const recipeField = (id, f) => ((pick('recipes', id) || {})[f]) || (RECIPE_MAP[id] ? RECIPE_MAP[id][f] : id);
+export const recipeName = (id) => recipeField(id, 'name');
 // An intent's own description (shown when an enemy is held); plain attacks are described by the UI.
 export const intentDesc = (id, key) => pick('intentDesc', `${id}.${key}`) || ENEMIES[id].intents[key].desc;
 export const phaseName = (id, i) => ((enemyT(id).phases || [])[i] || {}).name || ENEMIES[id].phases[i].name;

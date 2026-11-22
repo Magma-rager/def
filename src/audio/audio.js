@@ -163,6 +163,8 @@ export class AudioEngine {
       case 'relay': this.tone(NOTE(67), 0.1, { type: 'triangle', vol: 0.14 }); this.tone(NOTE(74), 0.16, { type: 'triangle', vol: 0.14, at: 0.07 }); break;
       case 'comboStart': this.tone(NOTE(64), 0.08, { type: 'square', vol: 0.05, filter: { freq: 2000 } }); break;
       case 'perfect': [0, 4, 7, 12].forEach((n, i) => this.tone(NOTE(67 + n), 0.3, { type: 'triangle', vol: 0.12, at: i * 0.03 })); break;
+      case 'ex': [0, 7, 12, 19].forEach((n, i) => this.tone(NOTE(72 + n), 0.22, { type: 'sine', vol: 0.11, at: i * 0.05 })); this.tone(NOTE(60), 0.4, { type: 'triangle', vol: 0.08 }); break;
+      case 'exNew': [0, 4, 7, 11, 14, 19].forEach((n, i) => this.tone(NOTE(72 + n), 0.3, { type: 'sine', vol: 0.11, at: i * 0.06 })); break;
       case 'finisher':
         [0, 4, 7, 12, 16].forEach((n, i) => this.tone(NOTE(62 + n), 0.7, { type: 'sawtooth', vol: 0.06, at: i * 0.02, filter: { freq: 3000 } }));
         this.tone(70, 0.8, { type: 'sine', vol: 0.4, slide: 30 });

@@ -17,6 +17,7 @@ import { SCENES, SPEAKERS, DEFEAT_LINES, DEV_REMARKS } from '../src/data/story.j
 import { PREPARED_PLANS, VOLATILE_OUTCOMES, THEME_NAMES } from '../src/data/acts.js';
 import { Run } from '../src/engine/run.js';
 import { LESSONS } from '../src/ui/lessons.js';
+import { RECIPES } from '../src/data/recipes.js';
 
 const holes = (s) => new Set([...String(s).matchAll(/\{(\w+)/g)].map((m) => m[1]));
 const sameHoles = (a, b, what) => assert.deepEqual([...holes(b)].sort(), [...holes(a)].sort(), `placeholders differ: ${what}`);
@@ -98,6 +99,8 @@ test('story, dialogue, tutorial and help are translated line for line', () => {
     sameHoles(L.body, r[1], `lesson ${L.key}`);
   }
   assert.deepEqual(Object.keys(RU.lessons).sort(), LESSONS.map((l) => l.key).sort(), 'lesson translations match the lessons');
+  for (const r of RECIPES) for (const f of ['name', 'how', 'effect', 'hint', 'purpose']) { filled(RU.recipes[r.id] && RU.recipes[r.id][f], `recipe ${r.id}.${f}`); sameHoles(r[f], RU.recipes[r.id][f], `recipe ${r.id}.${f}`); }
+  assert.deepEqual(Object.keys(RU.recipes).sort(), RECIPES.map((r) => r.id).sort(), 'recipe translations match the recipes');
 });
 
 test('Russian plural forms and number formatting', () => {
