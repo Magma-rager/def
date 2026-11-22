@@ -19,6 +19,7 @@
 //  30 save, reload, Continue · 31 the next encounter starts clean
 //
 // Usage: node tools/accept5.mjs [outDir] [lang=en] [WxH=844x390]   (needs npm run serve on port 8123)
+import { SAVE_VERSION } from '../src/engine/run.js';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import { RU } from '../src/i18n/ru.js';
@@ -282,7 +283,7 @@ await wait(600);
 await p.getByRole('button', { name: L('Continue'), exact: true }).click();
 await wait(700);
 const after30 = await snap();
-check('30. after reload, Continue restores the run exactly (save version 5)', after30 === before30 && JSON.parse(after30).v === 5, `${JSON.parse(after30).deck.length} cards, HP ${JSON.parse(after30).hp}`);
+check('30. after reload, Continue restores the run exactly (the current save version)', after30 === before30 && JSON.parse(after30).v === SAVE_VERSION, `${JSON.parse(after30).deck.length} cards, HP ${JSON.parse(after30).hp}`);
 
 // 31. the next encounter starts clean (walk the map until a battle opens; other rooms are left at once)
 for (let hop = 0; hop < 5; hop++) {

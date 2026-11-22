@@ -78,6 +78,34 @@ for (const [W, H] of VIEWPORTS) {
     await check(`museum-${tab}`, tab === 0);
   }
   await closeModals();
+  // Combo Journal (Phase 7): nothing, some and every recipe discovered; every filter; scrolled through
+  const scrollJournal = async (name) => {
+    for (let page = 1; page < 20; page++) {
+      const more = await ev(() => { const m = document.querySelector('.modal .panel'); const before = m.scrollTop; m.scrollTop += m.clientHeight * 0.8; return m.scrollTop > before; });
+      if (!more) break;
+      await check(`${name}-p${page}`);
+    }
+  };
+  for (const state of ['empty', 'some', 'all']) {
+    await ev(async (st) => {
+      const app = window.__sb;
+      const { RECIPE_IDS } = await import('/src/data/recipes.js');
+      const ids = st === 'empty' ? [] : st === 'some' ? ['straight_circuit', 'tandem_signal', 'final_harmonic', 'interference_reversal'] : RECIPE_IDS;
+      app.meta.combos = Object.fromEntries(ids.map((id, i) => [id, { at: Date.now(), count: i * 7 + 1 }]));
+      app.closeAllModals();
+      app.museumTab = 'Journal';
+      app.openMuseum();
+    }, state);
+    await check(`journal-${state}`, true);
+    await scrollJournal(`journal-${state}`);
+    if (state === 'some') {
+      const filters = await ev(() => [...document.querySelectorAll('.journal [data-filter]')].map((x) => x.dataset.filter));
+      for (const f of filters) { await ev((k) => document.querySelector(`.journal [data-filter="${k}"]`).click(), f); await check(`journal-filter-${f}`); }
+      const builds = await ev(() => [...document.querySelectorAll('.journal .jf-build option')].map((o) => o.value));
+      for (const v of builds) { await ev((k) => { const sel = document.querySelector('.journal .jf-build'); sel.value = k; sel.dispatchEvent(new Event('change')); }, v); await check(`journal-build-${v}`); }
+    }
+  }
+  await ev(() => { window.__sb.museumTab = 'Records'; window.__sb.closeAllModals(); });
 
   // ── a run ──
   await ev(() => { window.__sb.meta.tutorialDone = true; window.__sb.startRun('beta_badge'); });
@@ -349,6 +377,18 @@ for (const [W, H] of VIEWPORTS) {
     }, bn);
     await check(`banner-${bn.slice(1).join('-')}`, bn[1] === 'signalbreak_core' && bn[2] === 1);
   }
+  // EX Combo banners (Phase 7): every recipe alone, as a first discovery (the longest form), and overlaps
+  const exSets = await ev(async () => { const { RECIPE_IDS } = await import('/src/data/recipes.js'); return [...RECIPE_IDS.map((id) => [id]), ['prism_sequence', 'three_way_circuit', 'final_harmonic'], ['interference_reversal', 'quick_settlement']]; });
+  for (const ids of exSets) {
+    await ev((list) => {
+      const bs = window.__sb.battle;
+      bs.bannerEl.innerHTML = '';
+      window.__sb.meta.combos = {};
+      bs.onExCombo(list.map((id, k) => ({ id, group: 9999, order: k, of: list.length, applied: list.length < 2 || k < 1, len: 7, heroes: 3, hero: 'S', sum: { dmg: 24, guard: 8, heal: 4, momentum: 2, flow: 1.5, churn: 1, unlocked: 1, exposed: 5, counter: 6, cover: 2, echo: true } })));
+    }, ids);
+    await check(`banner-ex-${ids.join('+')}`, ids.length > 1 || ids[0] === 'interference_reversal');
+  }
+  await ev(() => { window.__sb.battle.bannerEl.innerHTML = ''; });
   await ev(() => window.__sb.pause()); await check('pause', true); await closeModals();
   await ev(async () => {
     const I = await import('/src/i18n/index.js');

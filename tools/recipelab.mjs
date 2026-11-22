@@ -3,14 +3,14 @@
 //
 // For each of the ten archetypes it drafts decks the way a player leaning into that build would — the
 // starter deck plus reward-pool cards carrying the archetype's tag (and a few others) — and fights Act I
-// and Act II formations and elites with the shared bot (tools/lib/bot.mjs), once as the ordinary player
+// and Act II formations, elites and bosses (scaled as a run scales them) with the shared bot (tools/lib/bot.mjs), once as the ordinary player
 // and once with the recipe-aware policy (`ex: true`). Nothing is injected: recipes trigger only when the
 // engine has executed the pattern. A starter-deck-only pass shows which recipes need no rewards at all.
 //
 // Usage: node tools/recipelab.mjs [decks=12] [reaction=1.0]
 import { Combat } from '../src/engine/combat.js';
 import { CARDS, STARTER_DECK, rewardPool, ARCHETYPES } from '../src/data/cards.js';
-import { FORMATIONS, ELITES } from '../src/data/enemies.js';
+import { FORMATIONS, ELITES, BOSSES } from '../src/data/enemies.js';
 import { RECIPES } from '../src/data/recipes.js';
 import { RNG } from '../src/core/rng.js';
 import { decide, perform } from './lib/bot.mjs';
@@ -30,9 +30,13 @@ function draft(arch, rng) {
   return ids;
 }
 
-function battle(ids, enemies, act, seed, ex) {
+// enemy HP and damage as a run scales them at depth 4 of the act (src/engine/run.js battleSetup)
+function battle(ids, enemies, act, seed, ex, kind = 'normal') {
   const rng = new RNG(seed);
-  const c = new Combat({ deck: ids.map((id, i) => ({ uid: `d${i}`, id, up: rng.next() < 0.25 })), party: PARTY, hp: 130, maxHp: 130, enemies, seed, relics: [], mutations: [], act, kind: 'normal' });
+  const depth = 4;
+  const hpMult = (kind === 'boss' ? 1.5 : kind === 'elite' ? 1.65 : 1.75) * (1 + depth * 0.035) * (1 + 0.08 * (act - 1));
+  const dmgMult = 1.1 * (1 + depth * 0.02);
+  const c = new Combat({ deck: ids.map((id, i) => ({ uid: `d${i}`, id, up: rng.next() < 0.25 })), party: PARTY, hp: 130, maxHp: 130, enemies, seed, relics: [], mutations: [], act, kind, hpMult, dmgMult, depth });
   let think = 0.4;
   const dt = 1 / 30;
   for (let step = 0; step < 30 * 400 && c.phase !== 'END'; step++) {
@@ -50,13 +54,13 @@ function battle(ids, enemies, act, seed, ex) {
 }
 
 function encounters(act, n) {
-  const f = FORMATIONS[act].map((x) => x[1]);
-  return [...Array.from({ length: n }, (_, i) => f[i % f.length]), ...ELITES[act].map((e) => [e])];
+  const f = FORMATIONS[act].map((x) => [x[1], 'normal']);
+  return [...Array.from({ length: n }, (_, i) => f[(i * 3) % f.length]), ...ELITES[act].map((e) => [[e], 'elite']), ...BOSSES[act].map((e) => [[e], 'boss'])];
 }
 
 const fmt = (o, n) => Object.entries(o).sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, v]) => `${k} ${v.toFixed(2)}`).join(' · ');
 const total = {};
-console.log(`Recipe lab: ${DECKS} decks per archetype, Act I + Act II formations and elites, reaction ${REACT}s ('regular' profile)\n`);
+console.log(`Recipe lab: ${DECKS} decks per archetype, Act I + Act II formations, elites and bosses (run scaling, depth 4), reaction ${REACT}s ('regular' profile)\n`);
 const table = [];
 for (const arch of ARCH) {
   const res = { base: { b: 0, w: 0, t: 0, ex: 0, by: {} }, ex: { b: 0, w: 0, t: 0, ex: 0, by: {} } };
@@ -64,9 +68,9 @@ for (const arch of ARCH) {
     const rng = new RNG(9000 + d * 31 + ARCH.indexOf(arch) * 977);
     const ids = draft(arch, rng);
     for (const act of [1, 2]) {
-      for (const [k, enemies] of encounters(act, 3).entries()) {
+      for (const [k, [enemies, kind]] of encounters(act, 3).entries()) {
         for (const mode of ['base', 'ex']) {
-          const c = battle(ids, enemies, act, 100 + d * 13 + k * 7 + act, mode === 'ex');
+          const c = battle(ids, enemies, act, 100 + d * 13 + k * 7 + act, mode === 'ex', kind);
           const r = res[mode];
           r.b++; r.t += c.t; if (c.result && c.result.victory) r.w++;
           r.ex += c.stats.exActivations;
@@ -99,8 +103,8 @@ for (const r of RECIPES) {
 // the starter deck alone, Act I formations
 const st = { b: 0, by: {} };
 for (let s = 0; s < DECKS * 2; s++) {
-  for (const [k, enemies] of encounters(1, 4).entries()) {
-    const c = battle(STARTER_DECK.map((x) => x.id || x), enemies, 1, 500 + s * 11 + k, true);
+  for (const [k, [enemies, kind]] of encounters(1, 4).entries()) {
+    const c = battle(STARTER_DECK.map((x) => x.id || x), enemies, 1, 500 + s * 11 + k, true, kind);
     st.b++;
     for (const [id, v] of Object.entries(c.stats.exByRecipe)) st.by[id] = (st.by[id] || 0) + v;
   }

@@ -231,7 +231,7 @@ export const LESSONS = [
   {
     key: 'exCombo', title: 'EX COMBO',
     body: 'That sequence was an <b>EX Combo</b>: a recipe made of cards and actions you already use, with an extra effect on top. There are more to find. The Museum\'s <b>Combo Journal</b> records every one you discover and how to repeat it.',
-    when: (c, x) => (x.exKnown > 0 ? { ui: 'none' } : null),
+    when: (c, x) => (x.exKnown > 0 && !x.exBanner ? { ui: 'none' } : null), // once the EX banner has had its moment
   },
   // ── interference, the first time each happens ──
   {
@@ -279,7 +279,7 @@ export function migrateLessons(meta) {
 
 // The first lesson that is relevant now and not seen yet, or null. `x`: { seen: Set or object of
 // seen keys, flags: { busyTap }, kind: 'normal' | 'elite' | 'boss', tutorial: the first battle,
-// tactical: Tactical timing is on, exKnown: EX Combos in the Combo Journal }.
+// tactical: Tactical timing is on, exKnown: EX Combos in the Combo Journal, exBanner: an EX banner is showing }.
 export function pickLesson(c, x) {
   if (!c || c.phase === 'END') return null;
   const seen = (k) => (x.seen instanceof Set ? x.seen.has(k) : !!(x.seen && x.seen[k]));

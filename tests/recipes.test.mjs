@@ -233,13 +233,11 @@ test('Tandem Signal: an arte, a Relay, the incoming hero\'s arte of the same sui
   relay(c, 'C');
   play(c, 'scrapline');
   assert.ok(!exIds(c).includes('tandem_signal'));
-  const echoes = c.stats.echoes || 0;
   play(c, 'thermal_lance'); // Corvin's arte, suit A
   assert.ok(exIds(c).includes('tandem_signal'));
   const ev = c.ex.find((e) => e.id === 'tandem_signal');
   assert.equal(ev.sum.echo, true);
   assert.ok(ev.sum.dmg > 0, 'the Echo dealt damage');
-  void echoes;
   assert.equal(c.heroState('V'), 'RECOVERING', 'the outgoing hero still recovers');
 });
 
@@ -627,4 +625,68 @@ test('a lethal Slipstream (damage, then "refunds double Flow") ends the battle c
   assert.equal(c.phase, 'END');
   assert.ok(c.result.victory);
   assert.deepEqual(c.verifyZones(), { ok: true });
+});
+
+// ── EX damage follows the ordinary rules (assignment §20 R4, §21): target at execution, Guard, adaptations ──
+test('EX strikes hit the current target at execution; area effects hit every living enemy', () => {
+  const c = fixed(['scrapline', 'rivet_jab', 'piston_strike', 'scrapfall'], [], { enemies: ['rush_hound', 'rush_hound'] });
+  c.selectHero('V');
+  play(c, 'scrapline', 'rivet_jab', 'piston_strike');
+  const e2 = c.enemies[1];
+  c.setTarget(e2.uid); // the player moves the target before the arte resolves
+  const hits = [];
+  const deal = c.dealDamage.bind(c);
+  c.dealDamage = (e, n, o = {}) => { if (o.tag === 'ex') hits.push(e.uid); return deal(e, n, o); };
+  play(c, 'scrapfall');
+  assert.deepEqual(exIds(c), ['straight_circuit']);
+  assert.deepEqual(hits, [e2.uid], 'the strike went to the target chosen when it resolved');
+});
+
+test('EX damage is blocked by enemy Guard like any hit (no pierce)', () => {
+  const c = fixed(['scrapline', 'rivet_jab', 'piston_strike', 'scrapfall']);
+  c.selectHero('V');
+  play(c, 'scrapline', 'rivet_jab', 'piston_strike');
+  const e = c.enemies[0];
+  e.guard = 500; // a wall of Guard before the arte
+  const hp = e.hp;
+  const opts = [];
+  const deal = c.dealDamage.bind(c);
+  c.dealDamage = (t, n, o = {}) => { if (o.tag === 'ex') opts.push({ ...o }); return deal(t, n, o); };
+  play(c, 'scrapfall');
+  assert.deepEqual(exIds(c), ['straight_circuit']);
+  assert.equal(opts.length, 1);
+  assert.ok(!opts[0].pierce, 'not piercing');
+  assert.equal(e.hp, hp, 'the arte and the strike both went into Guard');
+  assert.ok(c.ex[0].sum.dmg >= 5);
+  assert.ok(Math.abs(500 - e.guard - (c.combo.cards[3].dmg + c.ex[0].sum.dmg)) <= 1, 'Guard took the arte\'s damage and the strike\'s (Guard is fractional)');
+});
+
+test('EX damage carries the completing card\'s suit into the boss Suit Filter; it never advances arte-only adaptations', () => {
+  // the damage pipeline: a Suit Filter A cuts A-suit EX damage like A-suit card damage
+  const mk = (adaptation) => { const c = fixed(['scrapline', 'rivet_jab', 'piston_strike', 'scrapfall'], [], { enemies: ['scrap_tyrant'] }); c.adapt = adaptation ? { ...adaptation, progress: 0, broken: false } : null; return c; };
+  let c = mk({ id: 'suit_filter_A', need: 8 });
+  const boss = c.enemies[0];
+  boss.guard = 0;
+  const h0 = boss.hp;
+  c.dealDamage(boss, 10, { src: 'V', tag: 'ex', suit: 'A' });
+  assert.equal(h0 - boss.hp, 7, 'A-suit EX damage: 30% less');
+  const h1 = boss.hp;
+  c.dealDamage(boss, 10, { src: 'V', tag: 'ex', suit: 'B' });
+  assert.equal(h1 - boss.hp, 10, 'B-suit EX damage: unaffected');
+  // through play: the strike that Hessa's A-suit arte completes is passed as suit A
+  c = mk({ id: 'suit_filter_A', need: 8 });
+  const seen = [];
+  const deal = c.dealDamage.bind(c);
+  c.dealDamage = (t, n, o = {}) => { if (o.tag === 'ex') seen.push(o.suit); return deal(t, n, o); };
+  c.selectHero('V');
+  play(c, 'scrapline', 'rivet_jab', 'piston_strike', 'scrapfall');
+  assert.deepEqual(exIds(c), ['straight_circuit']);
+  assert.deepEqual(seen, ['A']);
+  // Guard Piercer breaks on arte damage only: the EX strike does not count towards it
+  c = mk({ id: 'guard_pierce', need: 999 });
+  c.selectHero('V');
+  play(c, 'scrapline', 'rivet_jab', 'piston_strike', 'scrapfall');
+  assert.deepEqual(exIds(c), ['straight_circuit']);
+  const arte = c.combo.cards[3];
+  assert.equal(c.adapt.progress, arte.dmg, `progress ${c.adapt.progress} = the arte's own damage ${arte.dmg}, not the strike's ${c.ex[0].sum.dmg}`);
 });

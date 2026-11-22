@@ -11,7 +11,8 @@ import { h, clear, btn } from './dom.js';
 import { cardEl, cardTooltip, fitText, CAT_GLYPH } from './cardView.js';
 import { LESSONS, LESSON_PACE, pickLesson } from './lessons.js';
 import { recordCombo } from '../engine/save.js';
-import { knownDiscoveries } from '../data/recipes.js';
+import { knownDiscoveries, RECIPE_MAP } from '../data/recipes.js';
+import { seqChips } from './museum.js';
 
 const OWNER_COL = { V: '#d0603f', C: '#b48cf0', S: '#e6c25a' };
 const HERO_KEYS = { KeyQ: 'V', KeyW: 'C', KeyE: 'S' };
@@ -509,7 +510,7 @@ export class BattleScreen {
     for (const ev of list) {
       const isNew = recordCombo(this.app.meta, ev.id);
       if (isNew) fresh.push(ev.id);
-      this.exLog.push({ id: ev.id, fresh: isNew, applied: ev.applied });
+      this.exLog.push({ id: ev.id, fresh: isNew, applied: ev.applied, group: ev.group, order: ev.order, len: ev.len, heroes: ev.heroes, sum: { ...ev.sum }, t: this.combat.t });
     }
     this.app.saveMeta();
     const sum = {};
@@ -528,7 +529,9 @@ export class BattleScreen {
     if (sum.echo) parts.push(t('Echo'));
     if (list.some((ev) => !ev.applied)) parts.push(t('the battle was already won'));
     const text = h('div', { class: 'banner-text' }, h('span', { class: 'ex-plate' }, 'EX'), list.map((ev) => recipeName(ev.id)).join(' + '));
-    const b = h('div', { class: 'banner tone-ex', 'data-ex': list.map((ev) => ev.id).join(',') }, text,
+    // why: each recipe's sequence as symbol chips (the Combo Journal has it in words)
+    const why = h('div', { class: 'banner-why' }, ...list.map((ev, i) => [i ? h('span', { class: 'plus' }, '+') : null, seqChips(RECIPE_MAP[ev.id], true)]).flat().filter(Boolean));
+    const b = h('div', { class: 'banner tone-ex', 'data-ex': list.map((ev) => ev.id).join(',') }, text, why,
       parts.length ? h('div', { class: 'banner-sub' }, parts.join(' · ')) : null,
       fresh.length ? h('div', { class: 'banner-sub banner-new' }, t('NEW EX COMBO DISCOVERED')) : null);
     this.bannerEl.append(b);
@@ -589,7 +592,7 @@ export class BattleScreen {
     const L = this.lessons;
     if (L.shown >= (this.setup.tutorial ? LESSON_PACE.perBattle.tutorial : LESSON_PACE.perBattle.normal)) return;
     if (c.t - L.lastAt < LESSON_PACE.gap) return;
-    const r = pickLesson(c, { seen: this.app.meta.tut, flags: L.flags, kind: this.setup.kind, tutorial: !!this.setup.tutorial, tactical: !!c.tactical, exKnown: knownDiscoveries(this.app.meta.combos).length });
+    const r = pickLesson(c, { seen: this.app.meta.tut, flags: L.flags, kind: this.setup.kind, tutorial: !!this.setup.tutorial, tactical: !!c.tactical, exKnown: knownDiscoveries(this.app.meta.combos).length, exBanner: !!this.bannerEl.querySelector('.banner.tone-ex:not(.out)') });
     if (r) this.showLesson(r.lesson, r.anchor);
   }
   // also used by tools (i18n-layout) to show a given lesson

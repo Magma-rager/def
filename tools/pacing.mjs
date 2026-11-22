@@ -18,6 +18,7 @@ import { decide, perform } from './lib/bot.mjs';
 
 const N = +(process.argv[2] || 40);
 if (process.env.SB_RELAY_NEEDS_ARTE === '1') RULES.RELAY_NEEDS_ARTE = true; // open decision A's alternative
+if (process.env.SB_EX === 'off') RULES.EX_COMBOS = false; // Phase 7: measure without EX Combo recipes (R2: with and without)
 const JSON_OUT = process.argv.includes('--json');
 const argOpt = (k, d) => { const a = process.argv.find((x) => x.startsWith(`--${k}=`)); return a ? a.slice(k.length + 3) : d; };
 const MODEL = argOpt('model', 'p6');

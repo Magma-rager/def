@@ -461,6 +461,11 @@ html.reduced-motion .rotate-phone { animation: none; transform: rotate(-90deg); 
 .tone-ex .banner-sub { color: #e8e2ff; }
 .tone-ex .banner-new { display: block; color: #ffe08a; font-weight: 900; letter-spacing: 0.08em; font-size: 0.85em; }
 html.reduced-motion .banner.tone-ex { animation: none; }
+html.reduced-motion .banner.tone-ex.out { transform: none; }
+.banner-why { display: flex; justify-content: center; align-items: center; gap: 6px; margin: 3px 0 1px; }
+.banner-why .plus { color: #8a7f90; font-weight: 900; }
+.seq.compact { gap: 2px; flex-wrap: nowrap; }
+.seq.compact .seq-chip { padding: 0 5px; font-size: 10px; }
 @keyframes banner-in { from { transform: scale(1.3); opacity: 0; } }
 .cutin-layer { position: absolute; inset: 0; pointer-events: none; z-index: 5; overflow: hidden; }
 .cutin { position: absolute; left: -10%; right: -10%; top: 30%; height: 34%; display: flex; align-items: center; justify-content: center; gap: 2%; background: linear-gradient(90deg, rgba(168, 67, 43, 0.0), rgba(168, 67, 43, 0.9) 20%, rgba(74, 40, 64, 0.95) 80%, rgba(74, 40, 64, 0)); transform: skewY(-6deg); animation: cutin 1.05s ease-in-out forwards; border-top: 3px solid var(--brass-hi); border-bottom: 3px solid var(--brass-hi); }

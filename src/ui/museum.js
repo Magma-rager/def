@@ -92,11 +92,12 @@ const SEQ = () => ({
 });
 const KIND_LABEL = () => ({ all: t('All'), offense: t('Offense'), defense: t('Defense'), utility: t('Utility'), relay: t('Relay'), support: t('Support'), accessible: t('Accessible'), intermediate: t('Intermediate'), advanced: t('Advanced') });
 
-export function seqChips(r) {
+// `compact`: symbols only (the EX banner's "why" line, where the words would not fit on a phone)
+export function seqChips(r, compact = false) {
   const seq = SEQ();
-  return h('div', { class: 'seq' }, ...r.seq.map((k, i) => {
+  return h('div', { class: `seq${compact ? ' compact' : ''}`, 'aria-label': r.seq.map((k) => (seq[k] ? `${seq[k][0]} ${seq[k][1]}` : k)).join(', ') }, ...r.seq.map((k, i) => {
     const [g, word] = seq[k] || [k, ''];
-    return h('span', { class: `seq-chip k-${k.replace(/[^A-Za-z0-9]/g, '_')}` }, h('b', {}, g), word ? h('span', {}, word) : null, i < r.seq.length - 1 ? h('i', { 'aria-hidden': 'true' }, '›') : null);
+    return h('span', { class: `seq-chip k-${k.replace(/[^A-Za-z0-9]/g, '_')}` }, h('b', {}, g), word && !compact ? h('span', {}, word) : null, i < r.seq.length - 1 ? h('i', { 'aria-hidden': 'true' }, '›') : null);
   }));
 }
 

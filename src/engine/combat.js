@@ -1697,8 +1697,11 @@ export class Combat {
     const live = () => this.phase !== 'END';
     const pool = () => this.enemies.reduce((a, e) => a + Math.max(0, e.hp) + (e.alive ? Math.max(0, Math.floor(e.guard)) : 0), 0);
     const hit = (fn) => { if (!live()) return; const b = pool(); fn(); sum.dmg += Math.max(0, b - pool()); };
-    const one = (n) => hit(() => { const t = this.currentTarget(); if (t && n > 0) this.dealDamage(t, n, { src: c.hero, tag: 'ex' }); });
-    const all = (n) => hit(() => { for (const t of this.aliveEnemies()) { if (!live()) break; if (n > 0) this.dealDamage(t, n, { src: c.hero, tag: 'ex', all: true }); } });
+    // EX damage goes through everything ordinary damage does (Guard, Weak, Exposed, Parry, citations,
+    // boss adaptations): it carries the suit of the card that completed the recipe for the Suit Filters
+    const suit = entry ? entry.variant : null;
+    const one = (n) => hit(() => { const t = this.currentTarget(); if (t && n > 0) this.dealDamage(t, n, { src: c.hero, tag: 'ex', suit }); });
+    const all = (n) => hit(() => { for (const t of this.aliveEnemies()) { if (!live()) break; if (n > 0) this.dealDamage(t, n, { src: c.hero, tag: 'ex', all: true, suit }); } });
     const share = (pct, min) => Math.max(min, Math.round(pct * base));
     return {
       base,
@@ -1788,9 +1791,11 @@ export class Combat {
     if (this.prep.dmgMult) a *= this.prep.dmgMult;
     if (o.arte && this.relics.has('kettle_drum') && this.combo && this.combo.cards.length >= 5) a *= 1.25;
     if (this.citation && !o.cashout) a *= 0.6;
-    if (o.entry && this.adapt && !this.adapt.broken) {
-      if (this.adaptOn('suit_filter_A') && o.entry.variant === 'A') a *= 0.7;
-      if (this.adaptOn('suit_filter_B') && o.entry.variant === 'B') a *= 0.7;
+    // a card's suit, or (EX Combo damage) the suit of the card that completed the recipe
+    const suit = o.entry ? o.entry.variant : o.suit || null;
+    if (suit && this.adapt && !this.adapt.broken) {
+      if (this.adaptOn('suit_filter_A') && suit === 'A') a *= 0.7;
+      if (this.adaptOn('suit_filter_B') && suit === 'B') a *= 0.7;
     }
     if ((e.st.exposed || 0) > 0) a *= 1.3;
     if (o.arte && e.st.mark > 0) { a *= 1.5; e.st.mark = 0; }

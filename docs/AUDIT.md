@@ -471,6 +471,111 @@ Hold an enemy for the next move in the engine's numbers (single hits after the t
 **Still for human judgment:** whether the lessons are understood and arrive at the right moments; whether 10–14 short pauses in the first battle feel like help or interruption; whether players find the Relay and use it on purpose; whether the incoming hero's read hold is noticed or just feels like breathing room; whether the Hound Mother now reads as "deal with the pack" and the bosses as fair; whether holding an enemy is discovered; whether 7.0–7.6px card text is readable on real phones; whether Tactical timing is found and helps. No human has played 0.2.6, and no physical iPhone or iPad has run it.
 
 
+## Revised roadmap, Phase 7: EX Combo recipes, discovery and the Combo Journal (0.2.7, 2026-11-22)
+
+Specification: `docs/COMBAT_SPEC.md` §28 (and §12.4, §19). Reference build for regressions: 0.2.6 (source `0bfcf8f`, build `3fd8b6b`; the Phase 6 checkpoint is `bdeb723`). Nothing here has been judged by human players: the project owner decided no human beta test is required for this phase, and none was run.
+
+**Baseline reproduced first.** On 0.2.6, `tools/simulate.mjs 30 0.55 quick` gave 28/30 (36.6s per battle, 4.3 HP lost per battle) and `30 1.0 regular` 18/30 (52.9s, 9.3). The same two runs on 0.2.7 with recognition switched off (`SB_EX=off`, i.e. `RULES.EX_COMBOS = false`, a measurement switch only) give exactly the same numbers, line for line: the recipe engine changes nothing when no recipe triggers.
+
+### The recipe system
+
+Fifteen recipes (§28 table), evaluated only when a basic attack or arte resolves or a chain ends, from a compact per-chain record of executed commands. Each triggers once per chain; several on one command all trigger in priority order; undiscovered recipes work; matching never changes legality, the queue or zones; EX effects cannot trigger further recipes. Discoveries go to the Museum record the moment they happen; the run counts finished battles only.
+
+### Tuning the catalogue (measured, not guessed)
+
+The first catalogue was far too generous: the ordinary bots completed recipes without trying. 30 full runs each, quick 0.55s / regular 1.0s:
+
+| Catalogue | EX per 100 chains (ordinary bot, quick / regular) | Battle time vs 0.2.6 | Regular wins | Recipe-aware bot, regular wins |
+|---|---|---|---|---|
+| v1 (first draft) | 145 / 92 | −22% / −16% | 22/30 | 24/30 |
+| v2 (Tandem same suit, Salvage needs the Churned card, Three-Way needs three artes, smaller effects) | 107 / 74 | −12% / −12% | 21 | 25 |
+| v3 (Quick Settlement needs a Cross, Pressure Release needs 8 Momentum) | 85 / 61 | −14% / −11% | 19 | 20 |
+| **v4 (shipped: every damage share cut about a quarter)** | **81 / 60** | **−10% / −8%** | **20** | **23** |
+
+Activation requirements were tightened before effects were cut, as the assignment asks; no enemy was changed to compensate.
+
+### Balance: the existing policy against a recipe-aware one
+
+`tools/lib/bot.mjs` gained a recipe-aware policy (`ex: true`): with the same hand, it orders its legal choices towards recipes (climb W→M→S before the arte, switch suits, a quick Cash Out after a Cross, +FLOW towards six cards, another hero's heal or Hessa's Cover mid-chain, Churn to dig and play what it brings, open with a basic attack kept in the Reserve). It plays nothing `check()` refuses and writes no history. 30 full runs per row, seeds 1001–1030:
+
+| Policy | Rules | Wins | HP lost / battle | Battle | EX / battle (per 100 chains) | Distinct recipes / run | 3-hero chains | Cards / chain | Momentum + / − | Support | Perfect / Cash Out / Dropped |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| quick, existing | EX off (= 0.2.6) | 28 | 4.3 | 36.6s | 0 | 0 | 34% | 3.68 | 36.6 / 27.1 | 5.9 | 60 / 37 / 3% |
+| quick, existing | EX on | 28 | 3.8 | 32.8s | 4.55 (81) | 10.4 | 33% | 3.62 | 32.6 / 23.1 | 5.4 | 57 / 40 / 2% |
+| quick, recipe-aware | EX off | 27 | 2.7 | 36.8s | 0 | 0 | 26% | 3.71 | 36.3 / 26.9 | 7.5 | 62 / 35 / 3% |
+| quick, recipe-aware | EX on | 28 | 2.9 | 31.0s | 6.35 (126) | 11.6 | 28% | 3.81 | 32.8 / 23.2 | 5.8 | 64 / 34 / 2% |
+| regular, existing | EX off (= 0.2.6) | 18 | 9.3 | 52.9s | 0 | 0 | 12% | 3.16 | 44.3 / 34.9 | 8.0 | 76 / 19 / 5% |
+| regular, existing | EX on | 20 | 7.1 | 48.6s | 4.66 (60) | 10.9 | 12% | 3.16 | 41.4 / 31.9 | 7.0 | 76 / 19 / 5% |
+| regular, recipe-aware | EX off | 20 | 6.4 | 50.4s | 0 | 0 | 11% | 3.35 | 42.2 / 32.6 | 9.0 | 76 / 18 / 6% |
+| regular, recipe-aware | EX on | 23 | 6.0 | 43.9s | 7.14 (114) | 11.7 | 9% | 3.36 | 38.4 / 28.8 | 8.0 | 78 / 17 / 5% |
+| learner 1.4s, existing | EX off | 11 | 12.5 | 48.8s | 0 | 0 | 9% | 2.92 | 38.1 / 27.7 | 6.6 | 67 / 21 / 12% |
+| learner 1.4s, existing | EX on | 14 | 12.1 | 48.3s | 4.14 (52) | 9.5 | 9% | 2.98 | 38.9 / 28.4 | 6.2 | 69 / 19 / 12% |
+
+*Reading it.* The recipe-aware policy with recognition off is no better than the existing policy (quick 27 vs 28 wins, the same 36.8s battles; regular 20 vs 18, 50.4 vs 52.9s): its different choices are not stronger play in themselves. With recognition on, the same choices shorten battles a further 13–16% (quick 36.8 → 31.0s, regular 50.4 → 43.9s) and lift regular wins 20 → 23. That gap is the strategic value of playing for recipes: a reward large enough to change normal decisions (more Perfects, longer chains, support used mid-chain, fewer three-hero chains in favour of same-suit hand-overs), not an automatic gain. The existing policy gets 4.1–4.7 recipes per battle incidentally, worth 8–10% shorter battles and wins within noise of 0.2.6 (quick 28 = 28, regular 20 vs 18, learner 14 vs 11 over 30 runs). EX damage is 6–8% of chain damage; EX Momentum 1.3–3.1 per battle against 32–41 gained; nothing runs away (Momentum and Churn caps hold in every recipe test and in the 25-battle soak).
+
+*By recipe* (per battle, existing quick / recipe-aware regular): Quick Settlement 1.27 / 0.17, Tandem Signal 0.70 / 0.82, Cross Current 0.47 / 1.19, Salvage Circuit 0.46 / 0.75, Three-Way 0.41 / 0.36, Iron Harmony 0.39 / 1.29, Interference Reversal 0.27 / 0.45, Pressure Release 0.17 / 0.15, Healing Cadence 0.13 / 0.38, Prism 0.10 / 0.26, Final Harmonic 0.08 / 0.07, Second Wind 0.06 / 0.09, Straight Circuit 0.06 / 1.12, High Climb 0.00 / 0.05. Straight Circuit is the clearest case of deliberate play: 0.06 per battle when the bot plays its usual way, 1.12 when it climbs on purpose. By encounter: 2.8–4.6 in ordinary fights, 4–7 in elites, 10–18 in bosses (longer fights, more chains).
+
+### Builds (`tools/recipelab.mjs 12`)
+
+Twelve drafted decks per archetype (the starter deck plus seven reward cards with the archetype's tag and three others), Act I and II formations, elites and bosses at run scaling, 168 battles per build and policy. All 15 recipes were reached through legal play; no recipe needed injected history. The starter deck alone reached 10 in Act I (Straight Circuit 1.89 per battle, Cross Current 1.14, Tandem Signal 0.81, Stored Strike 0.70, Three-Way 0.70, Iron Harmony 0.57, Quick Settlement 0.19, Interference Reversal 0.18, Salvage Circuit 0.12, Healing Cadence 0.08).
+
+| Build | Its recipes (recipe-aware, per battle) | Average over all builds |
+|---|---|---|
+| Flow Extension | Second Wind 0.87 | 0.19 |
+| Cash Out | Quick Settlement 1.07 | 0.26 |
+| Guard & Counter | Iron Harmony 2.02 | 1.07 |
+| Rank Ladder | Final Harmonic 0.70 (Straight Circuit 1.11) | 0.24 (1.17) |
+| Relay Echo | Three-Way 1.26, Tandem 1.24, Final Harmonic 0.41 | 1.02, 1.08, 0.24 |
+| Reserve Strategy | Stored Strike 0.80 | 0.53 |
+| Momentum Burst | Pressure Release 0.87 | 0.81 |
+| Interference Exploit | Interference Reversal 0.60 | 0.58 |
+| Suit Switching | Cross Current 0.92, Prism 0.44 | 1.11, 0.44 |
+| Churn Engine | Salvage Circuit 1.05 | 1.66 |
+
+Six builds clearly favour their own recipes; Momentum Burst and Interference Exploit only marginally (Interference Reversal depends on enemy Locks, not on the player's cards); Suit Switching and Churn Engine decks did not reach their recipes more often than other decks with this bot — its Cross and Churn habits are the same whatever the deck holds. Every build has recipes it can pursue; whether the differentiation reads as real to players is a question for human play.
+
+### Presentation and onboarding
+
+One banner per command (names, the sequence as chips, the effect actually applied, NEW only the first time); the first discovery opens one short lesson once the banner has faded (29 lessons now; the Phase 6 28 unchanged, their spacing, skip, replay, returning-player migration, pauses, input guard and Tactical timing untouched). No permanent recipe row; card text not reduced.
+
+### Tested
+
+| Check | Result |
+|---|---|
+| Unit tests (`npm test`) | 182/182 — `tests/recipes.test.mjs` (36): every recipe assembled by legal play (commit, Relay, support, Churn, Reserve, +FLOW, FINISH / CASH OUT) on a stacked hand and checked on the command that completes it, with its negatives (wrong order, missing step, other hero, rank, suit, part boundary, cancelled Relay, cancelled or queued card, support outside the chain, Cover expired, full HP); once per chain and again next chain; overlaps in priority order; caps; no recursion; a lethal completing arte and a winning Cash Out (recorded, not applied); a 25-battle randomized soak; EX damage to the target at execution, through Guard and the Suit Filters, not counted as arte damage; the Journal record (first, repeat, unknown and damaged ids, idempotent, older records); save and reload; run statistics; the two engine fixes. `tests/run.test.mjs`: a genuine 0.2.6 save (version 5) loads as version 6 with everything kept; a damaged version-6 record loads safely; the v3/v4 fixtures still convert |
+| Acceptance (`tools/accept7.mjs`, the assignment's scenarios A–E, steps 1–42 plus 5 extra checks, taps only after a disclosed fixture) | English 844×390 47/47, English 1180×820 47/47, Russian 844×390 47/47, Russian 1180×820 47/47 (all four run in parallel under load) |
+| Recipe coverage (`tools/recipelab.mjs 12`) | 15/15 recipes reached through legal play; 10 with the starter deck alone |
+| Balance (`tools/simulate.mjs`, 10 configurations × 30 runs) | above |
+| Phase 5 acceptance (`tools/accept5.mjs`, English 844×390) | 31/33 in the first run, under heavy parallel load: step 25 (a queued heal cancelled) raced the screenshot taken before the cancel tap, and step 30 still expected save version 5 (the tool now checks the current version); re-run pending |
+| Phase 6 acceptance (`tools/accept6.mjs`, English 844×390) | running |
+| Targeting (`tools/targeting.mjs`, 4 sizes, both languages) | 36/36 |
+| Layout (`tools/i18n-layout.mjs`, 7 viewports, now with every Combo Journal state and filter and every EX banner) | running |
+| Readability (`tools/readability.mjs`, smallest card effect text) | English 667×375 7.6px, 732×510 7.6, 844×390 7.6, 1194×834 11.6; Russian 7.0, 7.6, 7.6, 12.4 — unchanged from 0.2.6 |
+| Reduced Motion and no freeze (browser check) | with Reduced Motion the EX banner has no animation; with or without it, combat time and enemy ATB keep running while the banner shows (0.5s of battle time, ATB 0.48 → 0.59) |
+| Full campaign through the UI (`tools/milestone.mjs`, reload and Continue at every checkpoint) | English 1194×834 41/41: three acts won (Clockwork Regent, Protocol Auditor with the Volatile preparation, Signalbreak Core), a shop, the ending, credits, the results screen (EX Combos 67 · 12 recipes), the Museum record and unlock. Russian 844×390 and the defeat flow: running |
+| Offline web app (`tools/pwa.mjs`, the built game) | 16/16 under the GitHub Pages path and 15/15 at the site root as on the storage mirror |
+
+**Regression requirements R1–R7**
+
+| | Requirement | Result |
+|---|---|---|
+| R1 | Enemy pressure | Act multipliers and the 1.2s spacing unchanged (unit tests); 0% of enemy gaps under 1s in every pacing row with EX on and off (`tools/pacing.mjs 60 --act1 --pace=2.5`); the EX banner pauses nothing (enemy ATB keeps filling, browser check); the first-EX lesson pauses like every lesson |
+| R2 | ≤25% dropped at ~2.5s per card in opening fights, with Relays | The 2.5s active-Relay player drops 12–17% per Act I fight with EX on, 14–18% with EX off (`--relay=active --only-slow`, 60 battles per fight); the careful 2.5s player 5–8% either way. No presentation takes decision time |
+| R3 | Downtime | Decision, execution, holds, breathers, Recovery and pause still separate (`stats.time`); with EX on the quick player decides 1.9s, executes 19.9s, holds 2.0s, breathers 5.0s per battle (battles are shorter); no global freeze |
+| R4 | Targeting | 36/36 including queued attacks; EX strikes hit the target current when they resolve and area effects every living enemy (unit test) |
+| R5 | Early survivability | Learner, ordinary and quick players win every Act I fight with EX on and off; the learner's Act I HP loss is unchanged or lower; recipes are not needed to win (the existing policy with EX off is 0.2.6) |
+| R6 | Readability | Smallest card text unchanged (7.0–7.6px on phones); no permanent EX row; layout sweep running |
+| R7 | Saves, languages, offline | Version-6 run saves, v3/v4/v5 fixtures and the Museum record normalisation (unit tests); the Journal survives reload, a new run and a restarted encounter (acceptance steps 37–42a, both languages); 0 of 491 interface keys untranslated; offline check above; full campaign above |
+
+**Bugs found and fixed during the phase**
+- *A lethal Slipstream crashed the engine* (present in 0.2.6, confirmed by running the same sequence on `bdeb723`): its "refunds double Flow" ran after its own damage had ended the battle and read the chain that no longer existed. The recipe lab's drafted decks were the first to land a killing Slipstream. Fixed (`naturalRefund` returns 0 without a chain); unit test.
+- *A battle that ended during a command's follow-through left it marked as executing* (pre-existing; exposed when the scheduler soak's random stream changed): victory or defeat while a support was still animating after its effect. Fixed in the end-of-battle cleanup; unit test.
+- *EX damage skipped the boss Suit Filters* (found in review of the damage path): a strike carries no card entry, so the filter did not apply. EX damage now carries the suit of the card that completed the recipe; unit test.
+- *The first-EX lesson covered the EX banner.* It now waits until the banner has faded.
+- *Tools*: the acceptance scenario's first runs lost taps at battle start and raced the cancel window under parallel load; taps are now confirmed and the arte is queued two places back. A battle node with the Wild Signal trait (suits change on draw) legitimately broke the scripted same-suit sequence; the tool now picks a node without a suit-changing or Locking trait and records the trait.
+
+**Still for human judgment:** whether players notice recipes, understand why one triggered from the banner, and find the Journal; whether the recipes change how they play or only reward what they already do; whether 4–7 banners per battle (10–18 in boss fights) feel like reward or noise; whether the first-EX lesson is enough; whether the builds feel different. No human has played 0.2.7, and no physical iPhone or iPad has run it.
+
 ## Version
 
 Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exit gate has passed with evidence here; the patch number counts published builds with changes since that gate; `1.0.0` is the Phase 9 release. The title tagline, the "Patch Notes" event, `package.json` and the iOS project all show the same number (enforced by a test).
@@ -484,7 +589,7 @@ Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exi
 
 The table above follows the earlier roadmap. From 2026-11-13 the revised roadmap applies: the number keeps counting from 0.2, the minor number advances when one of the revised roadmap's phase gates is accepted (Phase 1 needs human playtesting for that), and the patch number counts published builds in between.
 
-Current version: **0.2.6** (the beta-feedback patch and its follow-up, plus revised-roadmap Phase 3, shared party HP and individual Defense, Phase 4, basic attacks, artes, support and a persistent hand, Phase 5, the command queue, hero Recovery and Relays, and Phase 6, Act I onboarding, Relay accessibility, Act I tuning and telegraphs; Phase 1 still waits for human playtesting, so the minor number stays at 2; earlier 0.2.0 passed the old Phase 2 gate). The previous build, 0.2.5, is commit `51d2e4d` (source `b702145`).
+Current version: **0.2.7** (the beta-feedback patch and its follow-up, plus revised-roadmap Phase 3, shared party HP and individual Defense, Phase 4, basic attacks, artes, support and a persistent hand, Phase 5, the command queue, hero Recovery and Relays, Phase 6, Act I onboarding, Relay accessibility, Act I tuning and telegraphs, and Phase 7, EX Combo recipes, discovery and the Combo Journal; Phase 1 still waits for human playtesting, so the minor number stays at 2; earlier 0.2.0 passed the old Phase 2 gate). The previous build, 0.2.6, is commit `3fd8b6b` (source `0bfcf8f`).
 
 ## Not present in this build
 
@@ -507,11 +612,13 @@ These roadmap references have no counterpart in this repository:
 | Relics | 30–45 | 39 (incl. 5 boss trophies) |
 | Events | 12–18 | 21 |
 | Build families | ≥ 4 | 10 (each with a passing signature test) |
+| EX Combo recipes | 12–16 (Phase 7) | 15 (every build has at least one; all reached through legal play in `tools/recipelab.mjs`) |
 | Starting relics | 4 with unlocks | 4 with unlocks |
 
 ## Known risks
 
 - Balance is tuned against bots only; no human playtest data yet.
+- EX Combo frequency and value are tuned against bots only: whether 4–7 banners per battle (10–18 in boss fights) read as reward or noise, and whether players change their play for recipes, is unmeasured.
 - No test on a physical iPad, iPhone or Safari; Chromium only.
 - Audio has never been heard.
 - Mid-battle saves restart the fight rather than resuming mid-combo.

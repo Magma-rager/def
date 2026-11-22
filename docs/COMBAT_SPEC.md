@@ -193,6 +193,7 @@ The decision window runs out (or three stumbles): queued commands that have star
 - Recipes are patterns over executed commands in one chain (e.g. Weak → Medium → Strong → arte of the same hero; three-hero Relay chain; Cover followed by an arte). They trigger once per chain when their last command executes. Cancelled or never-executed commands never count.
 - Overlap: when one executed command completes several recipes, all trigger in recipe priority order; the same recipe never triggers twice in one chain.
 - Discovery records the recipe in the Museum's Combo Journal; an undiscovered recipe still works.
+- As built in 0.2.7: §28 (catalogue, history, evaluation points, terminal order, effects, discovery policy, Journal, saves).
 
 ## 13. Timing
 
@@ -354,7 +355,7 @@ Intents, damage and timing are unchanged by Phases 3–5 except the `lowest` tar
 | 3 | today | per-hero `party[{id,hp,maxHp}]` |
 | **4** | Phase 3 | `hp = Σ hp + 12` (a knocked-out hero counts 0), `maxHp = Σ maxHp + 12` (the same bonus as a new run), `party = [{id}]`; older version-3 saves load and convert once |
 | 5 | Phase 4 | deck card ids mapped by the §18.1 table (`MIGRATE_CARDS`); unknown ids become a Medium basic attack; grafts and upgrades carried over |
-| 6 | Phase 7 | Museum gains `combos` (journal); absent field = empty |
+| 6 | Phase 7 | the run gains `exFound` and the EX statistics (empty for older saves; a damaged record is repaired); the Museum record — stored separately — gains `combos` (the Combo Journal), absent = empty, normalised idempotently (§28) |
 Battles are never saved mid-fight (a Continue restarts the encounter), so combat state needs no migration. Museum records keep their fields; new fields default safely.
 
 ## 20. Interface
@@ -550,4 +551,57 @@ Phase 6 changes presentation and Act I balance on top of §26; the scheduling ar
 - *Flow theft*: `imminentDrain()` gives the Flow a drain intent winding up (from 55% ATB) would take; the Flow bar shows it as a blinking red end and reads "THEFT −n". Drain intents carry their amount (`flow`).
 
 **Unchanged (open decisions and settings).** Decision A (`RELAY_NEEDS_ARTE` false) and decision B (targets at execution, `currentTarget()`) keep their defaults. Tactical timing stays off by default; Relaxed assist and Reduced motion are unchanged. Save version 5; lesson progress lives in the meta record, which already existed.
+
+## 28. Phase 7 as built (0.2.7) — EX Combo recipes, discovery and the Combo Journal
+
+Phase 7 adds recognition of deliberate sequences on top of §27; the scheduling architecture, the card categories, Momentum and the chain endings are unchanged. Measurements are in `docs/AUDIT.md` (Phase 7).
+
+**What a recipe is.** A data entry in `src/data/recipes.js`: `id`, `tier` (accessible, intermediate, advanced), explicit `priority`, `on` (`card` or `end`), `tags` (the build archetypes it belongs to), `kind` (offense, defense, utility), `support`, the texts (name, how, effect, hint, purpose; Russian in `src/i18n/ru.js`), `seq` (the Journal's chips), `match(x)` and `fx(api)`. An EX Combo is not a card, a card category, the EX suit (which stays a suit), a Finisher or Relay Echo, and has no resource or special card of its own: every recipe is built from cards the player already plays.
+
+**Execution history.** Each chain keeps the executed card entries (`cards[]`; Phase 7 adds the printed strength of a basic attack, `disrupted` — the card had been Locked or was Scrambled when played —, `coverUp`, and the card's uid) and a compact ordered log of executed events (`log[]`): `card`, `relay`, `support` (performer, the attacking hero, HP actually healed, Guard, Cover — only while the chain is active), `churn` (with the card it drew), `stash`, `flow` (Flow the player gained: +FLOW or a card). Queued, cancelled and never-executed commands never enter it; support outside a chain is never attributed to one. The record lives and dies with the chain; nothing is scanned per frame.
+
+**Evaluation points.** Exactly two: when a basic attack or arte resolves (after its own effects, after the card has moved to the discard or exhaust pile) — recipes with `on: 'card'` —, and when a chain ends (Perfect, Cash Out, Dropped, and a Clean Exit or Finisher Cash Out whose payout itself ended the battle) — `on: 'end'`. Order on one command: impact → card effects → recognition → EX effects in ascending priority → terminal cleanup. A recipe triggers at most once per chain (`chain.ex`); every recipe the command completes triggers. Damage shares are taken from the chain's damage before that command's EX effects, so overlaps do not compound. Matching changes no legality, queue or zone; a recipe that throws is treated as not matching.
+
+**No recursion.** EX effects never go through card resolution, support or chain endings. Flow from an EX effect carries no source and so can never complete Second Wind; an EX Echo evaluates no recipe.
+
+**Terminal events.** When the command's own damage ends the battle, the activation is still recognised — recorded in the Journal and the statistics, shown with "the battle was already won" — but its effect is not applied. Victory and defeat cleanup is unchanged; a command still in its follow-through when the battle ends no longer stays marked as executing (fixed in this phase).
+
+**Effects (bounded).** A strike for a share of the chain's damage with a minimum, to the current target (targets are taken at execution, §14) or to every living enemy; a flat strike; Guard; healing; Momentum (cap 10); Flow (only for the live chain, inside the counted cap); a Churn charge (cap); Exposed; Counter; Cover (+seconds only while Cover is up); an Echo of a given arte; lifting every Lock on the player's cards. EX damage is ordinary damage: Guard blocks it, Weak, Exposed, Parry and the Protocol Auditor's citations apply, and the boss Suit Filters apply by the suit of the card that completed the recipe; it is not arte damage, so it never advances Guard Piercer. Lifting Locks (including a boss's hardened Locks) is Interference Reversal's explicit property.
+
+**The catalogue (15).**
+
+| Priority | Recipe | Tier | Builds | Completes on | Effect |
+|---|---|---|---|---|---|
+| 10 | Straight Circuit | accessible | ladder | the arte that follows Weak, Medium, Strong basic attacks opening one hero's part | strike 25% (≥5), +1 Momentum |
+| 12 | Salvage Circuit | intermediate | churn | an arte, once the card a mid-combo Churn drew has been played (it may be the arte) | +1 Churn, +1 Momentum |
+| 15 | Stored Strike | accessible | reserve | an arte after a basic attack played from the Reserve in the same part | strike 20% (≥5), +1 Momentum |
+| 20 | High Climb | intermediate | ladder | an arte of rank 5–6 with three Steps in the part | Exposed 5s, +2 Momentum |
+| 22 | Second Wind | intermediate | flow | the 6th card of a combo in which the player extended Flow | +1.5s Flow, 6 Guard |
+| 25 | Prism Sequence | intermediate | variant | an arte in a part that holds A, B and EX suits | 3 per Cross to every enemy (3–15) |
+| 30 | Cross Current | accessible | variant | an arte after two Crosses in the part | +1 Momentum, +1 Churn |
+| 35 | Pressure Release | intermediate | momentum | the arte that brings Momentum spent on artes in the combo to 8 | 8 Guard, +2 Momentum |
+| 40 | Tandem Signal | intermediate | relay | the incoming hero's first arte, of the same suit as the arte that ended the previous part before the Relay | that arte Echoes at 30% |
+| 42 | Healing Cadence | intermediate | guard (support) | the attacker's next card after another hero's heal restored HP during the combo | +1s Flow, heal 4 |
+| 45 | Iron Harmony | intermediate | guard (support) | Corvin's or Pin's arte while the Cover Hessa's Guard support started in this combo is up | Counter 6, Cover +2s |
+| 50 | Three-Way Circuit | advanced | relay | the arte that gives all three heroes an arte in one combo | 15% (≥5) to every enemy, +1 Momentum |
+| 55 | Interference Reversal | intermediate | interference | an arte after a card that had been Locked or Scrambled was played | strike 25% (≥5), every Lock lifted |
+| 60 | Quick Settlement | accessible | cashout | a Quick Cash Out (2.5s+ Flow left) of 3+ cards with a Cross | 25% of the payout as damage, +1 Churn |
+| 70 | Final Harmonic | advanced | ladder, relay | a rank-6 arte in a three-hero combo of 6+ cards | 30% (≥12) to every enemy, 10 Guard |
+
+Every archetype has at least one recipe. With the starter deck alone the recipe lab's deliberate player reached 10 of the 15 in Act I fights; all 15 were reached by drafted decks (`tools/recipelab.mjs`). Material changes from the assignment's candidate table (all measured, `docs/AUDIT.md` Phase 7):
+- *Second Wind* is added: the Flow Extension build had no candidate.
+- *Tandem Signal* ("two heroes each land an arte in one Relay chain") needs the outgoing hero's part to end with the arte and the incoming hero's first arte to share its suit: ordinary Relay play completed the candidate in most two-hero chains (1.8 per battle for the ordinary quick bot).
+- *Three-Way Circuit* ("two Relays and a payoff from the third hero") needs an arte from each of the three heroes, for the same reason.
+- *Quick Settlement* needs a Cross in the cashed-out combo: two thirds of all Cash Outs were already Quick Cash Outs of three cards.
+- *Salvage Circuit* ("a card-management action contributes to a later sequence") needs the card a mid-combo Churn drew to be played: Churning a dead card before any arte was free value every chain.
+- *Pressure Release* asks for 8 Momentum on artes, not 6, which two artes of two heroes paid routinely.
+- *Healing Cadence*'s "meaningful continuation" is the attacking hero's next card after the heal, and the heal must restore HP (a heal at full HP does not count).
+
+**Discovery policy.** A recipe is discovered the moment it activates: the Museum record (`meta.combos`: `{ id: { at, count } }`) is updated and saved at once, and stays so if the battle is then lost, abandoned or restarted. The run's own EX statistics and `exFound` count finished battles only (merged when the battle ends), so a restarted encounter's activations reach the Journal but never count twice for the run. Unknown ids in the record are kept (a later build may know them) but never shown or counted. Undiscovered recipes work exactly like discovered ones.
+
+**Presentation.** One banner per command (`.banner.tone-ex`, distinct from Step, Cross, Relay and Finisher feedback): the EX plate, the names joined with "+" in priority order, the sequence as symbol chips (why it triggered), the effects actually applied (what it did), and "NEW EX COMBO DISCOVERED" only on a first discovery; held 2.6s (new) or 1.7s; nothing pauses; it sits above the field, not over the hand or the controls. EX damage numbers are cyan. Reduced Motion removes its zoom and slide; its sounds follow the audio settings. The first discovery opens one short lesson (*EX combo*) once the banner has faded; later discoveries never interrupt. There is no permanent recipe row.
+
+**Combo Journal.** The Museum's sixth tab: how many of the 15 are discovered; discovered recipes in full (name, activations, tier, kind, build, the sequence in chips with words, how, effect, purpose); undiscovered ones as "???" with their tier, kind, build, "?" chips and the hint; filters by kind, Relay, support and difficulty and by build. Touch and keyboard (buttons and a select); both languages; offline (local storage).
+
+**Statistics.** Combat: `exActivations`, `exByRecipe`, `exOverlaps`, `exDamage`, `exGuard`, `exHeal`, `exMomentum`, `exFlow`, `exChurn`, `exChainCards`, `exRelay`, `exSupport`, `exUnapplied`; the run summary adds `ex` and `exRecipes`; the results screen has one compact line (EX Combos: activations · recipes). `RULES.EX_COMBOS` (true) switches recognition off for measurement tools only; nothing in the game exposes it.
 

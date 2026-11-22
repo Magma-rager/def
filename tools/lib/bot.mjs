@@ -204,6 +204,13 @@ export function decide(c, { profile = 'regular', rng = Math.random, relay = 'car
     }
     // start low, so higher basic attacks and the artes can follow
     basics.sort((a, b) => c.effRank(a) - c.effRank(b) || def(c, b).gain - def(c, a).gain);
+    if (ex) {
+      // Stored Strike: open with a basic attack kept in the Reserve; between combos, keep a spare Weak one there
+      const kept = basics.find((u) => c.reserve.includes(u) && c.effRank(u) === c.effRank(basics[0]));
+      if (kept) return { type: 'play', uid: kept };
+      const weak = c.hand.filter((u) => u && cat(c, u) === 'basic' && def(c, u).rank === 1 && !c.isLocked(u));
+      if (!busy && weak.length >= 2 && c.reserve.length < c.reserveMax() && c.reserveLatchUntil <= c.t && c.canStash(weak[1])) return { type: 'stash', uid: weak[1] };
+    }
     return { type: 'play', uid: basics[0] };
   }
 
