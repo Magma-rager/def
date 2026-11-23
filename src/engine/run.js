@@ -91,9 +91,9 @@ export function emptyStats() {
 // with SB_PROFILE_DUMP=1, docs/AUDIT.md Phase 8), with small floors where ordinary play does none of it.
 // long/cash/relay: per combo · guard/churn/mom/flow/reserve/interf: per battle · suit: share above 50%.
 export const EVIDENCE_TYPICAL = {
-  1: { long: 0.31, cash: 0.12, relay: 1.0, guard: 14, churn: 0.5, suit: 0.1, mom: 10.3, flow: 0.2, reserve: 0.15, interf: 1.17 },
-  2: { long: 0.24, cash: 0.17, relay: 0.76, guard: 28.3, churn: 0.5, suit: 0.1, mom: 18.1, flow: 0.2, reserve: 0.15, interf: 1.5 },
-  3: { long: 0.19, cash: 0.18, relay: 0.68, guard: 47, churn: 1.46, suit: 0.1, mom: 27.4, flow: 0.3, reserve: 0.15, interf: 1.94 },
+  1: { long: 0.4, cash: 0.1, relay: 1.35, guard: 11.2, churn: 0.5, suit: 0.1, mom: 10.6, flow: 0.2, reserve: 0.15, interf: 1.0 },
+  2: { long: 0.3, cash: 0.12, relay: 1.0, guard: 26.5, churn: 0.5, suit: 0.1, mom: 18.6, flow: 0.2, reserve: 0.15, interf: 1.42 },
+  3: { long: 0.29, cash: 0.12, relay: 0.87, guard: 44.6, churn: 0.5, suit: 0.1, mom: 26.4, flow: 0.43, reserve: 0.15, interf: 1.5 },
 };
 export const EVIDENCE_MARGIN = 1.15;
 export const EVIDENCE_MIN = 0.6;
@@ -228,12 +228,26 @@ export class Run {
     return true;
   }
 
-  dominantTags() {
+  // The run's build direction (Phase 8, docs/COMBAT_SPEC.md §29): tags of what the player acquired —
+  // cards taken (not the starter deck), relics, mutations (counted double). Before Phase 8 the starter
+  // deck's own Guard tags (Salvage, Mend Circuit) counted, so every run's offers leaned towards Guard.
+  tagCounts() {
     const counts = {};
-    for (const c of this.d.deck) for (const t of CARDS[c.id].tags) counts[t] = (counts[t] || 0) + 1;
-    for (const r of this.d.relics) { const t = RELICS[r].tag; if (t) counts[t] = (counts[t] || 0) + 1; }
+    // the starter deck's cards are not a choice: each starter id is skipped as often as the starter deck holds it
+    const starter = {};
+    for (const sp of STARTER_DECK) starter[sp.id] = (starter[sp.id] || 0) + 1;
+    for (const c of this.d.deck) {
+      const d = CARDS[c.id];
+      if (starter[c.id] > 0) { starter[c.id]--; continue; }
+      if (d.rarity === 'status') continue;
+      for (const t of d.tags) counts[t] = (counts[t] || 0) + 1;
+    }
+    for (const r of this.d.relics) { const t = RELICS[r].tag; if (t && RELICS[r].rarity !== 'starter') counts[t] = (counts[t] || 0) + 1; }
     for (const m of this.d.mutations) { const t = MUTATIONS[m].tag; if (t) counts[t] = (counts[t] || 0) + 2; }
-    return Object.entries(counts).sort((a, b) => b[1] - a[1]).map((x) => x[0]);
+    return counts;
+  }
+  dominantTags() {
+    return Object.entries(this.tagCounts()).sort((a, b) => b[1] - a[1]).map((x) => x[0]);
   }
 
   // Dominant build archetype key (see ARCHETYPES), or 'balanced'.
@@ -521,10 +535,19 @@ export class Run {
     };
   }
 
+  // Card offers (Phase 8 reward economy, docs/COMBAT_SPEC.md §29). With a build direction (the most-held
+  // tag, held twice or leading alone), one card usually follows it and another the second direction; the last card is always
+  // a pivot — an archetype the build does not lead with — so a different plan is always on the table.
+  // Without a direction, the cards come from different archetypes, so the first picks choose one.
   cardChoices(rng, n, { kind = 'battle', boost = false, grafted = false, minRarity = null, tag = null } = {}) {
     const pool = rewardPool();
-    const tags = this.dominantTags();
+    const counts = this.tagCounts();
+    const tags = Object.keys(counts).filter((t) => ARCHETYPES[t]).sort((a, b) => counts[b] - counts[a]);
+    // the lead direction: the most-held tag, once it is held twice or leads alone
+    const lead = tags[0] && (counts[tags[0]] >= 2 || counts[tags[0]] > (counts[tags[1]] || 0)) ? tags[0] : null;
+    const second = lead && tags[1] && counts[tags[1]] >= 2 ? tags[1] : null;
     const out = [];
+    const offeredTags = new Set();
     // Every combo starts with a basic attack: when fewer than 40% of the deck are basic attacks, the
     // first card offered is one (prototype, docs/COMBAT_SPEC.md §25), so a deck full of artes stays playable.
     const needBasic = this.d.deck.length > 0 && this.categoryCount('basic') / this.d.deck.length < 0.4;
@@ -538,18 +561,41 @@ export class Run {
       }
       if (minRarity === 'uncommon' && rarity === 'common') rarity = 'uncommon';
       if (minRarity === 'rare') rarity = 'rare';
-      let cands = pool.filter((c) => c.rarity === rarity && !out.some((o) => o.id === c.id));
+      const fresh = (c) => !out.some((o) => o.id === c.id);
+      let cands = pool.filter((c) => c.rarity === rarity && fresh(c));
       if (i === 0 && needBasic) {
         const b = cands.filter((c) => c.category === 'basic');
-        cands = b.length ? b : pool.filter((c) => c.category === 'basic' && !out.some((o) => o.id === c.id));
+        cands = b.length ? b : pool.filter((c) => c.category === 'basic' && fresh(c));
+        // the basic attack offered still leans towards the build when one of its basics exists
+        if (lead && rng.chance(0.6)) { const lb = pool.filter((c) => c.category === 'basic' && c.tags.includes(lead) && fresh(c)); if (lb.length) cands = lb; }
       }
-      const wantTag = tag || (i === 0 && tags.length && rng.chance(0.65) ? tags[0] : i === 1 && tags[1] && rng.chance(0.4) ? tags[1] : null);
-      if (wantTag && !(i === 0 && needBasic)) {
-        const t = cands.filter((c) => c.tags.includes(wantTag));
+      const pivot = !tag && n >= 3 && i === n - 1;
+      let want = null;
+      if (tag) want = tag;
+      else if (pivot) {
+        // an archetype outside the build's top two that this offer has not shown yet
+        const away = Object.keys(ARCHETYPES).filter((t) => t !== lead && t !== second && !offeredTags.has(t) && cands.some((c) => c.tags.includes(t)));
+        want = away.length ? rng.pick(away) : null;
+      } else if (i === 0 && lead && rng.chance(0.6)) want = lead;
+      else if (i === 1 && second && rng.chance(0.4)) want = second;
+      else if (i === 1 && lead && !second && rng.chance(0.3)) want = lead;
+      if (want) {
+        let t = cands.filter((c) => c.tags.includes(want));
+        // a direction with no card of the rolled rarity (Reserve and Cash Out have no commons) takes
+        // the nearest rarity it has, so the lean never silently drops
+        if (!t.length && !(i === 0 && needBasic)) {
+          const near = { common: ['uncommon', 'rare'], uncommon: ['common', 'rare'], rare: ['uncommon', 'common'] }[rarity] || [];
+          for (const r of near) { t = pool.filter((c) => c.rarity === r && c.tags.includes(want) && fresh(c)); if (t.length) break; }
+        }
+        if (t.length) cands = t;
+      } else {
+        // otherwise prefer an archetype this offer has not shown yet
+        const t = cands.filter((c) => c.tags.length && c.tags.every((x) => !offeredTags.has(x)));
         if (t.length) cands = t;
       }
-      if (!cands.length) cands = pool.filter((c) => !out.some((o) => o.id === c.id));
+      if (!cands.length) cands = pool.filter(fresh);
       const pick = rng.pick(cands);
+      for (const t of pick.tags) offeredTags.add(t);
       out.push({ id: pick.id, up: false, graft: grafted ? rng.pick(graftPool().filter((g) => graftFits(g, pick))) : null });
     }
     return out;

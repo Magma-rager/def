@@ -76,7 +76,7 @@ card({
 });
 card({
   id: 'spark_primer', name: 'Spark Primer', category: 'basic', rank: 1, variant: 'EX', rarity: 'common', anim: 'cast', glyph: 'star',
-  v: { d: [3, 4], b: [4, 6] }, text: 'Deal {d}. The next card this combo deals +{b}.', tags: ['flow'],
+  v: { d: [3, 4], b: [5, 7] }, text: 'Deal {d}. The next card this combo deals +{b}.', tags: ['flow'],
   fx: (A) => { A.dmg(A.v('d')); A.nextBonus(A.v('b')); },
 });
 card({
@@ -137,8 +137,8 @@ card({
 });
 card({
   id: 'junk_toss', name: 'Junk Toss', category: 'basic', rank: 2, variant: 'B', rarity: 'common', anim: 'melee', glyph: 'box',
-  v: { d: [4, 5] }, text: 'Deal {d}, +2 per Churn used this battle (max +10).', tags: ['churn'],
-  fx: (A) => A.dmg(A.v('d') + Math.min(10, 2 * A.c.stats.churns)),
+  v: { d: [4, 5], p: [4, 4], m: [20, 24] }, text: 'Deal {d}, +{p} per Churn used this battle (max +{m}).', tags: ['churn'],
+  fx: (A) => A.dmg(A.v('d') + Math.min(A.v('m'), A.v('p') * A.c.stats.churns)),
 });
 card({
   id: 'fault_finder', name: 'Fault Finder', category: 'basic', rank: 2, variant: 'A', rarity: 'uncommon', anim: 'shoot', glyph: 'eye',
@@ -163,7 +163,7 @@ card({
 });
 card({
   id: 'quickdraw', name: 'Quickdraw', category: 'basic', rank: 3, variant: 'B', rarity: 'common', anim: 'shoot', glyph: 'clock',
-  v: { d: [7, 9] }, text: 'Deal {d}. Later cards this combo refund +0.3s more Flow.', tags: ['flow'],
+  v: { d: [8, 10] }, text: 'Deal {d}. Later cards this combo refund +0.3s more Flow.', tags: ['flow'],
   fx: (A) => { A.dmg(A.v('d')); A.ctxAdd('refundBonus', 0.3); },
 });
 card({
@@ -203,8 +203,8 @@ card({
 });
 card({
   id: 'scrap_feed', name: 'Scrap Feed', owner: 'V', category: 'arte', rank: 4, variant: 'A', rarity: 'common', anim: 'melee', glyph: 'gear',
-  v: { d: [8, 10] }, text: 'Deal {d}. Gain 1 Churn charge.', tags: ['churn'],
-  fx: (A) => { A.dmg(A.v('d')); A.churnGain(1); },
+  v: { d: [9, 11], g: [4, 5] }, text: 'Deal {d} and gain {g} Guard. Gain 1 Churn charge.', tags: ['churn'],
+  fx: (A) => { A.dmg(A.v('d')); A.guard(A.v('g')); A.churnGain(1); },
 });
 card({
   id: 'dead_drop', name: 'Dead Drop', owner: 'V', category: 'arte', rank: 4, variant: 'EX', rarity: 'uncommon', anim: 'guard', glyph: 'box',
@@ -218,12 +218,12 @@ card({
 });
 card({
   id: 'jam_breaker', name: 'Jam Breaker', owner: 'V', category: 'arte', rank: 5, variant: 'B', rarity: 'uncommon', anim: 'melee', glyph: 'chain',
-  v: { d: [8, 10], b: [2, 3] }, text: 'Deal {d}, +{b} per interference endured this battle (max 5).', tags: ['interference'],
+  v: { d: [8, 10], b: [3, 4] }, text: 'Deal {d}, +{b} per interference endured this battle (max 5).', tags: ['interference'],
   fx: (A) => A.dmg(A.v('d') + A.v('b') * Math.min(5, A.c.stats.interference)),
 });
 card({
   id: 'recycler', name: 'Recycler', owner: 'V', category: 'arte', rank: 5, variant: 'A', rarity: 'common', anim: 'melee', glyph: 'gear',
-  v: { d: [11, 14] }, text: 'Deal {d}. Gain 2 Churn charges.', tags: ['churn'],
+  v: { d: [12, 15] }, text: 'Deal {d}. Gain 2 Churn charges.', tags: ['churn'],
   fx: (A) => { A.dmg(A.v('d')); A.churnGain(2); },
 });
 card({
@@ -260,8 +260,8 @@ card({
 });
 card({
   id: 'junkstorm', name: 'Junkstorm', owner: 'V', category: 'arte', rank: 6, variant: 'A', rarity: 'rare', anim: 'melee', glyph: 'box',
-  v: { d: [8, 10] }, text: 'Deal {d} +2 per Churn used this battle (max +24) to ALL enemies.', tags: ['churn'],
-  fx: (A) => A.dmg(A.v('d') + Math.min(24, 2 * A.c.stats.churns), { all: true }),
+  v: { d: [8, 10], p: [4, 5], m: [36, 45] }, text: 'Deal {d} +{p} per Churn used this battle (max +{m}) to ALL enemies.', tags: ['churn'],
+  fx: (A) => A.dmg(A.v('d') + Math.min(A.v('m'), A.v('p') * A.c.stats.churns), { all: true }),
 });
 // Corvin (C): fire, area damage, Momentum and Echoes
 card({
@@ -281,7 +281,7 @@ card({
 });
 card({
   id: 'overclock', name: 'Overclock', owner: 'C', category: 'arte', rank: 4, variant: 'B', rarity: 'uncommon', anim: 'cast', glyph: 'clock',
-  v: { f: [1.0, 1.5], d: [6, 8] }, text: 'Gain {f}s Flow. Deal {d}.', tags: ['flow'],
+  v: { f: [1.0, 1.5], d: [8, 10] }, text: 'Gain {f}s Flow. Deal {d}.', tags: ['flow'],
   fx: (A) => { A.flow(A.v('f')); A.dmg(A.v('d')); },
 });
 card({
@@ -346,7 +346,7 @@ card({
 });
 card({
   id: 'slipstream', name: 'Slipstream', owner: 'S', category: 'arte', rank: 4, variant: 'EX', rarity: 'uncommon', anim: 'shoot', glyph: 'wave',
-  v: { d: [4, 5] }, text: 'Deal {d} twice. This card refunds double Flow.', tags: ['flow'],
+  v: { d: [5, 7] }, text: 'Deal {d} twice. This card refunds double Flow.', tags: ['flow'],
   fx: (A) => { A.dmg(A.v('d'), { hits: 2 }); A.extraRefund(); },
 });
 card({
@@ -376,7 +376,7 @@ card({
 });
 card({
   id: 'timekeeper', name: 'Timekeeper', owner: 'S', category: 'arte', rank: 5, variant: 'EX', rarity: 'uncommon', anim: 'shoot', glyph: 'clock',
-  v: { d: [6, 8], b: [4, 5] }, text: 'Deal {d} + {b} per full second of Flow remaining.', tags: ['flow'],
+  v: { d: [6, 8], b: [5, 6] }, text: 'Deal {d} + {b} per full second of Flow remaining.', tags: ['flow'],
   fx: (A) => A.dmg(A.v('d') + A.v('b') * Math.floor(A.flowLeft())),
 });
 card({
@@ -386,7 +386,7 @@ card({
 });
 card({
   id: 'breach_payload', name: 'Breach Payload', owner: 'S', category: 'arte', rank: 5, variant: 'A', rarity: 'rare', anim: 'shoot', glyph: 'chain',
-  v: { d: [8, 10], b: [5, 6] }, text: 'Deal {d} + {b} per interference endured this battle (max 6).', tags: ['interference'],
+  v: { d: [8, 10], b: [6, 7] }, text: 'Deal {d} + {b} per interference endured this battle (max 6).', tags: ['interference'],
   fx: (A) => A.dmg(A.v('d') + A.v('b') * Math.min(6, A.c.stats.interference)),
 });
 card({
@@ -462,8 +462,8 @@ card({
 });
 card({
   id: 'spare_parts', name: 'Spare Parts', owner: null, category: 'support', variant: 'EX', rarity: 'common', anim: 'buff', glyph: 'gear',
-  v: { n: [2, 3] }, text: 'Recover {n} Churn charges.', tags: ['churn'],
-  fx: (A) => A.churnGain(A.v('n')),
+  v: { n: [2, 3], g: [5, 7] }, text: 'Recover {n} Churn charges and gain {g} Guard.', tags: ['churn'],
+  fx: (A) => { A.churnGain(A.v('n')); A.guard(A.v('g')); },
 });
 
 // ─────────────── RELAY CARDS (withheld in Phase 4, restored in Phase 5 with the Relay command) ───────────────
@@ -481,8 +481,8 @@ card({
 });
 card({
   id: 'relay_baton', name: 'Relay Baton', owner: 'S', category: 'arte', rank: 5, variant: 'B', rarity: 'rare', anim: 'buff', glyph: 'hook',
-  v: { f: [0.2, 0.3] }, text: 'For each hero who joined this combo: +1 Momentum and +{f}s Flow.', tags: ['flow', 'relay'],
-  fx: (A) => { const n = A.ctx.owners.length; A.mom(n); A.flow(n * A.v('f')); },
+  v: { d: [8, 10], f: [0.2, 0.3] }, text: 'Deal {d}. For each hero who joined this combo: +1 Momentum and +{f}s Flow.', tags: ['flow', 'relay'],
+  fx: (A) => { A.dmg(A.v('d')); const n = A.ctx.owners.length; A.mom(n); A.flow(n * A.v('f')); },
 });
 card({
   id: 'chorus_break', name: 'Chorus Break', owner: 'C', category: 'arte', rank: 6, variant: 'A', rarity: 'uncommon', anim: 'cast', glyph: 'wave',

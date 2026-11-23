@@ -195,7 +195,52 @@ function exMove(c, P, hero, artes, basics, busy) {
   return null;
 }
 
-export function decide(c, { profile = 'regular', rng = Math.random, relay = 'careful', ex = false } = {}) {
+// Phase 8 build tactics (docs/AUDIT.md Phase 8): a player who leans into the build their deck holds —
+// Churning between chains to feed a Churn Engine, keeping the Reserve stocked for a Reserve deck,
+// Cashing Out a chain that carries Cash Out cards, saving Momentum for a Momentum deck's big artes.
+// `build` names the archetype tag, or 'auto' picks the tag held by the most non-starter cards (at least 4).
+const deckBuild = (c) => {
+  if (c._botBuild !== undefined) return c._botBuild;
+  const n = {};
+  for (const inst of c.cards.values()) { const d = CARDS[inst.id]; if (!d || d.rarity === 'starter') continue; for (const t of d.tags || []) n[t] = (n[t] || 0) + 1; }
+  const top = Object.entries(n).sort((a, b) => b[1] - a[1])[0];
+  c._botBuild = top && top[1] >= 4 ? top[0] : null;
+  return c._botBuild;
+};
+const tagged = (c, u, t) => (def(c, u).tags || []).includes(t);
+function buildMove(c, build, P, busy) {
+  if (!build) return null;
+  const free = !c.combo && !busy;
+  if (build === 'churn' && c.churnJamUntil <= c.t) {
+    // between chains, Churn a card that is no use now: the payoffs grow with every Churn this battle
+    const keep = 1 + (cards(c).some((u) => ['scrap_feed', 'recycler', 'salvage', 'spare_parts'].includes(def(c, u).id)) ? 0 : 1);
+    if (free && c.churn.charges > keep) {
+      const dud = c.hand.find((u) => u && !c.isLocked(u) && !tagged(c, u, 'churn') && (cat(c, u) === 'support' ? !c.check(u).ok : cat(c, u) === 'arte' && !c.heroReady(def(c, u).owner)));
+      const low = c.hand.filter((u) => u && cat(c, u) === 'basic' && !tagged(c, u, 'churn')).sort((a, b) => c.effRank(a) - c.effRank(b));
+      const target = dud || (low.length >= 3 ? low[low.length - 1] : null);
+      if (target) return { type: 'churn', uid: target };
+    }
+  }
+  if (build === 'reserve' && free && c.reserve.length < c.reserveMax() && c.reserveLatchUntil <= c.t) {
+    // keep the Reserve stocked: a Reserve-tagged card (they pay off from there), else a spare basic attack
+    const r = c.hand.find((u) => u && tagged(c, u, 'reserve') && cat(c, u) !== 'arte' && c.canStash(u));
+    const spare = c.hand.filter((u) => u && cat(c, u) === 'basic' && c.canStash(u));
+    const u = r || (c.reserve.length === 0 && spare.length >= 3 ? spare[0] : null);
+    if (u) return { type: 'stash', uid: u };
+  }
+  if (build === 'reserve' && !c.combo) {
+    // open from the Reserve with a card that pays off there (Hidden Ace)
+    const ace = c.reserve.find((u) => tagged(c, u, 'reserve') && cat(c, u) === 'basic' && c.check(u).ok);
+    if (ace) return { type: 'play', uid: ace };
+  }
+  if (build === 'cashout' && P.open && !busy && P.cards >= 2 && c.canCashOut() && c.combo) {
+    // a chain carrying a Cash Out card ends in a Cash Out rather than pushing on
+    if (c.combo.cards.some((e) => (CARDS[e.id].tags || []).includes('cashout'))) return { type: 'finish' };
+  }
+  return null;
+}
+
+export function decide(c, { profile = 'regular', rng = Math.random, relay = 'careful', ex = false, build = null } = {}) {
   if (c.phase === 'END' || c.phase === 'RECOVER') return { type: 'wait' };
   const tools = profile !== 'learner';
   const ahead = QUEUE_AHEAD[profile] !== undefined ? QUEUE_AHEAD[profile] : 1;
@@ -204,11 +249,13 @@ export function decide(c, { profile = 'regular', rng = Math.random, relay = 'car
   if (junk && c.churnJamUntil <= c.t) return { type: 'churn', uid: junk };
   // a learner watches each command finish; the others keep up to `ahead` commands waiting
   if (busy && c.queue.length >= ahead) return { type: 'wait' };
-  if (tools && danger(c) && c.guard < 6 && c.available() >= 3 && !c.combo) return { type: 'spend', what: 'guard' };
+  if (tools && danger(c) && c.guard < 6 && c.available() >= 3 && !c.combo && !((build === 'auto' ? deckBuild(c) : build) === 'momentum' && c.hp > c.maxHp * 0.5)) return { type: 'spend', what: 'guard' };
   const sup = usefulSupport(c, profile);
   if (sup && (!c.combo || c.flowHeld() || c.flowLeft() > 2)) return { type: 'play', uid: sup };
 
   const P = c.proj();
+  const bm = buildMove(c, build === 'auto' ? deckBuild(c) : build, P, busy);
+  if (bm) return bm;
   if (!P.open) {
     if (busy && profile === 'learner') return { type: 'wait' };
     const hero = bestHero(c, profile);
