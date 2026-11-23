@@ -89,7 +89,7 @@ test('Momentum Burst: Overpressure spends what is left after its cost', () => {
   assert.ok(h0 - hp(c) >= 25, `${h0 - hp(c)}`);
   assert.ok(c.finishChain().ok);
   assert.equal(c.history[0].type, 'perfect');
-  assert.equal(c.momentum, 3, 'emptied, then +1 for the Cross (A → B, paid on resolution) and +2 for the Perfect');
+  assert.equal(c.momentum, 5, 'emptied, then +1 for the Cross (A → B, paid on resolution), +2 for the Perfect and +2 from Pressure Release (4 + 5 = 9 Momentum spent on an arte, Phase 8 counts both)');
 });
 
 test('Flow Extension: Overclock adds Flow within the combo cap', () => {
@@ -189,7 +189,7 @@ test('Relay Echo: the Relay command triggers Echo Splice, Relay Resonance and Re
   assert.ok(graftPool().includes('echoing'));
   const offered = rewardPool().map((c) => c.id);
   for (const id of ['mirror_wire', 'hand_off', 'relay_baton', 'chorus_break', 'grand_relay']) assert.ok(offered.includes(id), id);
-  assert.ok(!offered.includes('pressure_valve'), 'Pressure Valve stays withheld (not a Relay card)');
+  assert.ok(offered.includes('pressure_valve'), 'Pressure Valve is offered again (Phase 8 redesign)');
   const run = (relics, mutations) => {
     const c = mk(['scrapline', 'hotwire', 'piston_strike', 'rivet_jab', 'scrapfall', 'thermal_lance'], { relics, mutations });
     play(c, 'scrapline');

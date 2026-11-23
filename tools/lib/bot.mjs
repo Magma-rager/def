@@ -125,6 +125,22 @@ function projSeg(c) {
   }
   return seg;
 }
+// Phase 8 techniques (docs/COMBAT_SPEC.md §29): when the active hero's arte is out of reach because the
+// combo's rank is already as high, a free ally's technique that lowers the rank enough brings it back.
+function techMove(c, P, hero) {
+  const techs = cards(c).filter((u) => def(c, u).tech && c.check(u).ok);
+  if (!techs.length) return null;
+  const blocked = cards(c).filter((u) => cat(c, u) === 'arte' && def(c, u).owner === hero && !c.isLocked(u) && c.check(u).reason === 'rank');
+  if (!blocked.length) return null;
+  for (const t of techs) {
+    const fx = c.techOf(t, c.reserve.includes(t));
+    if (!fx.rewind) continue;
+    const after = Math.max(0, P.rank - fx.rewind);
+    const budget = c.available() - (def(c, t).cost || 0) + pendingGain(c);
+    if (blocked.some((u) => c.effRank(u) > after && def(c, u).cost <= budget)) return { type: 'play', uid: t };
+  }
+  return null;
+}
 const chainHas = (c, k) => !!(c.combo && c.combo.log && c.combo.log.some((l) => l.k === k));
 const QUICK_LEFT = 2.5; // RULES.QUICK_CASH_LEFT (Flow left for a Quick Cash Out)
 
@@ -163,6 +179,13 @@ function exMove(c, P, hero, artes, basics, busy) {
   if (!artes.length && mine.length && c.churn.charges > 0 && !drew.length && left > 2 && c.churnJamUntil <= c.t) {
     const dead = c.hand.find((u) => u && cat(c, u) === 'basic' && !ok(u) && !c.isLocked(u)); // a basic attack too low to follow
     if (dead) return { type: 'churn', uid: dead };
+  }
+  // Cross Current / Prism Sequence: a suit technique (Prism Cut) before an A or B basic, so it Crosses
+  const crosses = seg.slice(1).filter((e, i) => e.v && seg[i].v && e.v !== seg[i].v).length;
+  if (!artes.length && crosses < 2 && seg.length >= 1 && mine.length) {
+    const suitTech = cards(c).find((u) => def(c, u).tech && c.check(u).ok && c.techOf(u, c.reserve.includes(u)).suit);
+    const next = basics.find((u) => c.effVariant(u) !== 'EX');
+    if (suitTech && next && P.variant !== 'EX') return { type: 'play', uid: suitTech };
   }
   // Cross Current: with two basic attacks to choose from and no arte yet, switch suits
   if (!artes.length && basics.length > 1 && !busy) {
@@ -231,6 +254,10 @@ export function decide(c, { profile = 'regular', rng = Math.random, relay = 'car
   if (artes.length) {
     artes.sort((a, b) => c.effRank(b) - c.effRank(a));
     return { type: 'play', uid: artes[0] };
+  }
+  if (P.last === 'arte' && !busy) {
+    const tm = techMove(c, P, hero);
+    if (tm) return tm;
   }
   if (P.last === 'arte') {
     // after an arte: hand over to a hero who can follow up, otherwise FINISH (a Perfect)

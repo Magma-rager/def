@@ -86,7 +86,7 @@ function playRun(seed) {
         log.exFound = [...new Set([...(log.exFound || []), ...(out.exFound || [])])];
         log.k[`exKind_${setup.kind}`] = (log.k[`exKind_${setup.kind}`] || 0) + (out.stats.exActivations || 0);
         log.k[`battles_${setup.kind}`] = (log.k[`battles_${setup.kind}`] || 0) + 1;
-        for (const k of ['basics', 'artes', 'supports', 'momentumGained', 'momentumSpent', 'rejected', 'perfect', 'cashouts', 'forced', 'churns', 'stashes', 'reservePlays', 'relays', 'cancelled', 'chainCards', 'chainArtes', 'damage', 'recoverTime', 'allRecovering', 'relayMomentum', 'finishers', 'combos', 'relaysNoArte', 'relayMomentumNoArte', 'queuedAttacks', 'targetChangedByPlayer', 'targetChangedByDeath', 'exActivations', 'exOverlaps', 'exDamage', 'exGuard', 'exHeal', 'exMomentum', 'exFlow', 'exChurn', 'exChainCards', 'exRelay', 'exSupport', 'exUnapplied']) log.k[k] = (log.k[k] || 0) + (out.stats[k] || 0);
+        for (const k of ['basics', 'artes', 'supports', 'momentumGained', 'momentumSpent', 'rejected', 'perfect', 'cashouts', 'forced', 'churns', 'stashes', 'reservePlays', 'relays', 'cancelled', 'chainCards', 'chainArtes', 'damage', 'recoverTime', 'allRecovering', 'relayMomentum', 'finishers', 'combos', 'relaysNoArte', 'relayMomentumNoArte', 'queuedAttacks', 'targetChangedByPlayer', 'targetChangedByDeath', 'exActivations', 'exOverlaps', 'exDamage', 'exGuard', 'exHeal', 'exMomentum', 'exFlow', 'exChurn', 'exChainCards', 'exRelay', 'exSupport', 'exUnapplied', 'techniques']) log.k[k] = (log.k[k] || 0) + (out.stats[k] || 0);
         for (const n of [1, 2, 3]) log.k[`chain${n}`] = (log.k[`chain${n}`] || 0) + out.stats.chainHeroes[n];
         for (const [k, v] of Object.entries(out.stats.time)) log.k[`time_${k}`] = (log.k[`time_${k}`] || 0) + v;
         log.k.longest = Math.max(log.k.longest || 0, out.stats.longest);
@@ -98,11 +98,21 @@ function playRun(seed) {
         log.arch = run.dominantTags()[0] || '-';
         if (!out.victory) log.deaths = `act${setup.act} ${setup.kind} ${setup.enemies.join('+')}`;
         if (setup.kind === 'boss' && out.victory) log.bosses++;
+        // boss adaptations (Phase 8): which one, against which boss, and whether play broke it
+        if (setup.kind === 'boss') (log.adapt = log.adapt || []).push({ boss: setup.enemies[0], id: c.adapt ? c.adapt.id : null, broken: !!(c.adapt && c.adapt.broken), progress: c.adapt ? c.adapt.progress / c.adapt.need : 0, win: out.victory });
         void c;
         run.finishBattle(out);
         break;
       }
-      case 'bossprep': run.chooseBossPrep('prepared', 'brace'); break;
+      case 'bossprep': {
+        // evidence the boss reads (Phase 8 calibration): raw per-battle rates at this boss
+        if (process.env.SB_PROFILE_DUMP) {
+          const S = run.d.stats, b = Math.max(1, S.battles), cb = Math.max(1, S.combos), ab = Math.max(1, S.variantPlays.A + S.variantPlays.B);
+          console.log('PROFILE', JSON.stringify({ act: run.d.act, arch: run.dominantTags()[0], pick: p.arch, long: S.longCombos / cb, cash: S.cashouts / cb, relay: S.relays / cb, guard: S.guardGained / b, absorbed: S.guardAbsorbed, churn: S.churns / b, suit: Math.max(S.variantPlays.A, S.variantPlays.B) / ab, mom: S.momentumSpent / b, flow: S.flowGained / b, reserve: S.reservePlays / b, interf: S.interferencePayoffs / b, top: p.profile.slice(0, 3).map((x) => `${x.arch}:${x.score.toFixed(2)}`) }));
+        }
+        run.chooseBossPrep('prepared', 'brace');
+        break;
+      }
       case 'reward': {
         const tags = run.dominantTags();
         let idx = p.cards.findIndex((s) => CARDS[s.id].tags.some((t) => tags.slice(0, 2).includes(t)));
@@ -191,7 +201,7 @@ console.log(`per battle: basic ${per('basics')} · arte ${per('artes')} · suppo
 console.log(`combo endings: Perfect ${sum('perfect')} · Cash Out ${sum('cashouts')} · Dropped ${sum('forced')} · cards by hero V ${sum('heroV')} C ${sum('heroC')} S ${sum('heroS')} · zone/Momentum integrity failures 0 (checked every action)`);
 const chains = Math.max(1, sum('combos'));
 console.log(`chains: ${(sum('combos') / battles).toFixed(1)}/battle · heroes per chain 1/2/3: ${[1, 2, 3].map((n) => `${Math.round((sum('chain' + n) / chains) * 100)}%`).join(' / ')} · Relays ${per('relays')}/battle · cards per chain ${(sum('chainCards') / chains).toFixed(2)} (longest ${Math.max(0, ...all.map((r) => r.k.longest || 0))}) · artes per chain ${(sum('chainArtes') / chains).toFixed(2)} · damage per chain ${(sum('damage') / chains).toFixed(0)}`);
-console.log(`endings: Perfect ${Math.round((sum('perfect') / chains) * 100)}% · Cash Out ${Math.round((sum('cashouts') / chains) * 100)}% · Dropped ${Math.round((sum('forced') / chains) * 100)}% · Finishers ${per('finishers')}/battle · Relay Momentum ${per('relayMomentum')}/battle · cancelled ${per('cancelled')}/battle · queue peak ${Math.max(0, ...all.map((r) => r.k.queuePeak || 0))}`);
+console.log(`endings: Perfect ${Math.round((sum('perfect') / chains) * 100)}% · Cash Out ${Math.round((sum('cashouts') / chains) * 100)}% · Dropped ${Math.round((sum('forced') / chains) * 100)}% · Finishers ${per('finishers')}/battle · Relay Momentum ${per('relayMomentum')}/battle · cancelled ${per('cancelled')}/battle · techniques ${per('techniques')}/battle · queue peak ${Math.max(0, ...all.map((r) => r.k.queuePeak || 0))}`);
 const tt = ['decide', 'execute', 'grace', 'breather', 'idle', 'wait'].map((k) => [k, sum('time_' + k) / battles]);
 console.log(`time per battle (s): ${tt.map(([k, v]) => `${k} ${v.toFixed(1)}`).join(' · ')} · hero Recovery ${per('recoverTime')} hero-s (all three recovering ${per('allRecovering')}s)`);
 console.log(`open decisions: Relays without an arte in the outgoing segment ${per('relaysNoArte')}/battle (${Math.round((sum('relaysNoArte') / Math.max(1, sum('relays'))) * 100)}% of Relays, ${per('relayMomentumNoArte')} Momentum) · queued attacks ${per('queuedAttacks')}/battle, target changed while waiting: by the player ${per('targetChangedByPlayer')}, by a death ${per('targetChangedByDeath')}${RULES.RELAY_NEEDS_ARTE ? ' · RULES.RELAY_NEEDS_ARTE = true' : ''}`);
@@ -203,4 +213,10 @@ console.log(`EX effects per battle: damage ${per('exDamage')} (${Math.round((sum
 console.log(`EX by recipe (per battle): ${recipeIds.map((k) => `${k} ${(sum('ex_' + k) / battles).toFixed(2)}`).join(' · ') || 'none'}`);
 console.log(`EX by encounter (per battle): ${['battle', 'elite', 'boss'].map((k) => `${k} ${(sum('exKind_' + k) / Math.max(1, sum('battles_' + k))).toFixed(2)}`).join(' · ')} · distinct recipes per run ${avg(all.map((r) => (r.exFound || []).length)).toFixed(1)} (all runs: ${new Set(all.flatMap((r) => r.exFound || [])).size} of 15)`);
 const archs = [...new Set(all.map((r) => r.arch))];
+{
+  const ad = all.flatMap((r) => r.adapt || []);
+  const by = {};
+  for (const x of ad) { const k = x.id || 'none'; by[k] = by[k] || { n: 0, broken: 0, prog: 0, win: 0 }; by[k].n++; by[k].broken += x.broken ? 1 : 0; by[k].prog += x.progress; by[k].win += x.win ? 1 : 0; }
+  console.log(`boss adaptations (${ad.length} boss fights): ${Object.entries(by).sort((a, b) => b[1].n - a[1].n).map(([k, v]) => `${k} ${v.n}× broken ${v.broken} (avg progress ${Math.round((v.prog / v.n) * 100)}%, won ${v.win})`).join(' · ')}`);
+}
 console.log(`by build (dominant tag at the end): ${archs.map((a) => { const rs = all.filter((r) => r.arch === a); const b = rs.reduce((x, r) => x + r.battles, 0); return `${a} ${rs.length} runs, ${rs.filter((r) => r.result === 'victory').length} wins, EX ${(rs.reduce((x, r) => x + (r.k.exActivations || 0), 0) / Math.max(1, b)).toFixed(2)}/battle`; }).join(' · ')}`);

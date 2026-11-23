@@ -233,7 +233,12 @@ test('events take HP from and give HP to the pool', () => {
     return [run, run.eventChoose(idx)];
   };
   assert.equal(play('tutorial_kiosk', 1)[0].d.hp, 92, 'Smash it: -8');
-  assert.equal(play('rust_oracle', 0)[0].d.hp, 85, 'Pay in blood: -15');
+  // Pay in blood: the 15 HP are paid when the graft goes onto a card (Phase 8: cancelling costs nothing)
+  const [oracle] = play('rust_oracle', 0);
+  assert.equal(oracle.d.hp, 100);
+  const target = oracle.d.deck.find((x) => oracle.canApplySelect(oracle.d.pending.select.action, x));
+  assert.ok(oracle.applySelect(oracle.d.pending.select.action, target.uid));
+  assert.equal(oracle.d.hp, 85, 'Pay in blood: -15');
   assert.equal(play('cable_garden', 0, 50)[0].d.hp, 80, 'Drink the current: +30');
   const [belt] = play('discard_belt', 1);
   assert.equal(belt.d.maxHp, 125, 'Grab the whole stack: party max HP -5');

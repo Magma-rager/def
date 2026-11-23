@@ -2,7 +2,7 @@
 // Pure logic: no DOM, no rendering. The view reads state and drains `events` for presentation.
 // All timing uses this.t (combat seconds), advanced only by update(); pausing = not calling update().
 import { RECIPES } from '../data/recipes.js';
-import { CARDS, cardValue, HERO_ANIM, isOffensive } from '../data/cards.js';
+import { CARDS, cardValue, HERO_ANIM, isOffensive, gaugedRank } from '../data/cards.js';
 import { ENEMIES } from '../data/enemies.js';
 import { RNG } from '../core/rng.js';
 
@@ -174,6 +174,7 @@ export class Combat {
 
     // ── stats ──
     this.stats = {
+      techniques: 0,
       damage: 0, maxHit: 0, combos: 0, perfect: 0, cashouts: 0, forced: 0, longest: 0, churns: 0, stashes: 0,
       reservePlays: 0, relays: 0, crosses: 0, steps: 0, guardGained: 0, guardAbsorbed: 0, interference: 0,
       variantPlays: { A: 0, B: 0, EX: 0 }, cardsPlayed: 0, momentumSpent: 0, flowGained: 0, longCombos: 0,
@@ -305,7 +306,7 @@ export class Combat {
     const inst = this.cards.get(uid);
     const d = CARDS[inst.id];
     if (!isOffensive(d)) return 0;
-    let r = d.rank + (inst.rankMod || 0);
+    let r = gaugedRank(d, inst.rankMod); // a re-gauged rank stays in its category (Phase 8)
     const m = this.temp[uid];
     if (m && m.until > this.t) r += m.rankDelta || 0;
     return Math.max(1, Math.min(9, r));
@@ -462,6 +463,10 @@ export class Combat {
       P.relays++;
       P.lastCmd = 'relay';
     } else if (q.type === 'finish') P.finish = true;
+    else if (q.type === 'support' && q.tech && P.open) {
+      P.rank = Math.max(0, P.rank - q.tech.rewind);
+      if (q.tech.suit) P.variant = q.tech.suit;
+    }
     return P;
   }
   proj() {
@@ -475,7 +480,7 @@ export class Combat {
     return this.queue.length >= RULES.QUEUE_AHEAD;
   }
   isChainCmd(cmd) {
-    return cmd.type === 'card' || cmd.type === 'relay' || cmd.type === 'finish';
+    return cmd.type === 'card' || cmd.type === 'relay' || cmd.type === 'finish' || (cmd.type === 'support' && !!cmd.tech);
   }
   chainPending() {
     const x = this.executing;
@@ -508,6 +513,14 @@ export class Combat {
     const short = () => ({ ok: false, reason: 'momentum', text: { k: 'Needs {n} Momentum', p: { n: cost } } });
     // support: independent of chains; costs its performer's action (Recovery afterwards)
     if (d.category === 'support') {
+      // a technique (docs/COMBAT_SPEC.md §29) reshapes the active combo: there must be one, with a card
+      // in its current part, and not already ending
+      if (d.tech) {
+        const P = this.proj();
+        if (!P.open) return { ok: false, reason: 'nocombo', text: 'Technique: needs a combo' };
+        if (P.finish || P.ending) return { ok: false, reason: 'finishing', text: 'Combo ending' };
+        if (P.seg < 1) return { ok: false, reason: 'needcard', text: 'Technique: play a card first' };
+      }
       const hero = this.supportPerformer(d);
       if (!hero) return { ok: false, reason: 'busy', text: d.owner ? this.busyText(d.owner) : 'Every hero is busy' };
       if (this.available() < cost) return short();
@@ -699,6 +712,18 @@ export class Combat {
     return { ok: true };
   }
 
+  // A technique's effect for this instance (upgrades, played from Reserve): { rewind, suit }.
+  techOf(uid, fromReserve) {
+    const inst = this.cards.get(uid);
+    const d = CARDS[inst.id];
+    const t = d.tech ? d.tech((k) => cardValue(d, inst.up, k), !!fromReserve) : {};
+    return { rewind: Math.max(0, Math.floor(t.rewind || 0)), suit: t.suit || null };
+  }
+  // a technique in hand or Reserve that could be performed now (the combo should not auto-finish)
+  techniqueAvailable() {
+    return [...this.hand, ...this.reserve].some((u) => u && this.def(u).tech && this.check(u).ok);
+  }
+
   // ───────────────────────── commands (docs/COMBAT_SPEC.md §7.1, §11.3, §16) ─────────────────────────
   // commit: validate, move the card from its slot (or Reserve) into the queue (its slot is held, not
   // refilled), reserve its cost. Execution starts when every earlier command has completed.
@@ -722,6 +747,7 @@ export class Combat {
       category: d.category, rank: chk.rank || 0, variant: chk.variant || null, scrambled: this.isScrambled(uid), target: o.target && this.member(o.target) ? o.target : null, at: this.t,
       enemyAtCommit: this.target, waited: !!this.executing,
     };
+    if (d.tech) cmd.tech = this.techOf(uid, chk.zone === 'reserve');
     if (cmd.type === 'card' && !this.combo) this.startCombo(chk.hero);
     this.reserved += cmd.cost;
     this.queue.push(cmd);
@@ -812,7 +838,7 @@ export class Combat {
   // Is a queued command still legal on top of projection P (the executed chain plus the commands
   // before it)? Support stays valid (its performer is reserved for it).
   cmdValid(q, P) {
-    if (q.type === 'support') return true;
+    if (q.type === 'support') return !q.tech || (P.open && !P.finish && !P.ending && P.seg >= 1);
     if (P.finish || P.ending) return false;
     if (q.type === 'finish') return this.finishable(q.mode, P);
     if (q.type === 'relay') {
@@ -945,7 +971,7 @@ export class Combat {
   autoFinish() {
     const c = this.combo;
     if (!c || c.pendingEnd || this.chainPending() || this.phase !== 'ACTIVE') return;
-    if (this.lastIsArte() && c.lastCmd === 'card' && !this.hasContinuation() && !this.relayStillPossible()) this.finishCombo('perfect');
+    if (this.lastIsArte() && c.lastCmd === 'card' && !this.hasContinuation() && !this.relayStillPossible() && !this.techniqueAvailable()) this.finishCombo('perfect');
   }
   // End the chain now if nothing of it is executing, otherwise as soon as the executing command
   // completes. Unstarted chain commands are cancelled at once (docs/COMBAT_SPEC.md §12.3, §16).
@@ -1196,9 +1222,23 @@ export class Combat {
     this.stats.supports++;
     this.stats.byHero[hero]++;
     this.stats.cardsPlayed++;
-    if (fromReserve) this.stats.reservePlays++;
+    if (fromReserve) {
+      this.stats.reservePlays++;
+      if (this.adaptOn('reserve_seal')) this.adaptProgress(1);
+      if (this.mutations.has('deep_pockets')) this.gainMomentum(1, 'Reserve');
+    }
     let mult = 1;
     if (fromReserve && inst.graft === 'cached') mult *= 1.5;
+    // a technique reshapes the active combo's current part: what projection promised when it was committed
+    if (cmd.tech && this.combo && this.phase === 'ACTIVE') {
+      const c = this.combo;
+      const before = c.rank;
+      c.rank = Math.max(0, c.rank - cmd.tech.rewind);
+      if (cmd.tech.suit) c.variant = cmd.tech.suit;
+      this.stats.techniques++;
+      c.log.push({ k: 'tech', id: d.id, hero, attacker: c.hero, rewind: before - c.rank, suit: cmd.tech.suit });
+      this.emit({ type: 'technique', id: d.id, hero, attacker: c.hero, rank: c.rank, rewind: before - c.rank, suit: cmd.tech.suit });
+    }
     const api = this.makeApi(entry, inst, d, { mult, bonus: 0, echoing: false, ctx });
     const hp0 = this.hp, guard0 = Math.floor(this.guard), cover0 = this.coverActive();
     d.fx(api);
@@ -1373,12 +1413,12 @@ export class Combat {
       ctxAdd: (k, n) => { if (!echoing) c[k] = (c[k] || 0) + n; },
       ctxSet: (k, n) => { if (!echoing) c[k] = n; },
       // spends what is left after this card's own cost (reserved Momentum is never touched)
-      spendMomentum() {
+      spendMomentum(max = Infinity) {
         if (echoing) return entry.spentAll || 0;
-        const n = self.available();
+        const n = Math.max(0, Math.min(self.available(), Math.floor(max)));
         self.momentum -= n;
         entry.spentAll = n;
-        entry.spent = n;
+        entry.spent = (entry.spent || 0) + n; // the card's own cost is already in `spent` (Pressure Release reads it)
         self.stats.momentumSpent += n;
         if (self.adaptOn('momentum_drain')) self.adaptProgress(n);
         if (n) self.emit({ type: 'momentum', delta: -n, why: def.name });

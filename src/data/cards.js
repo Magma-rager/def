@@ -14,12 +14,18 @@
 //
 // Phase 4 conversion status (p4):
 //   'converted' — reviewed for the new rules; offered by rewards, shops and events
-//   'compat'    — older card kept playable in existing decks with an interim conversion, but not
-//                 offered until its planned conversion (Rewind "techniques", Phase 8)
 //   'withheld'  — never offered; save version 5 replaces it with `migrate` (same hero and rarity)
-//                 when an older save is loaded. Phase 5 restored the Relay cards once the Relay
-//                 command existed; Pressure Valve stays withheld (it is not a Relay card and repeats
-//                 Overpressure at lower value; its redesign belongs to the Phase 8 content pass).
+//                 when an older save is loaded (the table below stays as Phase 4 shipped it).
+// Phase 8 converted the last four interim cards into techniques and redesigned Pressure Valve: every
+// card is now 'converted' (docs/COMBAT_SPEC.md §29).
+//
+// Techniques (Phase 8, §29): support cards with a `tech(v, fromReserve)` that returns { rewind, suit }.
+// An ally who is free performs one during the active hero's combo (the support rules: its owner, or
+// any free hero for a neutral one); when it executes, the active segment's rank drops by `rewind`
+// (never below 0) and its current suit becomes `suit`. The queue's projection applies the same change,
+// so cards committed after a technique are judged against the lowered rank; a technique needs a combo
+// with at least one card in its current part, and is cancelled (card back, Momentum returned) if the
+// combo ends before it executes. Past cards, Steps and Crosses are never rewritten.
 
 export const CATEGORY_NAMES = { basic: 'Basic', arte: 'Arte', support: 'Support', junk: 'Glitch' };
 export const STRENGTH_NAMES = { 1: 'Weak', 2: 'Medium', 3: 'Strong' };
@@ -181,9 +187,11 @@ card({
   fx: (A) => { A.dmg(A.v('d')); A.stashBestArte(); },
 });
 card({
-  id: 'cache_hook', name: 'Cache Hook', category: 'basic', rank: 3, variant: 'A', rarity: 'uncommon', anim: 'shoot', glyph: 'hook', p4: 'compat',
-  v: { d: [6, 8] }, text: 'Deal {d}. From Reserve: Rewind 2 and gain 1 Momentum.', tags: ['reserve', 'ladder'],
-  fx: (A) => { A.dmg(A.v('d')); if (A.fromReserve) { A.rewind(2); A.mom(1); } },
+  // Phase 8 technique (was an interim Strong attack that rewound itself from Reserve)
+  id: 'cache_hook', name: 'Cache Hook', owner: null, category: 'support', variant: 'A', rarity: 'uncommon', anim: 'buff', glyph: 'hook',
+  v: { r: [1, 2], rr: [2, 3] }, text: 'Technique: the combo\'s rank drops by {r}. Played from Reserve: by {rr} instead, and +1 Momentum.', tags: ['reserve', 'ladder'],
+  tech: (v, fromReserve) => ({ rewind: fromReserve ? v('rr') : v('r') }),
+  fx: (A) => { if (A.fromReserve) A.mom(1); },
 });
 
 // ───────────────────────────── ARTES ─────────────────────────────
@@ -229,9 +237,11 @@ card({
   fx: (A) => A.guard(Math.max(6, Math.floor((A.ctx.damage * A.v('p')) / 100))),
 });
 card({
-  id: 'downshift', name: 'Downshift', owner: 'V', category: 'arte', rank: 5, variant: 'EX', rarity: 'rare', anim: 'melee', glyph: 'hammer', p4: 'compat',
-  v: { d: [6, 8], r: [4, 5] }, text: 'Deal {d}. Rewind {r}.', tags: ['ladder', 'flow'],
-  fx: (A) => { A.dmg(A.v('d')); A.rewind(A.v('r')); },
+  // Phase 8 technique (was an interim rank-5 arte that rewound itself)
+  id: 'downshift', name: 'Downshift', owner: 'V', category: 'support', cost: 2, variant: 'EX', rarity: 'rare', anim: 'guard', glyph: 'hammer',
+  v: { r: [4, 5], f: [1, 1.5] }, text: 'Technique: the combo\'s rank drops by {r} and its Flow gains {f}s (within the cap).', tags: ['ladder', 'flow'],
+  tech: (v) => ({ rewind: v('r') }),
+  fx: (A) => A.flow(A.v('f')),
 });
 card({
   id: 'sunderline', name: 'Sunderline', owner: 'V', category: 'arte', rank: 6, variant: 'B', rarity: 'uncommon', anim: 'melee', glyph: 'hammer',
@@ -280,9 +290,11 @@ card({
   fx: (A) => { A.dmg(A.v('d'), { all: true }); A.mom(A.c.party.length); },
 });
 card({
-  id: 'rethread', name: 'Rethread', owner: 'C', category: 'arte', rank: 4, variant: 'A', rarity: 'starter', anim: 'cast', glyph: 'spiral', p4: 'compat',
-  v: { d: [4, 6] }, text: 'Deal {d}. Rewind 2 (combo rank -2).', tags: ['ladder'],
-  fx: (A) => { A.dmg(A.v('d')); A.rewind(2); },
+  // Phase 8 technique (was an interim rank-4 arte that rewound itself)
+  id: 'rethread', name: 'Rethread', owner: 'C', category: 'support', cost: 1, variant: 'A', rarity: 'common', anim: 'cast', glyph: 'spiral',
+  v: { r: [2, 3] }, text: 'Technique: the combo\'s rank drops by {r}, so another arte comes within reach.', tags: ['ladder'],
+  tech: (v) => ({ rewind: v('r') }),
+  fx: () => {},
 });
 card({
   id: 'feedback_loop', name: 'Feedback Loop', owner: 'C', category: 'arte', rank: 5, variant: 'EX', rarity: 'uncommon', anim: 'cast', glyph: 'spiral',
@@ -295,9 +307,11 @@ card({
   fx: (A) => A.detonateScorch(A.v('p')),
 });
 card({
-  id: 'prism_cut', name: 'Prism Cut', owner: 'C', category: 'arte', rank: 5, variant: 'EX', rarity: 'rare', anim: 'cast', glyph: 'prism', p4: 'compat',
-  v: { d: [6, 8] }, text: "Deal {d}. The combo's suit becomes EX. Rewind 1.", tags: ['variant'],
-  fx: (A) => { A.dmg(A.v('d')); A.setVariant('EX'); A.rewind(1); },
+  // Phase 8 technique (was an interim rank-5 arte that set the suit and rewound itself)
+  id: 'prism_cut', name: 'Prism Cut', owner: 'C', category: 'support', cost: 1, variant: 'EX', rarity: 'rare', anim: 'cast', glyph: 'prism',
+  v: { r: [1, 2] }, text: 'Technique: the combo\'s suit becomes EX and its rank drops by {r}: the next A or B card Crosses.', tags: ['variant'],
+  tech: (v) => ({ rewind: v('r'), suit: 'EX' }),
+  fx: () => {},
 });
 card({
   id: 'last_word', name: 'Last Word', owner: 'C', category: 'arte', rank: 6, variant: 'EX', rarity: 'uncommon', anim: 'cast', glyph: 'star',
@@ -482,9 +496,12 @@ card({
 });
 // still withheld: not a Relay card; repeats Overpressure at a lower value (Phase 8 redesign)
 card({
-  id: 'pressure_valve', name: 'Pressure Valve', owner: 'C', category: 'arte', rank: 5, variant: 'A', rarity: 'uncommon', anim: 'cast', glyph: 'flame', p4: 'withheld', migrate: 'overpressure',
-  v: { d: [3, 4] }, text: 'Spend all Momentum: deal {d} per point.', tags: ['momentum'],
-  fx: (A) => { const n = A.spendMomentum(); if (n > 0) A.dmg(A.v('d') * n); },
+  // Phase 8 redesign (was withheld: "spend all Momentum, {d} per point" repeated Overpressure at a lower
+  // value). Overpressure is the all-in finisher; Pressure Valve is the measured one: it vents a capped
+  // amount, half of it as Guard, and leaves the rest for the next arte of a long combo.
+  id: 'pressure_valve', name: 'Pressure Valve', owner: 'C', category: 'arte', rank: 5, variant: 'A', rarity: 'uncommon', anim: 'cast', glyph: 'flame', migrate: 'overpressure',
+  v: { d: [6, 7], n: [3, 4], g: [3, 3] }, text: 'Deal {d}. Then vent up to {n} more Momentum: +{d} damage and {g} Guard per point vented. Momentum above {n} stays.', tags: ['momentum', 'guard'],
+  fx: (A) => { const n = A.spendMomentum(A.v('n')); A.dmg(A.v('d') * (1 + n)); if (n > 0) A.guard(A.v('g') * n); },
 });
 
 // ─────────────────────────── STATUS / JUNK ───────────────────────────
@@ -497,6 +514,20 @@ card({
 export const CARDS = Object.fromEntries(C.map((c) => [c.id, c]));
 export const CARD_LIST = C;
 export const isOffensive = (def) => def.category === 'basic' || def.category === 'arte';
+// A card's rank after Grease Monkey / Save Point re-gauging stays inside its category (Phase 8): basic
+// attacks Weak 1 to Strong 3, artes 4 to 6. (Enemy Scramble may still shift it for a few seconds.)
+export const RANK_RANGE = { basic: [1, 3], arte: [4, 6] };
+export function gaugedRank(def, rankMod = 0) {
+  const r = RANK_RANGE[def.category];
+  if (!r) return 0;
+  return Math.max(r[0], Math.min(r[1], def.rank + (rankMod || 0)));
+}
+// Grafts that need damage, a Relay or a place in the combo only fit attacks (support has none of them).
+const ATTACK_GRAFTS = new Set(['keen', 'breaker', 'echoing', 'ledger']);
+export function graftFits(g, def) {
+  if (!def || def.category === 'junk' || def.category === 'status') return false;
+  return !ATTACK_GRAFTS.has(g) || isOffensive(def);
+}
 
 // Starter deck (docs/COMBAT_SPEC.md §18.1, prototype): 3 Weak, 3 Medium, 2 Strong with mixed suits,
 // one rank-4 arte per hero, Corvin's heal and Hessa's Guard/Cover support.

@@ -1,12 +1,12 @@
 // Run state machine: map, nodes, rewards, shops, events, rest, surgery, bosses, mutations, saving.
 // All run data lives in the plain object `this.d` so it serializes to localStorage verbatim.
 import { RNG, seedFrom } from '../core/rng.js';
-import { CARDS, STARTER_DECK, rewardPool, graftPool, ARCHETYPES, MIGRATE_CARDS, UNKNOWN_CARD_FALLBACK, isOffensive } from '../data/cards.js';
+import { CARDS, STARTER_DECK, rewardPool, graftPool, ARCHETYPES, MIGRATE_CARDS, UNKNOWN_CARD_FALLBACK, isOffensive, RANK_RANGE, gaugedRank, graftFits } from '../data/cards.js';
 import { RELICS, relicPool } from '../data/relics.js';
 import { ENEMIES, FORMATIONS, ELITES, BOSSES } from '../data/enemies.js';
 import { EVENTS, EVENT_MAP } from '../data/events.js';
 import { MUTATIONS, mutationPool } from '../data/mutations.js';
-import { ADAPTATIONS } from '../data/adaptations.js';
+import { ADAPTATIONS, adaptationApplies } from '../data/adaptations.js';
 import { TRAIT_IDS } from '../data/traits.js';
 import { PREPARED_PLANS, VOLATILE_OUTCOMES } from '../data/acts.js';
 
@@ -87,6 +87,17 @@ export function emptyStats() {
   };
 }
 
+// Typical per-battle evidence at each act's boss: medians of ordinary simulated campaigns (tools/simulate.mjs
+// with SB_PROFILE_DUMP=1, docs/AUDIT.md Phase 8), with small floors where ordinary play does none of it.
+// long/cash/relay: per combo · guard/churn/mom/flow/reserve/interf: per battle · suit: share above 50%.
+export const EVIDENCE_TYPICAL = {
+  1: { long: 0.31, cash: 0.12, relay: 1.0, guard: 14, churn: 0.5, suit: 0.1, mom: 10.3, flow: 0.2, reserve: 0.15, interf: 1.17 },
+  2: { long: 0.24, cash: 0.17, relay: 0.76, guard: 28.3, churn: 0.5, suit: 0.1, mom: 18.1, flow: 0.2, reserve: 0.15, interf: 1.5 },
+  3: { long: 0.19, cash: 0.18, relay: 0.68, guard: 47, churn: 1.46, suit: 0.1, mom: 27.4, flow: 0.3, reserve: 0.15, interf: 1.94 },
+};
+export const EVIDENCE_MARGIN = 1.15;
+export const EVIDENCE_MIN = 0.6;
+
 export class Run {
   constructor(d) {
     this.d = d;
@@ -142,6 +153,13 @@ export class Run {
     if (!obj) return null;
     migrate(obj);
     if (obj.version !== SAVE_VERSION) return null;
+    // Phase 8: a re-gauged rank stays inside its category (basic 1-3, arte 4-6); older saves could hold
+    // a basic attack raised to rank 4+ or an arte to 7+ under the 1-9 rule. Grafts are kept as they are.
+    for (const inst of obj.deck || []) {
+      const d = CARDS[inst.id];
+      if (!d || !RANK_RANGE[d.category] || !inst.rankMod) continue;
+      inst.rankMod = gaugedRank(d, inst.rankMod) - d.rank;
+    }
     return new Run(obj);
   }
 
@@ -184,7 +202,7 @@ export class Run {
 
   effRank(inst) {
     if (!isOffensive(CARDS[inst.id])) return 0;
-    return Math.max(1, Math.min(9, CARDS[inst.id].rank + (inst.rankMod || 0)));
+    return gaugedRank(CARDS[inst.id], inst.rankMod);
   }
   effVariant(inst) {
     return inst.variant || CARDS[inst.id].variant;
@@ -532,13 +550,13 @@ export class Run {
       }
       if (!cands.length) cands = pool.filter((c) => !out.some((o) => o.id === c.id));
       const pick = rng.pick(cands);
-      out.push({ id: pick.id, up: false, graft: grafted ? rng.pick(graftPool()) : null });
+      out.push({ id: pick.id, up: false, graft: grafted ? rng.pick(graftPool().filter((g) => graftFits(g, pick))) : null });
     }
     return out;
   }
 
-  randomRelics(rng, n, rarities = null) {
-    let pool = relicPool(this.d.relics);
+  randomRelics(rng, n, rarities = null, exclude = []) {
+    let pool = relicPool([...this.d.relics, ...exclude]);
     if (rarities) {
       const r = pool.filter((id) => rarities.includes(RELICS[id].rarity));
       if (r.length >= n) pool = r;
@@ -607,34 +625,45 @@ export class Run {
   }
 
   // ───────────────────────── boss preparation ─────────────────────────
+  // Boss evidence (Phase 8, docs/COMBAT_SPEC.md §29): what this run does clearly more than ordinary play
+  // at the same act. Each measure is compared with its typical value at this act's boss (EVIDENCE_TYPICAL,
+  // the median of ordinary simulated campaigns, docs/AUDIT.md); a score of 1 means 15% above typical.
+  // Before Phase 8 the thresholds were fixed numbers from before artes cost Momentum, so Momentum
+  // spending — which every deck now does — won almost every boss.
   analyzeProfile() {
     const S = this.d.stats;
     const b = Math.max(1, S.battles);
     const combos = Math.max(1, S.combos);
+    const T = EVIDENCE_TYPICAL[this.d.act] || EVIDENCE_TYPICAL[3];
     const out = [];
-    const add = (arch, score, evidence) => { if (score >= 1) out.push({ arch, score, evidence }); };
+    // a habit at least near its typical level still counts when nothing stands out more (the boss adapts to the strongest)
+    const add = (arch, ok, value, typical, evidence) => { const score = ok ? value / (typical * EVIDENCE_MARGIN) : 0; if (score >= EVIDENCE_MIN) out.push({ arch, score, evidence }); };
     if (S.combos >= 8) {
-      add('ladder', S.longCombos >= 4 ? (S.longCombos / combos) / 0.3 : 0, { k: '{a} of {b} combos ran 5+ cards', p: { a: S.longCombos, b: S.combos } });
-      add('cashout', S.cashouts >= 5 ? (S.cashouts / combos) / 0.4 : 0, { k: '{a} of {b} combos ended in a Cash Out', p: { a: S.cashouts, b: S.combos } });
-      add('relay', S.relays >= 15 ? (S.relays / combos) / 1.4 : 0, { k: '{a} Relays across {b} combos', p: { a: S.relays, b: S.combos } });
+      add('ladder', S.longCombos >= 4, S.longCombos / combos, T.long, { k: '{a} of {b} combos ran 5+ cards', p: { a: S.longCombos, b: S.combos } });
+      add('cashout', S.cashouts >= 5, S.cashouts / combos, T.cash, { k: '{a} of {b} combos ended in a Cash Out', p: { a: S.cashouts, b: S.combos } });
+      add('relay', S.relays >= 15, S.relays / combos, T.relay, { k: '{a} Relays across {b} combos', p: { a: S.relays, b: S.combos } });
     }
-    add('guard', S.guardAbsorbed >= 50 ? (S.guardGained / b) / 35 : 0, { k: '{a} Guard raised, {b} damage absorbed', p: { a: S.guardGained, b: S.guardAbsorbed } });
-    add('churn', S.churns >= 12 ? (S.churns / b) / 4 : 0, { k: '{a} Churns over {b} battles', p: { a: S.churns, b: S.battles } });
+    add('guard', S.guardAbsorbed >= 50, S.guardGained / b, T.guard, { k: '{a} Guard raised, {b} damage absorbed', p: { a: S.guardGained, b: S.guardAbsorbed } });
+    add('churn', S.churns >= 12, S.churns / b, T.churn, { k: '{a} Churns over {b} battles', p: { a: S.churns, b: S.battles } });
     const ab = S.variantPlays.A + S.variantPlays.B;
     if (ab >= 30) {
       const dom = S.variantPlays.A >= S.variantPlays.B ? 'A' : 'B';
       const share = S.variantPlays[dom] / ab;
-      add(`variant${dom}`, share / 0.68, { k: '{a}% of suited cards played were {s}', p: { a: Math.round(share * 100), s: dom } });
+      add(`variant${dom}`, true, share - 0.5, T.suit, { k: '{a}% of suited cards played were {s}', p: { a: Math.round(share * 100), s: dom } });
     }
-    add('momentum', S.momentumSpent >= 25 ? (S.momentumSpent / b) / 6 : 0, { k: '{a} Momentum spent', p: { a: S.momentumSpent } });
-    add('flow', S.flowGained >= 5 ? (S.flowGained / b) / 1.2 : 0, { k: '{a}s of bonus Flow gained', p: { a: { n: S.flowGained, d: 1 } } });
-    add('reserve', S.reservePlays >= 6 ? (S.reservePlays / b) / 1.5 : 0, { k: '{a} cards played from Reserve', p: { a: S.reservePlays } });
-    add('interference', S.interferencePayoffs >= 8 ? (S.interferencePayoffs / b) / 2 : 0, { k: '{a} interference-payoff cards played', p: { a: S.interferencePayoffs } });
+    add('momentum', S.momentumSpent >= 25, S.momentumSpent / b, T.mom, { k: '{a} Momentum spent', p: { a: S.momentumSpent } });
+    add('flow', S.flowGained >= 5, S.flowGained / b, T.flow, { k: '{a}s of bonus Flow gained', p: { a: { n: S.flowGained, d: 1 } } });
+    add('reserve', S.reservePlays >= 6, S.reservePlays / b, T.reserve, { k: '{a} cards played from Reserve', p: { a: S.reservePlays } });
+    add('interference', S.interferencePayoffs >= 8, S.interferencePayoffs / b, T.interf, { k: '{a} interference-payoff cards played', p: { a: S.interferencePayoffs } });
     return out.sort((a, b2) => b2.score - a.score);
   }
 
   bossAnalysis() {
-    const profile = this.analyzeProfile();
+    // the strongest evidence whose counter this boss can actually apply (Hardened Locks needs a boss
+    // that Locks); the preparation screen lists that same evidence
+    const all = this.analyzeProfile();
+    const boss = ENEMIES[this.d.bosses[this.d.act]];
+    const profile = all.filter((x) => adaptationApplies(x.arch, boss));
     const top = profile[0] || null;
     const adaptation = top ? { ...ADAPTATIONS[top.arch] } : null;
     const rng = this.rng('volatile', this.d.act);
@@ -682,14 +711,26 @@ export class Run {
     return ev;
   }
 
+  // whether an event choice can be taken now: true, or the reason (shown on the choice)
+  eventChoiceReq(idx) {
+    const p = this.d.pending;
+    const ch = p && p.type === 'event' ? EVENT_MAP[p.eventId].choices[idx] : null;
+    if (!ch) return 'Not applicable';
+    if (ch.req) { const r = ch.req(this.api(this.rng('preview'))); if (r !== true) return r; }
+    // a choice that asks for a card is refused when no card in the deck can take it
+    if (ch.needs && !this.d.deck.some((x) => this.canApplySelect(ch.needs, x))) { const text = 'No card in the deck can take this'; return text; }
+    return true;
+  }
+
   eventChoose(idx) {
     const p = this.d.pending;
     if (!p || p.type !== 'event' || (p.result && !p.result.repeat)) return null;
     const ev = EVENT_MAP[p.eventId];
     const ch = ev.choices[idx];
     if (!ch) return null;
+    const ok = this.eventChoiceReq(idx);
+    if (ok !== true) return { error: ok };
     const api = this.api(this.rng('evt', p.nodeId, (p.tries || 0)));
-    if (ch.req) { const r = ch.req(api); if (r !== true) return { error: r }; }
     p.tries = (p.tries || 0) + 1;
     const res = ch.run(api) || { text: '' };
     p.result = { text: res.text, repeat: !!res.repeat, choice: idx, offer: res.offer || null };
@@ -708,10 +749,10 @@ export class Run {
       case 'duplicate': return true;
       case 'recut': return off && this.effVariant(inst) !== 'EX';
       case 'ex': return off && this.effVariant(inst) !== 'EX';
-      case 'rankup': return off && this.effRank(inst) < 9;
-      case 'rankdown': return off && this.effRank(inst) > 1;
+      case 'rankup': return off && this.effRank(inst) < RANK_RANGE[d.category][1];
+      case 'rankdown': return off && this.effRank(inst) > RANK_RANGE[d.category][0];
       default:
-        if (action.startsWith('graft:')) return inst.graft !== action.slice(6);
+        if (action.startsWith('graft:')) return inst.graft !== action.slice(6) && graftFits(action.slice(6), d);
         return !!d;
     }
   }
@@ -746,13 +787,20 @@ export class Run {
         else return false;
     }
     const p = this.d.pending;
-    if (p && p.select) p.select = null;
+    if (p && p.select) {
+      // an event's price is paid when its card is chosen (docs/COMBAT_SPEC.md §29): cancelling costs nothing
+      const cost = p.select.cost;
+      if (cost && cost.scrap) this.d.scrap = Math.max(0, this.d.scrap - cost.scrap);
+      if (cost && cost.hp) this.hurt(cost.hp);
+      p.select = null;
+    }
     return true;
   }
 
   cancelSelect() {
     const p = this.d.pending;
-    if (p && p.select) p.select = null;
+    if (p && p.select && !p.select.required) p.select = null;
+    return !!p && !p.select;
   }
 
   takeOfferCard(idx) {
@@ -800,12 +848,14 @@ export class Run {
         return out;
       },
       offerCards: (n, minRarity, tag) => ({ text: { k: '$Choose a card.' }, offer: run.cardChoices(rng, n, { minRarity, tag }) }),
-      offerGraft: () => {
-        const g = rng.pick(graftPool());
-        return { text: { k: '$The Oracle prepares a {g} graft.', p: { g: { graft: g } } }, select: { title: { k: 'Graft {g}', p: { g: { graft: g } } }, filter: 'graftable', action: `graft:${g}` } };
+      offerGraft: (cost = null) => {
+        // a graft some card in the deck can take
+        const fits = graftPool().filter((g) => run.d.deck.some((x) => run.canApplySelect(`graft:${g}`, x)));
+        const g = rng.pick(fits.length ? fits : graftPool());
+        return { text: { k: '$The Oracle prepares a {g} graft.', p: { g: { graft: g } } }, select: { title: { k: 'Graft {g}', p: { g: { graft: g } } }, filter: 'graftable', action: `graft:${g}`, ...(cost ? { cost } : {}) } };
       },
-      addRandomRelic: () => {
-        const r = run.randomRelics(rng, 1)[0];
+      addRandomRelic: (exclude = []) => {
+        const r = run.randomRelics(rng, 1, null, exclude)[0];
         if (!r) { run.d.scrap += 50; return null; }
         run.addRelic(r);
         return r;
@@ -821,8 +871,12 @@ export class Run {
       },
       mutateRandomRank: () => {
         const c = rng.pick(run.d.deck.filter((x) => isOffensive(CARDS[x.id])));
-        const delta = rng.chance(0.5) ? 1 : -1;
+        const [lo, hi] = RANK_RANGE[CARDS[c.id].category];
         const before = run.effRank(c);
+        // up or down at random, but always a real change inside the card's category
+        let delta = rng.chance(0.5) ? 1 : -1;
+        if (before + delta > hi || before + delta < lo) delta = -delta;
+        if (before + delta > hi || before + delta < lo) delta = 0;
         c.rankMod = (c.rankMod || 0) + delta;
         return { k: '{card} is now rank {now} (was {was}).', p: { card: { card: c.id }, now: run.effRank(c), was: before } };
       },
@@ -877,6 +931,7 @@ export class Run {
       return { ok: true };
     }
     if (kind === 'heal') {
+      if (this.d.hp >= this.d.maxHp) return { ok: false, text: 'The party is at full HP' };
       if (s.healUsed || !pay(s.healPrice)) return { ok: false, text: 'Not enough Scrap' };
       s.healUsed = true;
       this.healPct(0.3);
@@ -907,9 +962,18 @@ export class Run {
   }
 
   // ───────────────────────── rest & surgery & treasure ─────────────────────────
+  // whether a rest option does anything now: true, or the reason it is unavailable
+  restAvailable(option) {
+    if ((option === 'tune' || option === 'overdrive') && !this.d.deck.some((x) => !x.up)) { const text = 'Every card is already upgraded'; return text; }
+    if (option === 'recover' && this.d.hp >= this.d.maxHp) { const text = 'The party is at full HP'; return text; }
+    return true;
+  }
+
   restChoose(option) {
     const p = this.d.pending;
     if (!p || p.type !== 'rest' || p.done) return null;
+    const ok = this.restAvailable(option);
+    if (ok !== true) return { error: ok };
     if (option === 'recover') { this.healPct(p.quiet ? 0.45 : 0.3); p.done = 'recover'; return { text: 'The party patches up by the furnace.' }; }
     if (option === 'fortify') { this.d.prepToken = { startGuard: 12, startMomentum: 2 }; p.done = 'fortify'; return { text: 'Battle plan drafted. Your next Elite or Boss fight starts with 12 Guard and 2 Momentum.' }; }
     if (option === 'overdrive') {

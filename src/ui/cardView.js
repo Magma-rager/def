@@ -78,7 +78,7 @@ export function cardEl(inst, opts = {}) {
   const mods = [];
   if (inst.rankMod && off) mods.push(`<span class="mod">${t('{n}R', { n: `${inst.rankMod > 0 ? '+' : ''}${inst.rankMod}` })}</span>`);
   if (inst.recut && off) mods.push(`<span class="mod">${t('RECUT')}</span>`);
-  const catWord = def.category === 'basic' ? strengthName(def.rank) : categoryName(def.category);
+  const catWord = def.category === 'basic' ? strengthName(def.rank) : def.tech ? t('Technique') : categoryName(def.category);
   el.innerHTML = `
     <div class="card-frame">
       <div class="card-top">
@@ -172,6 +172,7 @@ export function cardTooltip(inst) {
   // the rules line: what the category means for this card
   if (def.category === 'basic') lines.push(`<span class="dim">${esc(t('{s} attack (rank {r}): any hero can perform it; generates {n} Momentum.', { s: strengthName(def.rank), r: def.rank, n: def.gain }))}</span>`);
   else if (def.category === 'arte') lines.push(`<span class="dim">${esc(t('{hero}\'s arte (rank {r}, costs {n} Momentum): needs a basic attack earlier in {hero}\'s combo.', { hero: { hero: def.owner }, r: def.rank, n: def.cost }))}</span>`);
+  else if (def.tech) lines.push(`<span class="dim">${esc(t('Technique ({n} Momentum): a free ally performs it inside an open combo, after at least one card; it lowers the combo\'s rank for the attacking hero.', { n: def.cost }))}</span>`);
   else if (def.category === 'support') lines.push(`<span class="dim">${esc(def.cost > 0 ? t('Support (costs {n} Momentum): playable any time, in or out of a combo.', { n: def.cost }) : t('Support (free): playable any time, in or out of a combo.'))}</span>`);
   lines.push(cardText(def, inst.up));
   if (coversParty(def)) lines.push(`<span class="kw-cover">${esc(t('Cover: for 4s, hits aimed at Corvin or Pin land on Hessa, and her 30% Defense applies.'))}</span>`);

@@ -440,9 +440,8 @@ export function eventScreen(app, root) {
     if (!p.result || p.result.repeat) {
       if (p.result && p.result.repeat) body.append(h('p', { class: 'event-result' }, result()));
       const list = h('div', { class: 'event-choices' });
-      const api = run.api(run.rng('preview'));
       ev.choices.forEach((ch, i) => {
-        const req = ch.req ? ch.req(api) : true;
+        const req = run.eventChoiceReq(i);
         const b = h('button', { class: 'choice', type: 'button', disabled: req !== true }, h('b', {}, choiceLabel(ev.id, i)), h('span', {}, req === true ? choiceHint(ev.id, i) : msg(req)));
         b.addEventListener('click', () => {
           const r = run.eventChoose(i);
@@ -471,7 +470,7 @@ export function eventScreen(app, root) {
   const handleSelect = async () => {
     if (p.select) {
       const sel = p.select;
-      const uid = await app.selectCard({ title: msg(sel.title), filter: (inst) => run.canApplySelect(sel.action, inst), confirm: t('Confirm'), preview: sel.action === 'upgrade', action: sel.action, cancelable: true });
+      const uid = await app.selectCard({ title: msg(sel.title), filter: (inst) => run.canApplySelect(sel.action, inst), confirm: t('Confirm'), preview: sel.action === 'upgrade', action: sel.action, cancelable: !sel.required });
       if (uid) run.applySelect(sel.action, uid);
       else run.cancelSelect();
       app.save();
@@ -508,7 +507,8 @@ export function restScreen(app, root) {
     ];
     const list = h('div', { class: 'rest-opts' });
     for (const [k, name, desc, ic] of opts) {
-      const b = h('button', { class: 'rest-opt', type: 'button' }, h('span', { class: 'ro-ico', html: iconSvg(ic) }), h('b', {}, name), h('span', {}, desc));
+      const why = run.restAvailable(k);
+      const b = h('button', { class: 'rest-opt', type: 'button', disabled: why !== true }, h('span', { class: 'ro-ico', html: iconSvg(ic) }), h('b', {}, name), h('span', {}, why === true ? desc : msg(why)));
       b.addEventListener('click', async () => {
         if (k === 'tune') {
           const uid = await app.selectCard({ title: t('Upgrade a card'), filter: (inst) => !inst.up, confirm: t('Upgrade'), preview: true, cancelable: true });

@@ -1,5 +1,8 @@
 // Events: each choice has a real mechanical outcome applied through the run API (engine/run.js RunAPI).
 // A choice may return { text, select: { title, filter, action } } to ask the player to pick a card.
+// Phase 8 (docs/COMBAT_SPEC.md §29): a choice that asks for a card names its action in `needs`, and is
+// refused when no card in the deck can take it; a price (`cost: { scrap, hp }`) is paid only when the
+// card is chosen, so cancelling costs nothing; a trade whose reward comes first is `required`.
 // Selection actions: remove | upgrade | transform | duplicate | recut | graft:<id> | ex | rankup | rankdown
 //
 // Outcome text is language-neutral: run() returns say(key, params) naming one of the choice's
@@ -33,7 +36,7 @@ export const EVENTS = [
       { label: 'Grab one', hint: 'Choose 1 of 3 cards to add.', results: {}, run: (R) => R.offerCards(3, 'common') },
       { label: 'Grab the whole stack', hint: 'Add 2 random cards. The party loses 5 max HP.', results: { ok: 'You haul {cards} off the belt. Somebody strained something structural.' },
         run: (R) => { const a = R.addRandomCards(2); R.loseMaxHp(5); return { text: say('ok', { cards: cards(a) }) }; } },
-      { label: 'Throw one in', hint: 'Remove a card from your deck.', results: { ok: 'Pick something to feed the fire.' }, run: () => ({ text: say('ok'), select: { title: 'Remove a card', filter: 'removable', action: 'remove' } }) },
+      { label: 'Throw one in', hint: 'Remove a card from your deck.', needs: 'remove', results: { ok: 'Pick something to feed the fire.' }, run: () => ({ text: say('ok'), select: { title: 'Remove a card', filter: 'removable', action: 'remove' } }) },
     ],
   },
   {
@@ -49,8 +52,8 @@ export const EVENTS = [
     id: 'patch_notes', acts: [1, 2, 3], title: `Patch Notes v${VERSION}`, art: 'notes',
     text: 'A floating scroll unrolls: "BALANCE CHANGES: Relay is now worse (it was already bad?). Fixed a bug where players had fun." It offers to apply a hotfix to you.',
     choices: [
-      { label: 'Accept the nerf', hint: 'Remove a card. Gain 30 Scrap.', results: { ok: 'Ozmund: "See? Healthy for the meta."' }, run: (R) => { R.gain(30); return { text: say('ok'), select: { title: 'Nerf (remove) a card', filter: 'removable', action: 'remove' } }; } },
-      { label: 'Request a rework', hint: 'Transform a card into a random card of the same kind (basic attack, arte or support).', results: { ok: 'The scroll sighs and rewrites a card.' }, run: () => ({ text: say('ok'), select: { title: 'Rework a card', filter: 'transformable', action: 'transform' } }) },
+      { label: 'Accept the nerf', hint: 'Remove a card. Gain 30 Scrap.', needs: 'remove', results: { ok: 'Ozmund: "See? Healthy for the meta."' }, run: (R) => { R.gain(30); return { text: say('ok'), select: { title: 'Nerf (remove) a card', filter: 'removable', action: 'remove', required: true } }; } },
+      { label: 'Request a rework', hint: 'Transform a card into a random card of the same kind (basic attack, arte or support).', needs: 'transform', results: { ok: 'The scroll sighs and rewrites a card.' }, run: () => ({ text: say('ok'), select: { title: 'Rework a card', filter: 'transformable', action: 'transform' } }) },
       { label: 'Mark as "won\'t fix"', hint: 'Nothing happens.', results: { ok: 'Granraku: "Classic."' }, run: () => ({ text: say('ok') }) },
     ],
   },
@@ -58,8 +61,8 @@ export const EVENTS = [
     id: 'rust_oracle', acts: [1, 2], title: 'The Rust Oracle', art: 'oracle',
     text: 'An automaton made entirely of rust offers surgery. "Payment: a little blood. Or a lot of oil. We are out of oil."',
     choices: [
-      { label: 'Pay in blood', hint: 'The party loses 15 HP. Graft a card (choice of 3 grafts).', results: {}, run: (R) => { R.hurt(15); return R.offerGraft(); } },
-      { label: 'Ask for a reading', hint: 'Upgrade a card of your choice. Lose 20 Scrap.', req: (R) => R.scrap >= 20 || need(20), results: { ok: '"Your future... has a +2 in it."' }, run: (R) => { R.spend(20); return { text: say('ok'), select: { title: 'Upgrade a card', filter: 'upgradable', action: 'upgrade' } }; } },
+      { label: 'Pay in blood', hint: 'The party loses 15 HP. The Oracle picks a graft; you pick the card.', results: {}, run: (R) => R.offerGraft({ hp: 15 }) },
+      { label: 'Ask for a reading', hint: 'Upgrade a card of your choice. Lose 20 Scrap.', needs: 'upgrade', req: (R) => R.scrap >= 20 || need(20), results: { ok: '"Your future... has a +2 in it."' }, run: () => ({ text: say('ok'), select: { title: 'Upgrade a card', filter: 'upgradable', action: 'upgrade', cost: { scrap: 20 } } }) },
       { label: 'Leave', hint: 'Nothing happens.', results: { ok: 'The Oracle flakes away, offended.' }, run: () => ({ text: say('ok') }) },
     ],
   },
@@ -78,7 +81,7 @@ export const EVENTS = [
     text: 'Someone planted cables in neat rows and they grew. Soft blue current drips from the leaves.',
     choices: [
       { label: 'Drink the current', hint: 'Heal the party 30 HP.', results: { ok: 'Corvin: "Tastes like a battery. In a good way."' }, run: (R) => { R.healFlat(30); return { text: say('ok') }; } },
-      { label: 'Prune a card', hint: 'Remove a card. The party loses 12 HP.', results: { ok: 'The vines take their payment.' }, run: (R) => { R.hurt(12); return { text: say('ok'), select: { title: 'Remove a card', filter: 'removable', action: 'remove' } }; } },
+      { label: 'Prune a card', hint: 'Remove a card. The party loses 12 HP.', needs: 'remove', results: { ok: 'The vines take their payment.' }, run: () => ({ text: say('ok'), select: { title: 'Remove a card', filter: 'removable', action: 'remove', cost: { hp: 12 } } }) },
     ],
   },
 
@@ -98,7 +101,7 @@ export const EVENTS = [
     id: 'duplicate_bug', acts: [2, 3], title: 'Duplicate Bug', art: 'dupe',
     text: 'A shimmering tear in the floor clones anything you drop into it. Mostly. It once cloned a chair into a slightly sadder chair.',
     choices: [
-      { label: 'Clone a card', hint: 'Duplicate a card. The copy gets a random suit.', results: { ok: 'The tear ripples.' }, run: () => ({ text: say('ok'), select: { title: 'Duplicate a card', filter: 'any', action: 'duplicate' } }) },
+      { label: 'Clone a card', hint: 'Duplicate a card. The copy gets a random suit.', needs: 'duplicate', results: { ok: 'The tear ripples.' }, run: () => ({ text: say('ok'), select: { title: 'Duplicate a card', filter: 'any', action: 'duplicate' } }) },
       { label: 'Clone your Scrap', hint: '50%: double your Scrap (max +80). 50%: lose 30.', results: { win: 'Exploit confirmed. +{n} Scrap.', lose: 'The tear eats the Scrap and burps.' },
         run: (R) => { if (R.rng.chance(0.5)) { const g = Math.min(80, R.scrap); R.gain(g); return { text: say('win', { n: g }) }; } R.spend(Math.min(30, R.scrap)); return { text: say('lose') }; } },
       { label: 'Report the bug', hint: 'Gain 25 Scrap.', results: { ok: 'Ozmund: "Thank you for your report. It will be ignored."' }, run: (R) => { R.gain(25); return { text: say('ok') }; } },
@@ -117,7 +120,7 @@ export const EVENTS = [
     id: 'dev_door', acts: [2], title: 'The Dev Room Door', art: 'door', story: true,
     text: 'A door marked STAFF ONLY. Behind it: Ozmund Lurr, in a turtleneck, surrounded by mugs. "You\'re not supposed to be here. Nobody\'s supposed to be ANYWHERE. Nobody PLAYS this."',
     choices: [
-      { label: '"Relay is good, actually."', hint: 'Story. Ozmund grumbles. Upgrade a card of your choice.', results: { ok: 'Ozmund stares. "...Which part." Granraku tells him. For twenty minutes. Ozmund takes notes on a napkin.' },
+      { label: '"Relay is good, actually."', hint: 'Story. Ozmund grumbles. Upgrade a card of your choice.', needs: 'upgrade', results: { ok: 'Ozmund stares. "...Which part." Granraku tells him. For twenty minutes. Ozmund takes notes on a napkin.' },
         run: (R) => { R.flag('praisedRelay'); return { text: say('ok'), select: { title: 'Upgrade a card', filter: 'upgradable', action: 'upgrade' } }; } },
       { label: 'Exploit his dev console', hint: 'Gain a random rare card. Next battle enemies have +20% HP.', results: { ok: 'You type "give rare". You get {card}. Ozmund: "THAT IS NOT A FEATURE."' },
         run: (R) => { R.flag('exploitedConsole'); R.setNextBattleMod({ hpMult: 1.2 }); const c = R.addRandomCards(1, 'rare'); return { text: say('ok', { card: card(c[0]) }) }; } },
@@ -128,8 +131,8 @@ export const EVENTS = [
     id: 'variant_press', acts: [2, 3], title: 'The Suit Press', art: 'press',
     text: 'A hydraulic press stamps suits onto blank cards. A/B/EX. The EX die is cracked, but still works if you pay.',
     choices: [
-      { label: 'Recut a suit (free)', hint: 'Switch a card between A and B.', results: { ok: 'KA-CHUNK.' }, run: () => ({ text: say('ok'), select: { title: 'Recut a card', filter: 'recuttable', action: 'recut' } }) },
-      { label: 'Stamp EX (45 Scrap)', hint: 'Make a card EX.', req: (R) => R.scrap >= 45 || need(45), results: { ok: 'The cracked die bites down.' }, run: (R) => { R.spend(45); return { text: say('ok'), select: { title: 'Make a card EX', filter: 'notEX', action: 'ex' } }; } },
+      { label: 'Recut a suit (free)', hint: 'Switch a card between A and B.', needs: 'recut', results: { ok: 'KA-CHUNK.' }, run: () => ({ text: say('ok'), select: { title: 'Recut a card', filter: 'recuttable', action: 'recut' } }) },
+      { label: 'Stamp EX (45 Scrap)', hint: 'Make a card EX.', needs: 'ex', req: (R) => R.scrap >= 45 || need(45), results: { ok: 'The cracked die bites down.' }, run: () => ({ text: say('ok'), select: { title: 'Make a card EX', filter: 'notEX', action: 'ex', cost: { scrap: 45 } } }) },
       { label: 'Leave', hint: 'Nothing happens.', results: { ok: 'The press keeps stamping nothing, forever.' }, run: () => ({ text: say('ok') }) },
     ],
   },
@@ -137,8 +140,8 @@ export const EVENTS = [
     id: 'unfinished_npc', acts: [2, 3], title: 'The Unfinished NPC', art: 'npc',
     text: 'A character with no texture and one line of dialogue: "TRADE?" It holds out something shiny.',
     choices: [
-      { label: 'Trade a card for a relic', hint: 'Remove a card of your choice. Gain a random relic.', results: { ok: 'It hands you {relic}. "TRADE." It seems happy.' },
-        run: (R) => { const r = R.addRandomRelic(); return { text: say('ok', { relic: relic(r) }), select: { title: 'Give a card', filter: 'removable', action: 'remove' } }; } },
+      { label: 'Trade a card for a relic', hint: 'Remove a card of your choice. Gain a random relic.', needs: 'remove', results: { ok: 'It hands you {relic}. "TRADE." It seems happy.' },
+        run: (R) => { const r = R.addRandomRelic(); return { text: say('ok', { relic: relic(r) }), select: { title: 'Give a card', filter: 'removable', action: 'remove', required: true } }; } },
       { label: 'Give it a name', hint: 'Story. Heal the party 24 HP.', results: { ok: 'Pin names it "Gerald". Gerald says "TRADE?" with new dignity.' }, run: (R) => { R.flag('namedNPC'); R.healFlat(24); return { text: say('ok') }; } },
     ],
   },
@@ -158,7 +161,7 @@ export const EVENTS = [
     text: 'A merchant who sells merchants. Inside the smallest one is a single relic, offered as an exchange.',
     choices: [
       { label: 'Trade a relic for two', hint: 'Lose a random relic (not your starter). Gain 2 random relics.', req: (R) => R.tradeableRelics() > 0 || 'No relic to trade', results: { ok: 'You hand over {lost}. Out come {a} and {b}.' },
-        run: (R) => { const lost = R.loseRandomRelic(); const a = R.addRandomRelic(); const b = R.addRandomRelic(); return { text: say('ok', { lost: relic(lost), a: relic(a), b: relic(b) }) }; } },
+        run: (R) => { const lost = R.loseRandomRelic(); const a = R.addRandomRelic([lost]); const b = R.addRandomRelic([lost]); return { text: say('ok', { lost: relic(lost), a: relic(a), b: relic(b) }) }; } },
       { label: 'Buy a card (40 Scrap)', hint: 'Choose 1 of 3 uncommon+ cards.', req: (R) => R.scrap >= 40 || need(40), results: {}, run: (R) => { R.spend(40); return R.offerCards(3, 'uncommon'); } },
       { label: 'Leave', hint: 'Nothing happens.', results: { ok: 'The merchant folds itself away.' }, run: () => ({ text: say('ok') }) },
     ],
@@ -176,7 +179,7 @@ export const EVENTS = [
     id: 'frozen_frame', acts: [3], title: 'Frozen Frame', art: 'frame',
     text: 'Time has stopped in this room, mid-explosion. You can walk between the sparks.',
     choices: [
-      { label: 'Steal a moment', hint: 'Graft "Quick" onto a card.', results: { ok: 'You pocket a fraction of a second.' }, run: () => ({ text: say('ok'), select: { title: { k: 'Graft {g}', p: { g: { graft: 'quick' } } }, filter: 'graftable', action: 'graft:quick' } }) },
+      { label: 'Steal a moment', hint: 'Graft "Quick" onto a card.', needs: 'graft:quick', results: { ok: 'You pocket a fraction of a second.' }, run: () => ({ text: say('ok'), select: { title: { k: 'Graft {g}', p: { g: { graft: 'quick' } } }, filter: 'graftable', action: 'graft:quick' } }) },
       { label: 'Rest in the stillness', hint: 'Heal the party 20% of max HP.', results: { ok: 'Nothing moves. For once, neither do you.' }, run: (R) => { R.healPct(0.2); return { text: say('ok') }; } },
     ],
   },
@@ -184,7 +187,7 @@ export const EVENTS = [
     id: 'echo_chamber_event', acts: [2, 3], title: 'Whispering Hall', art: 'hall',
     text: 'Every word spoken here repeats forever, a little quieter each time. Corvin is delighted.',
     choices: [
-      { label: 'Teach a card to echo', hint: 'Graft "Echoing" onto a card.', results: { ok: 'The card hums with its own reflection.' }, run: () => ({ text: say('ok'), select: { title: { k: 'Graft {g}', p: { g: { graft: 'echoing' } } }, filter: 'graftable', action: 'graft:echoing' } }) },
+      { label: 'Teach a card to echo', hint: 'Graft "Echoing" onto a card.', needs: 'graft:echoing', results: { ok: 'The card hums with its own reflection.' }, run: () => ({ text: say('ok'), select: { title: { k: 'Graft {g}', p: { g: { graft: 'echoing' } } }, filter: 'graftable', action: 'graft:echoing' } }) },
       { label: 'Shout for Scrap', hint: 'Gain 35 Scrap.', results: { ok: '"SCRAP!" ... scrap ... scrap ... Coins rain from the vents.' }, run: (R) => { R.gain(35); return { text: say('ok') }; } },
     ],
   },
@@ -208,8 +211,8 @@ export const EVENTS = [
     id: 'grease_monkey', acts: [1, 2, 3], title: 'Grease Monkey Bench', art: 'bench',
     text: 'A workbench with a sign: "FREE TUNE-UPS (one per customer) (customers: 0)".',
     choices: [
-      { label: 'Re-gauge a card up', hint: 'Raise a card\'s rank by 1.', results: { ok: 'Click-click-click.' }, run: () => ({ text: say('ok'), select: { title: 'Raise rank', filter: 'rankup', action: 'rankup' } }) },
-      { label: 'Re-gauge a card down', hint: 'Lower a card\'s rank by 1.', results: { ok: 'Click... click.' }, run: () => ({ text: say('ok'), select: { title: 'Lower rank', filter: 'rankdown', action: 'rankdown' } }) },
+      { label: 'Re-gauge a card up', hint: 'Raise a card\'s rank by 1.', needs: 'rankup', results: { ok: 'Click-click-click.' }, run: () => ({ text: say('ok'), select: { title: 'Raise rank', filter: 'rankup', action: 'rankup' } }) },
+      { label: 'Re-gauge a card down', hint: 'Lower a card\'s rank by 1.', needs: 'rankdown', results: { ok: 'Click... click.' }, run: () => ({ text: say('ok'), select: { title: 'Lower rank', filter: 'rankdown', action: 'rankdown' } }) },
       { label: 'Plate armor (Hessa)', hint: 'The party gains 6 max HP.', results: { ok: 'Hessa bolts on a spare boiler plate. Fashion.' }, run: (R) => { R.gainMaxHp(6); return { text: say('ok') }; } },
     ],
   },

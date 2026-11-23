@@ -18,7 +18,7 @@ const OWNER_COL = { V: '#d0603f', C: '#b48cf0', S: '#e6c25a' };
 const HERO_KEYS = { KeyQ: 'V', KeyW: 'C', KeyE: 'S' };
 const KEY_OF = { V: 'Q', C: 'W', S: 'E' };
 // reasons an unplayable hand card shows on its face (others are shown by the card's own state)
-const SHOWN_REASONS = ['rank', 'owner', 'needbasic', 'momentum', 'junk', 'busy', 'heroes', 'queue'];
+const SHOWN_REASONS = ['rank', 'owner', 'needbasic', 'momentum', 'junk', 'busy', 'heroes', 'queue', 'nocombo', 'needcard'];
 
 // A mini card (Reserve, next card): rank and suit for attacks, a cross for support, then the name.
 function miniCard(c, uid, inst) {

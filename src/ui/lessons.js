@@ -235,6 +235,16 @@ export const LESSONS = [
     body: 'That sequence was an <b>EX Combo</b>: a recipe made of cards and actions you already use, with an extra effect on top. There are more to find. The Museum\'s <b>Combo Journal</b> records every one you discover and how to repeat it.',
     when: (c, x) => (x.exKnown > 0 && !x.exBanner ? { ui: 'none' } : null), // once the EX banner has had its moment
   },
+  {
+    // Phase 8 (docs/COMBAT_SPEC.md §29): a technique card is held and would help the combo now
+    key: 'technique', need: ['arte', 'support'], title: 'TECHNIQUE',
+    body: 'A <b>technique</b> is a support card a <b>free ally</b> performs inside your combo, after at least one card: it lowers the combo\'s <b>rank</b>, so the attacking hero can follow with another arte. It never rewrites cards already played and is cancelled if the combo ends first.',
+    when: (c) => {
+      if (!c.combo || c.phase !== 'ACTIVE') return null;
+      const u = held(c).find((x) => c.def(x).tech && playable(c, x));
+      return u ? where(c, u) : null;
+    },
+  },
   // ── interference, the first time each happens ──
   {
     key: 'lock', title: 'CARD LOCKED',

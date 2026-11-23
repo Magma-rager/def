@@ -118,7 +118,7 @@ export const ENEMIES = {
     lore: 'Reads your habits. Hunts the weakest link.',
     intents: {
       strike: {
-        kind: 'atk', name: 'Hunt', dmg: 10, desc: 'Strike the most injured ally for 10, +10 if your Guard is below 6.',
+        kind: 'atk', name: 'Hunt', dmg: 10, desc: 'Strike the least-defended hero for 10, +10 if your Guard is below 6.',
         exec: (e, c, it) => c.hitParty(e, it.target, c.edmg(e, 10 + (c.guard < 6 ? 10 : 0))),
       },
       exploit: {
@@ -199,7 +199,7 @@ export const ENEMIES = {
     intents: {
       parry: { kind: 'special', name: 'Parry Stance', desc: 'For 3s, reflects 50% of damage it takes back at the attacker. Hold your attacks!', exec: (e, c) => c.enemyStatus(e, 'parry', 3) },
       cleave: { kind: 'aoe', name: 'Null Cleave', dmg: 10, desc: 'Hit every ally for 10 and make them Weak for 3s.', exec: (e, c) => { c.hitAll(e, c.edmg(e, 10)); c.weakenParty(e, 'all', 3); } },
-      execute: { kind: 'atk', name: 'Execute', dmg: 20, desc: 'Strike the most injured ally for 20.', exec: (e, c, it) => c.hitParty(e, it.target, c.edmg(e, 20)) },
+      execute: { kind: 'atk', name: 'Execute', dmg: 20, desc: 'Strike the least-defended hero for 20.', exec: (e, c, it) => c.hitParty(e, it.target, c.edmg(e, 20)) },
     },
     targetMode: 'lowest',
     ai: cycle('parry', 'cleave', 'execute', 'parry', 'execute'),
@@ -225,7 +225,7 @@ export const ENEMIES = {
 
   // ─────────────── BOSSES ───────────────
   clockwork_regent: {
-    name: 'Clockwork Regent', act: 1, tier: 'boss', hp: 270, actTime: 5.8, art: 'regent', size: 2.0,
+    name: 'Clockwork Regent', act: 1, tier: 'boss', locks: true, hp: 270, actTime: 5.8, art: 'regent', size: 2.0,
     lore: 'Rules the Scrapworks by the tick. Every second is taxed.',
     intents: {
       decree: lock('Royal Decree', 2),
@@ -250,7 +250,7 @@ export const ENEMIES = {
     ai: (e) => (e.phase === 1 ? cycle('barrier', 'compactor', 'rubble', 'compactor')(e) : cycle('grind', 'compactor', 'barrier', 'rubble')(e)),
   },
   protocol_auditor: {
-    name: 'Protocol Auditor', act: 2, tier: 'boss', hp: 400, actTime: 5.8, art: 'auditor', size: 2.0,
+    name: 'Protocol Auditor', act: 2, tier: 'boss', locks: true, hp: 400, actTime: 5.8, art: 'auditor', size: 2.0,
     lore: 'Detects repeated patterns. Issues Citations. Has never been wrong (it checked).',
     intents: {
       audit: {
@@ -266,7 +266,7 @@ export const ENEMIES = {
     ai: (e) => (e.phase === 1 ? cycle('audit', 'beam', 'redtape', 'beam')(e) : cycle('audit', 'strict', 'redtape', 'beam')(e)),
   },
   mirror_array: {
-    name: 'Mirror Array', act: 2, tier: 'boss', hp: 380, actTime: 5.8, art: 'mirror', size: 2.0,
+    name: 'Mirror Array', act: 2, tier: 'boss', locks: true, hp: 380, actTime: 5.8, art: 'mirror', size: 2.0,
     lore: 'It plays exactly like you. It plays slightly worse. It is annoyed about that.',
     intents: {
       reflect: { kind: 'atk', name: 'Reflection', dmg: 8, desc: 'Fires back 60% of your last combo’s strongest card (min 8).', exec: (e, c, it) => c.hitParty(e, it.target, c.edmg(e, Math.max(8, Math.round(0.6 * c.lastStrongestHit())))) },
@@ -291,7 +291,7 @@ export const ENEMIES = {
     ai: (e) => (e.phase === 1 ? cycle('corrupt', 'devour', 'bleed', 'rewrite', 'devour')(e) : cycle('bleed', 'delete', 'rewrite', 'devour')(e)),
   },
   signalbreak_core: {
-    name: 'Signalbreak Core', act: 3, tier: 'boss', hp: 600, actTime: 5.6, art: 'core', size: 2.2,
+    name: 'Signalbreak Core', act: 3, tier: 'boss', locks: true, hp: 600, actTime: 5.6, art: 'core', size: 2.2,
     lore: 'The heart of the game. It knows every rule you broke.',
     intents: {
       clock: lock('Clock Protocol', 2, 6),
