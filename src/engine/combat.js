@@ -517,9 +517,9 @@ export class Combat {
       // in its current part, and not already ending
       if (d.tech) {
         const P = this.proj();
-        if (!P.open) return { ok: false, reason: 'nocombo', text: 'Technique: needs a combo' };
+        if (!P.open) return { ok: false, reason: 'nocombo', text: 'Needs a combo' };
         if (P.finish || P.ending) return { ok: false, reason: 'finishing', text: 'Combo ending' };
-        if (P.seg < 1) return { ok: false, reason: 'needcard', text: 'Technique: play a card first' };
+        if (P.seg < 1) return { ok: false, reason: 'needcard', text: 'Play a card first' };
       }
       const hero = this.supportPerformer(d);
       if (!hero) return { ok: false, reason: 'busy', text: d.owner ? this.busyText(d.owner) : 'Every hero is busy' };

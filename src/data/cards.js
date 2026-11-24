@@ -189,7 +189,7 @@ card({
 card({
   // Phase 8 technique (was an interim Strong attack that rewound itself from Reserve)
   id: 'cache_hook', name: 'Cache Hook', owner: null, category: 'support', variant: 'A', rarity: 'uncommon', anim: 'buff', glyph: 'hook',
-  v: { r: [1, 2], rr: [2, 3] }, text: 'Technique: the combo\'s rank drops by {r}. Played from Reserve: by {rr} instead, and +1 Momentum.', tags: ['reserve', 'ladder'],
+  v: { r: [1, 2], rr: [2, 3] }, text: 'Technique: the combo\'s rank drops by {r} (from Reserve: by {rr}, +1 Momentum).', tags: ['reserve', 'ladder'],
   tech: (v, fromReserve) => ({ rewind: fromReserve ? v('rr') : v('r') }),
   fx: (A) => { if (A.fromReserve) A.mom(1); },
 });
@@ -239,7 +239,7 @@ card({
 card({
   // Phase 8 technique (was an interim rank-5 arte that rewound itself)
   id: 'downshift', name: 'Downshift', owner: 'V', category: 'support', cost: 2, variant: 'EX', rarity: 'rare', anim: 'guard', glyph: 'hammer',
-  v: { r: [4, 5], f: [1, 1.5] }, text: 'Technique: the combo\'s rank drops by {r} and its Flow gains {f}s (within the cap).', tags: ['ladder', 'flow'],
+  v: { r: [4, 5], f: [1, 1.5] }, text: 'Technique: the combo\'s rank drops by {r}; +{f}s Flow.', tags: ['ladder', 'flow'],
   tech: (v) => ({ rewind: v('r') }),
   fx: (A) => A.flow(A.v('f')),
 });
@@ -292,7 +292,7 @@ card({
 card({
   // Phase 8 technique (was an interim rank-4 arte that rewound itself)
   id: 'rethread', name: 'Rethread', owner: 'C', category: 'support', cost: 1, variant: 'A', rarity: 'common', anim: 'cast', glyph: 'spiral',
-  v: { r: [2, 3] }, text: 'Technique: the combo\'s rank drops by {r}, so another arte comes within reach.', tags: ['ladder'],
+  v: { r: [2, 3] }, text: 'Technique: the combo\'s rank drops by {r}.', tags: ['ladder'],
   tech: (v) => ({ rewind: v('r') }),
   fx: () => {},
 });
@@ -309,7 +309,7 @@ card({
 card({
   // Phase 8 technique (was an interim rank-5 arte that set the suit and rewound itself)
   id: 'prism_cut', name: 'Prism Cut', owner: 'C', category: 'support', cost: 1, variant: 'EX', rarity: 'rare', anim: 'cast', glyph: 'prism',
-  v: { r: [1, 2] }, text: 'Technique: the combo\'s suit becomes EX and its rank drops by {r}: the next A or B card Crosses.', tags: ['variant'],
+  v: { r: [1, 2] }, text: 'Technique: the combo turns EX, rank −{r}. The next A or B card Crosses.', tags: ['variant'],
   tech: (v) => ({ rewind: v('r'), suit: 'EX' }),
   fx: () => {},
 });
@@ -481,7 +481,7 @@ card({
 });
 card({
   id: 'relay_baton', name: 'Relay Baton', owner: 'S', category: 'arte', rank: 5, variant: 'B', rarity: 'rare', anim: 'buff', glyph: 'hook',
-  v: { d: [8, 10], f: [0.2, 0.3] }, text: 'Deal {d}. For each hero who joined this combo: +1 Momentum and +{f}s Flow.', tags: ['flow', 'relay'],
+  v: { d: [8, 10], f: [0.2, 0.3] }, text: 'Deal {d}. Per hero in this combo: +1 Momentum, +{f}s Flow.', tags: ['flow', 'relay'],
   fx: (A) => { A.dmg(A.v('d')); const n = A.ctx.owners.length; A.mom(n); A.flow(n * A.v('f')); },
 });
 card({
@@ -500,7 +500,7 @@ card({
   // value). Overpressure is the all-in finisher; Pressure Valve is the measured one: it vents a capped
   // amount, half of it as Guard, and leaves the rest for the next arte of a long combo.
   id: 'pressure_valve', name: 'Pressure Valve', owner: 'C', category: 'arte', rank: 5, variant: 'A', rarity: 'uncommon', anim: 'cast', glyph: 'flame', migrate: 'overpressure',
-  v: { d: [6, 7], n: [3, 4], g: [3, 3] }, text: 'Deal {d}. Then vent up to {n} more Momentum: +{d} damage and {g} Guard per point vented. Momentum above {n} stays.', tags: ['momentum', 'guard'],
+  v: { d: [6, 7], n: [3, 4], g: [3, 3] }, text: 'Deal {d}. Vent up to {n} more Momentum: +{d} damage and {g} Guard each.', tags: ['momentum', 'guard'],
   fx: (A) => { const n = A.spendMomentum(A.v('n')); A.dmg(A.v('d') * (1 + n)); if (n > 0) A.guard(A.v('g') * n); },
 });
 

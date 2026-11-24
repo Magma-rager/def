@@ -605,3 +605,46 @@ Every archetype has at least one recipe. With the starter deck alone the recipe 
 
 **Statistics.** Combat: `exActivations`, `exByRecipe`, `exOverlaps`, `exDamage`, `exGuard`, `exHeal`, `exMomentum`, `exFlow`, `exChurn`, `exChainCards`, `exRelay`, `exSupport`, `exUnapplied`; the run summary adds `ex` and `exRecipes`; the results screen has one compact line (EX Combos: activations · recipes). `RULES.EX_COMBOS` (true) switches recognition off for measurement tools only; nothing in the game exposes it.
 
+
+## 29. Phase 8 as built (0.2.8) — techniques, content completion, reward economy
+
+**Techniques.** The four former compatibility cards (Rethread, Prism Cut, Downshift, Cache Hook) are *techniques*: support cards (`tech(v, fromReserve) → { rewind, suit }` in `src/data/cards.js`) that a free ally performs inside the attacking hero's open combo. Rules:
+
+- Legal only while a combo is projected open, not finishing, with at least one card already in the current part (`check()` reasons `nocombo`, `finishing`, `needcard`; the first two are shown on the card face).
+- Performed by the support performer rule (owner if Ready, else the selected or first Ready hero) and never by the attacking hero: a technique owned by the attacker is refused.
+- The effect is projected into the queue (`applyProj` lowers `P.rank`, sets `P.variant`), so the cards queued after it are judged against the lowered rank; it is a chain command (`isChainCmd`), cancelled with the combo and revalidated like an attack.
+- On resolution it lowers `combo.rank` by its value (floor 0) and, for Prism Cut, makes the combo's suit EX, so the next A or B card Crosses. It never rewrites cards already played, Steps or Crosses; it is logged `{k:'tech'}` and counted in `stats.techniques`.
+- Auto-finish waits while a technique is playable.
+- Values: Rethread −2 (−3 upgraded); Prism Cut −1 (−2) and EX suit; Downshift −4 (−5) and +1s (+1.5s) Flow; Cache Hook −1 (−2), from the Reserve −2 (−3) and +1 Momentum. Cards show "Technique" as their role word; a lesson introduces them the first time one is playable mid-combo.
+
+**Pressure Valve.** Corvin, rank 5, cost 3: deal 6 (7), then vent up to 3 (4) more Momentum, each vented point adding the base damage again and 3 Guard. Momentum above the cap stays. Overpressure spends everything; the Valve spends a bounded amount and keeps the rest. `spendMomentum(max)` accumulates `entry.spent`, so Pressure Release reads every arte's full spend (before Phase 8 only the last spend was kept).
+
+**Content fixes found by the audit** (each with a test in `tests/content.test.mjs`, `tests/adaptations.test.mjs`, `tests/events.test.mjs`):
+- Reserve Seal's break and Deep Pockets now count support played from the Reserve.
+- Rank changes (events, surgery, mutations, loading) stay inside the card's category: basics 1–3, artes 4–6 (`RANK_RANGE`, `gaugedRank`).
+- Keen, Breaker, Echoing and Ledger only go on attacks (`graftFits`).
+- Hardened Locks is only chosen against a boss that Locks (`locks: true`, `adaptationApplies`).
+- Shop heal and rest options that would do nothing are refused with the reason.
+- Event card selections:
+  - a selection no card can take is refused up front (`needs`);
+  - a price is paid when the card is chosen (`cost`), so cancelling is free;
+  - a trade whose reward comes first is `required`;
+  - a traded relic never comes straight back;
+  - the Rust Oracle's text matches what it does (one graft, chosen by the Oracle).
+
+**Boss evidence.** Each measure is compared with its typical value at that act's boss (`EVIDENCE_TYPICAL`, medians of ordinary simulated campaigns; score 1 = 15% above typical; a habit at 0.6 still counts when nothing stands out). Before, fixed thresholds from before artes cost Momentum made Momentum Siphon the adaptation in 87 of 89 simulated boss fights; now ten of the eleven appear.
+
+**Reward economy.**
+- The build direction is what the player acquired: cards beyond the starter deck (each starter id skipped as often as the starter holds it), non-starter relics, and mutations (counted double).
+- With a direction (the most-held tag, held twice or leading alone):
+  - the first offered card leans into it (60%);
+  - the second leans into the second direction (40%), or the lead (30%);
+  - the last card is always a pivot to an archetype outside the top two.
+- Without a direction, the offered cards come from different archetypes.
+- A lean or pivot whose tag has no card at the rolled rarity takes the nearest rarity (Reserve and Cash Out have no commons), so every archetype is offered as a pivot.
+- The 40% basic-attack safeguard keeps the first slot and prefers a basic of the lead tag.
+
+**Build payoffs strengthened** (measured with `tools/simulate.mjs --build=each --tactics`):
+- Churn: Junk Toss +4 per Churn (max +20/+24); Junkstorm +4/+5 per Churn (max +36/+45); Scrap Feed adds 4/5 Guard; Recycler 12/15; Spare Parts adds 5/7 Guard.
+- Flow: Spark Primer +5/+7; Quickdraw 8/10; Slipstream 5/7 twice; Overclock 8/10; Timekeeper +5/+6 per second; Relay Baton now deals 8/10.
+- Interference: Jam Breaker +3/+4; Breach Payload +6/+7.

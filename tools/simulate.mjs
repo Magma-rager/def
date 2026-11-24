@@ -284,6 +284,9 @@ const archs = [...new Set(all.map((r) => r.arch))];
   const ad = all.flatMap((r) => r.adapt || []);
   const by = {};
   for (const x of ad) { const k = x.id || 'none'; by[k] = by[k] || { n: 0, broken: 0, prog: 0, win: 0 }; by[k].n++; by[k].broken += x.broken ? 1 : 0; by[k].prog += x.progress; by[k].win += x.win ? 1 : 0; }
+  const bb = {};
+  for (const x of ad) { bb[x.boss] = bb[x.boss] || { n: 0, w: 0, ad: 0, br: 0 }; bb[x.boss].n++; bb[x.boss].w += x.win ? 1 : 0; bb[x.boss].ad += x.id ? 1 : 0; bb[x.boss].br += x.broken ? 1 : 0; }
+  console.log(`bosses (all six alternatives): ${Object.entries(bb).map(([k, v]) => `${k} ${v.w}/${v.n} won, adapted ${v.ad}, broken ${v.br}`).join(' · ')}`);
   console.log(`boss adaptations (${ad.length} boss fights): ${Object.entries(by).sort((a, b) => b[1].n - a[1].n).map(([k, v]) => `${k} ${v.n}× broken ${v.broken} (avg progress ${Math.round((v.prog / v.n) * 100)}%, won ${v.win})`).join(' · ')}`);
 }
 {

@@ -574,7 +574,9 @@ export class Run {
       if (tag) want = tag;
       else if (pivot) {
         // an archetype outside the build's top two that this offer has not shown yet
-        const away = Object.keys(ARCHETYPES).filter((t) => t !== lead && t !== second && !offeredTags.has(t) && cands.some((c) => c.tags.includes(t)));
+        // (any rarity: a tag with no card at the rolled rarity takes its nearest one below, so Reserve and
+        // Cash Out, which have no commons, are offered as often as the others)
+        const away = Object.keys(ARCHETYPES).filter((t) => t !== lead && t !== second && !offeredTags.has(t) && pool.some((c) => c.tags.includes(t) && fresh(c)));
         want = away.length ? rng.pick(away) : null;
       } else if (i === 0 && lead && rng.chance(0.6)) want = lead;
       else if (i === 1 && second && rng.chance(0.4)) want = second;

@@ -577,6 +577,166 @@ One banner per command (names, the sequence as chips, the effect actually applie
 
 **Still for human judgment:** whether players notice recipes, understand why one triggered from the banner, and find the Journal; whether the recipes change how they play or only reward what they already do; whether 4–7 banners per battle (10–18 in boss fights) feel like reward or noise; whether the first-EX lesson is enough; whether the builds feel different. No human has played 0.2.7, and no physical iPhone or iPad has run it.
 
+## Revised roadmap, Phase 8: content completion, techniques, reward economy, builds (0.2.8, 2026-11-24)
+
+**Baseline first** (0.2.7, commit d236ce8, kept as the Phase 7 checkpoint): `tools/simulate.mjs` gave quick 28/30, regular 20/30 (48.6s per battle), recipe-aware 21/30, learner 14/30; in every profile about 27 of 30 runs ended with Guard as the dominant tag; Momentum Siphon was the adaptation in 87 of 89 simulated boss fights.
+
+### What was built
+- **Techniques** (docs/COMBAT_SPEC.md §29): Rethread, Prism Cut, Downshift and Cache Hook stopped being compatibility stubs. Each is a support card a free ally performs inside the attacking hero's combo, lowering its rank (Prism Cut also sets the suit to EX); it is projected in the queue, cancelled with the chain and never rewrites played cards. They have a card-face role word, a refusal reason on the card, a lesson, and EN/RU text.
+- **Pressure Valve**: rank-5 Corvin arte; deals 6, then vents up to 3 more Momentum at 6 damage and 3 Guard per point. Distinct from Overpressure, which spends everything.
+- **Content audit with behavioural tests**:
+  - all 39 relics, 12 mutations and 10 grafts (graft eligibility included);
+  - every offered and starter card, plain and upgraded, played through the queue;
+  - anti-stranding decks (support-heavy, arte-heavy, rank-modified) finishing real fights;
+  - all 11 adaptations broken by legal play against real bosses;
+  - all 21 events, every choice;
+  - shop, surgery, rest, treasure and every boss preparation (Wildcard's rare card persists).
+  - Tests: 203 → 243.
+- **Defects found and fixed**:
+  - `spendMomentum` overwrote `entry.spent`, so Pressure Release missed earlier spends.
+  - Reserve Seal's break and Deep Pockets ignored support played from the Reserve.
+  - Hardened Locks could be chosen against a boss that never Locks.
+  - Rank changes used 1–9 instead of the card's category range.
+  - Keen, Breaker, Echoing and Ledger could graft onto support cards.
+  - Shop heal charged at full HP.
+  - Paid event selections took the price even when cancelled; reward-first trades could be cancelled to keep the reward.
+  - A traded relic could come straight back.
+  - The Rust Oracle promised a choice of three grafts and gave one.
+  - Rest options that did nothing were selectable.
+  - Two intent texts still said "most injured ally".
+  - Found by the regression tools: the new card texts first rendered at 6.4px on phones, and the technique refusal reasons were clipped in the card footer. Both were shortened (EN and RU).
+- **Boss evidence**: compared with typical play at the same act (medians of ordinary simulated campaigns, `SB_PROFILE_DUMP=1`). Ten of the eleven adaptations now appear in simulated boss fights, against two before.
+- **Reward economy**:
+  - The build direction now comes from what the player acquired, not the starter deck (whose Guard tags steered every run to Guard).
+  - Offers lean into the lead and second directions, and always end with a pivot to another archetype.
+  - A lean or pivot whose tag has no card at the rolled rarity takes the nearest rarity (Reserve and Cash Out have no commons).
+  - The 40% basic safeguard prefers a basic of the build.
+
+### Natural build diversity (ordinary bot, no target, 30 runs, `simulate 30 1.0 regular`)
+Dominant tag at the end of the run: 0.2.7 Guard 27, Churn 3. 0.2.8: Ladder 7, Guard 7, Interference 5, Suit 3, Churn 2, Cash Out 2, Relay 2, Reserve 1, Momentum 1 — nine directions.
+
+### Build-focused campaigns (`simulate 100 1.0 regular --build=each --tactics`, seeds 1001–1300, 30 per build)
+Each run targets one archetype and acquires only through ordinary offers (rewards, shops, surgery, boss relics, mutations). In battle the bot uses the build's tactics. "×" is that mechanic per battle against the all-build average.
+
+| Build | Wins | Target cards held | Deck led by it | Own mechanic per battle | s/battle | Damage/s | HP lost/battle | Own recipes/battle |
+|---|---|---|---|---|---|---|---|---|
+| Guard & Counter | 28/30 | 16.2 | 30/30 | Guard 75 (1.77×) | 50.9 | 6.5 | 5.4 | 0.87 |
+| Cash Out | 27/30 | 9.2 | 29/30 | Cash Outs 1.3 (1.52×) | 33.1 | 9.7 | 7.7 | 0.81 |
+| Rank Ladder | 23/30 | 11.9 | 30/30 | Steps 4.9 (1.21×) | 39.5 | 7.9 | 9.5 | 0.24 |
+| Suit Switching | 20/30 | 9.8 | 28/30 | Crosses 7.1 (0.95×) | 34.2 | 9.3 | 12.8 | 0.77 |
+| Relay Echo | 19/30 | 10.7 | 29/30 | Relays 7.2 (1.35×) | 41.9 | 7.5 | 12.7 | 2.72 |
+| Momentum Burst | 19/30 | 11.9 | 29/30 | Momentum spent 34.8 (1.19×) | 35.1 | 9.1 | 12.2 | 1.37 |
+| Reserve Strategy | 19/30 | 9.0 | 27/30 | Reserve plays 3.4 (8.99×) | 39.9 | 7.7 | 11.8 | 0.99 |
+| Flow Extension | 18/30 | 11.4 | 30/30 | bonus Flow 2.6s (3.06×) | 34.4 | 9.2 | 12.9 | 0.46 |
+| Interference Exploit | 17/30 | 13.7 | 30/30 | interference payoffs 9.4 (3.46×) | 31.9 | 9.5 | 13.2 | 0.42 |
+| Churn Engine | 9/30 | 12.3 | 29/30 | Churns 3.5 (3.47×) | 36.1 | 8.0 | 14.6 | 0.06 |
+
+**Reading the table:**
+- All ten builds can be assembled through the ordinary economy.
+- Guard is the safe, slow build.
+- Cash Out wins fastest with short chains.
+- Flow, Interference, Reserve and Churn have the most distinctive loops (3–9× their mechanic).
+- Suit Switching is not distinguished by Cross count, because every deck Crosses about 7 times a battle. Its difference is the suit mix and its payoffs (below).
+- Churn Engine remains the weakest build (30% wins; 55% on seeds 1001–1030 with or without the Churn tactic). Two rounds of payoff changes moved it from 1/10 to 9/30.
+- Reserve forms only when a Reserve card is offered early. In `tools/accept8.mjs runs`, its three seeds did not form the build. In simulate's 30 runs it led the deck 27 times.
+
+**Changes made from these measurements** (before → after, 10 runs per build at first, then 30):
+- Churn Engine (1/10 → 9/30):
+  - Junk Toss and Junkstorm scale +4 per Churn (caps 20/36);
+  - Scrap Feed and Spare Parts give Guard;
+  - Recycler +1 damage.
+- Flow Extension (4/10 → 18/30): Spark Primer, Quickdraw, Slipstream, Overclock, Timekeeper raised; Relay Baton now deals damage.
+- Interference Exploit (4/10 → 17/30): Jam Breaker, Breach Payload raised.
+
+### Investigations (`tools/buildlab.mjs 12`, drafted + natural decks, Act I–II fights)
+- **Suit Switching** (§13). Drafted decks hold attacks 61% A / 29% B / 10% EX; natural decks 40/55/5.
+  - Crosses: 1.21 per chain (recipe-aware 1.50).
+  - Consecutive Crosses: 13% of chains (21%).
+  - A+B+EX in one segment: 5% (8%); natural decks 2% (4%).
+  - Cross Current: 0.60/battle (0.76); Prism Sequence: 0.21 (0.25).
+  - Twin Dials, Prism Lens and Wild Hinge change damage by under 4% and recipe rates by under 0.1.
+  - Why the build's own recipes are rare: EX attacks are scarce (5–10%), so three suits in one segment rarely come together. Prism Cut (now a real technique) is the one card that builds that pattern.
+  - Not changed: no free Crosses, no lowered recipe requirements; suits remain a bonus layer.
+- **Churn Engine** (§14).
+  - The ordinary player Churns 4.8 times a battle, almost all between chains. The recipe-aware player Churns 2.5–2.8 times inside combos.
+  - A card drawn by a mid-combo Churn is an attack 75–81% of the time, but is actually played only 25–29%, usually because it does not fit the combo's rank. A later arte follows 21–27%.
+  - Salvage Circuit is 0.27 per in-combo Churn and 0.6/battle at most.
+  - Flow lost to Churn: 0.8s/battle (recipe-aware).
+  - Churn Gear and Oiled Bearings change little (Churns 4.1 → 4.5 / 3.7). Churnfed on every non-Churn card gives about 36 Guard a battle.
+  - The recipe's requirement to play the drawn card is kept. The bottleneck is the drawn card's rank; techniques lower the rank and are the existing way to make such a card playable.
+- **Momentum Burst** (§15): gains 32–36 and spends 25–31 Momentum per battle, about 3.7–3.9 per arte. Pressure Release 0.9–1.4/battle. Its value is efficient arte use and the Momentum ceiling, not one recipe's frequency.
+- **Interference Exploit** (§15), natural decks by encounter type:
+  - against Lock enemies: 8.2 damage/s, 4.6 HP lost per fight, 1.25 interference endured;
+  - against Scramble: 9.5 damage/s, 7.8 HP lost, 2.4 endured, Interference Reversal 0.29/battle;
+  - against other interference: 8.1 damage/s, 4.1 HP lost;
+  - against none: 7.8 damage/s, 15.8 HP lost.
+  - Its payoffs only work against interference; without it the deck is fragile. That is a matchup build, as the brief expected.
+
+### Recipe lab, corrected methodology (`tools/recipelab.mjs 12 --natural=…`)
+- Layers:
+  - A: drafted decks (kept, unchanged method);
+  - B: natural decks from build-focused campaigns at the Act I and II bosses;
+  - C: ordinary vs recipe-aware;
+  - D: by encounter kind;
+  - E: the full-run table above.
+- The benchmark is the average over the ten drafted archetype groups; it is not labelled as a sampled average deck.
+- Per opportunity = own recipes per chain that carried a card of the build.
+- Recipe-aware, natural decks: Relay 0.60, Momentum 0.37, Reserve 0.30, Suit 0.28, Flow 0.28, Guard 0.23, Ladder 0.20, Cash Out 0.20, Churn 0.18, Interference 0.14.
+- EX per chain varies by build: 1.1 (Guard) to 3.5 (Cash Out).
+- Boss fights carry 3–4× the EX of formations.
+- All 15 recipes are reached; six are most frequent in a build tagged for them on natural decks (Stored Strike, Second Wind, Pressure Release, Iron Harmony, Three-Way Circuit, Quick Settlement).
+
+### Balance against 0.2.7 (same commands and seeds)
+| Profile | 0.2.7 | 0.2.8 | Battle | HP lost/battle |
+|---|---|---|---|---|
+| quick (0.55s) | 28/30 | 29/30 | 32.8 → 28.5s | 3.8 → 4.5 |
+| regular (1.0s) | 20/30 | 24/30 | 48.6 → 41.1s | 7.1 → 9.2 |
+| recipe-aware | 21/30 | 26/30 | 44.5 → 36.9s | 5.9 → 6.0 |
+| learner (1.4s), 100 runs | 42/100 | 44/100 | 48.8 → 39.7s | 12.8 → 14.6 |
+| regular, EX off | — | 17/30 | 44.2s | 11.9 |
+
+- Every 0.2.7 → 0.2.8 difference here is within about one standard error at 30 runs. The learner check used 100 runs because 30 gave 11 against 14.
+- Battles are shorter because decks are more coherent and the boss counters are spread out. Momentum Siphon used to drain every boss fight.
+- Deck progression per run (regular): 47.9 cards offered, 11.3 taken, 4.3 rewards skipped; 1.7 shop cards; 2.7 upgrades; 1.9 grafts; 4.9 relics; 2 mutations; 13 → 26.7 cards.
+- Boss adaptation break rates (regular): every chosen adaptation was broken in 92–100% of fights, except Reserve Seal (rare) and Hardened Locks (7 of 8). With the recipe-aware policy, Reserve Seal was chosen 22 times and broken 3.
+- All six bosses appear across the runs; at the regular profile each was won in every fight it appeared in (9–17 fights each).
+
+### Tested
+- **Unit tests: 243 pass.**
+  - `tests/techniques.test.mjs` (20);
+  - `tests/content.test.mjs` (18: catalogue, every card, all relics, mutations, grafts, anti-stranding);
+  - `tests/adaptations.test.mjs` (13: all eleven, legal breaks against real bosses, applicability);
+  - `tests/events.test.mjs` (9: every event choice, requirements, paid selections, trades, shop, surgery, rest, treasure, all seven boss preparations).
+- **Acceptance (`tools/accept8.mjs`), scenarios A–E through taps.** Disclosed fixtures: seed, stacked hands, enemy HP, the jump to the Act I boss with Payout Audit, Act II nodes. Result 51/51 in English and Russian at 844×390 and 1180×820. Steps 14, 16 and 17 are engine-level checks (disclosed).
+  - All four techniques in real chains: performer, rank and suit changes, Cross after Prism Cut, a second arte following, no duplicates, valid after a reload.
+  - Pressure Valve taken from an ordinary first-battle reward and played; compared with Overpressure; upgraded; Pressure Release.
+  - Payout Audit against the Scrap Tyrant: warning, reduced payout, three Perfects with the panel counting 1/3–3/3, broken, full payout, the fight won.
+  - Boss relic Scrap Heart working in Act II.
+  - Mutation chosen and active in Act II.
+  - Shop purchase and removal service, surgery, event recut, then reload with the state persisting; the modified card in the next battle's deck.
+- **Phase 7 acceptance** (`tools/accept7.mjs`) still 47/47 (English, 844×390) on the final build, so the EX recipes, Journal and discovery flow are unchanged. Scenario A–E rerun on the final texts: 51/51.
+- **Scenario F** (`accept8 runs`, headless ordinary campaigns, three seeds per build): nine families formed and reached Act II or later with saves round-tripping at every step — Guard, Relay, Interference, Flow, Churn, Cash Out, Ladder, Momentum, Suit. Reserve did not form on its three seeds (2–4 cards).
+- **Scenario G** (`accept8 campaign`, a first-time player, the shared UI bot tapping at the quick profile):
+  - Russian at 844×390, 11/11: Clockwork Regent, Protocol Auditor, The Corruptor; victory, ending, credits, results matching the recorded run, Museum and Journal, new run, record kept.
+  - English at 1180×820, 11/11: Clockwork Regent, Mirror Array, Signalbreak Core; victory with a Cash Out build.
+  - An earlier English run beat Scrap Tyrant, Protocol Auditor and The Corruptor. Its results screen recorded the victory, but two of its checks failed because the checker read the cleared live run instead of the profile's run record; the checker was fixed.
+  - Together the three campaigns beat all six bosses through the interface.
+  - One English attempt stalled in Act II after 11 battles and ran out its time budget. The cause was not identified; the rerun, now logging progress every minute and nudging after a minute without change, did not stall.
+
+**Regression requirements R1–R7**
+
+| | Requirement | Result |
+|---|---|---|
+| R1 | Enemy pressure | 0% of enemy gaps under 1s in every pacing row (`pacing.mjs 60 --act1 --pace=2.5`); starter-deck pacing identical to 0.2.7 row for row (checked on commit d236ce8). No card freezes enemy ATB; Churn's 5% push and the Churn Tax push are tested |
+| R2 | Decision time, dropped combos | The 2.5s active-Relay player drops 14–17% per opening fight (Phase 7: 12–17%); techniques add no Flow beyond Downshift's capped +1s and wait for a free ally |
+| R3 | Downtime | Decision, execution, holds, breathers, Recovery kept separate (`stats.time`); unchanged rows in pacing |
+| R4 | Targeting | `tools/targeting.mjs` 36/36 including queued attacks; techniques take no target |
+| R5 | Early survivability | Learner, ordinary and quick win every Act I fight; starter-deck pacing unchanged. The slow 2.5s player still loses Hound Mother 97% of the time, the same on 0.2.7 (pre-existing, not a Phase 8 change). Learner full runs 42/100 → 44/100 |
+| R6 | Readability | Smallest card text 7.6px (English) and 7.0px (Russian) at 667×375, unchanged after shortening the new texts (they first measured 6.4px). Layout sweep (`tools/i18n-layout.mjs`, every screen, modal, event, card and boss preparation at 7 sizes) 0 issues in English (2,297 screens) and Russian (2,299) after the fixes; before them, 34/35 clipped technique reasons |
+| R7 | Saves, languages, offline | Run saves round-trip at every simulated step; v3–v6 fixtures (unit tests); no new save version (techniques keep their card ids; events store `cost`/`required` as optional fields); `tools/pwa.mjs` 16/16 offline; EN and RU acceptance with reload and Continue |
+
+**Still for human judgment.** Whether techniques read as intended: a free ally helping the attacker. Whether the pivot slot feels like a real choice. Whether Churn Engine is fun at its current strength. No physical iPhone or iPad test; no App Store work.
+
 ## Version
 
 Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exit gate has passed with evidence here; the patch number counts published builds with changes since that gate; `1.0.0` is the Phase 9 release. The title tagline, the "Patch Notes" event, `package.json` and the iOS project all show the same number (enforced by a test).
@@ -590,7 +750,7 @@ Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exi
 
 The table above follows the earlier roadmap. From 2026-11-13 the revised roadmap applies: the number keeps counting from 0.2, the minor number advances when one of the revised roadmap's phase gates is accepted (Phase 1 needs human playtesting for that), and the patch number counts published builds in between.
 
-Current version: **0.2.7** (the beta-feedback patch and its follow-up, plus revised-roadmap Phase 3, shared party HP and individual Defense, Phase 4, basic attacks, artes, support and a persistent hand, Phase 5, the command queue, hero Recovery and Relays, Phase 6, Act I onboarding, Relay accessibility, Act I tuning and telegraphs, and Phase 7, EX Combo recipes, discovery and the Combo Journal; Phase 1 still waits for human playtesting, so the minor number stays at 2; earlier 0.2.0 passed the old Phase 2 gate). The previous build, 0.2.6, is commit `3fd8b6b` (source `0bfcf8f`).
+Current version: **0.2.8** (the beta-feedback patch and its follow-up, plus revised-roadmap Phase 3, shared party HP and individual Defense, Phase 4, basic attacks, artes, support and a persistent hand, Phase 5, the command queue, hero Recovery and Relays, Phase 6, Act I onboarding, Relay accessibility, Act I tuning and telegraphs, and Phase 7, EX Combo recipes, discovery and the Combo Journal; Phase 1 still waits for human playtesting, so the minor number stays at 2; earlier 0.2.0 passed the old Phase 2 gate). The previous build, 0.2.6, is commit `3fd8b6b` (source `0bfcf8f`). Phase 8 (0.2.8) completes the content conversion: techniques, Pressure Valve, behavioural audits of every card, relic, mutation, graft, adaptation, event and service, the reward economy and build differentiation.
 
 ## Not present in this build
 
@@ -609,10 +769,10 @@ These roadmap references have no counterpart in this repository:
 | Normal enemies | 12–18 | 12 (+1 summon) |
 | Elites | 6 | 6 |
 | Bosses | 3 + up to 3 alternatives | 6 (2 per act, one chosen per run) |
-| Playable cards | 75–100 | 80 (25 basic attacks, 42 artes, 13 support; 4 of them kept for older decks but not offered) + 1 withheld (Pressure Valve) |
+| Playable cards | 75–100 | 81 (24 basic attacks, 40 artes, 17 support, four of the support cards techniques); every card is offered, none withheld or kept as a stub |
 | Relics | 30–45 | 39 (incl. 5 boss trophies) |
 | Events | 12–18 | 21 |
-| Build families | ≥ 4 | 10 (each with a passing signature test) |
+| Build families | ≥ 4 | 10, all assembled through ordinary offers by build-focused campaigns (`simulate --build=each`); 9 shown through separate ordinary runs in `accept8 runs` (Reserve depends on an early Reserve offer); Churn Engine is the weakest (9/30 wins) |
 | EX Combo recipes | 12–16 (Phase 7) | 15 (every build has at least one; all reached through legal play in `tools/recipelab.mjs`) |
 | Starting relics | 4 with unlocks | 4 with unlocks |
 

@@ -419,3 +419,31 @@ test('a grafted, upgraded card keeps both through zone moves, a save and a load'
   assert.equal(c.cards.get(inst.uid).graft, 'spark');
   assert.equal(c.cards.get(inst.uid).up, true);
 });
+
+// ───────────────────────── anti-stranding (assignment §11.4) ─────────────────────────
+import { decide, perform } from '../tools/lib/bot.mjs';
+test('support-heavy, arte-heavy and rank-modified decks still finish real fights (no stranding)', () => {
+  const decks = {
+    support: ['scrapline', 'rivet_jab', 'piston_strike', 'scrapline', 'mend_circuit', 'salvage', 'brace_up', 'ward_weave', 'low_gear', 'signal_boost', 'hold_the_line', 'spare_parts', 'shuffle_step', 'rethread', 'cache_hook', 'vault_guard'],
+    arte: ['scrapline', 'rivet_jab', 'piston_strike', 'scrapfall', 'recycler', 'sunderline', 'capstone', 'thermal_lance', 'detonate', 'last_word', 'overpressure', 'bolt_volley', 'crosscut', 'ladder_peak', 'grand_relay', 'chorus_break'],
+    ranked: [{ id: 'scrapline', rankMod: 2 }, { id: 'scrapline', rankMod: 2 }, { id: 'rivet_jab', rankMod: 1 }, { id: 'piston_strike' }, { id: 'pinprick', rankMod: 2 }, { id: 'scrapfall', rankMod: 2 }, { id: 'thermal_lance', rankMod: 2 }, { id: 'bolt_volley', rankMod: 2 }, 'mend_circuit', 'salvage', { id: 'step_up', rankMod: 1 }, { id: 'quickdraw' }],
+  };
+  for (const [name, ids] of Object.entries(decks)) {
+    for (const enemies of [['rush_hound', 'wire_jammer'], ['foundry_warden']]) {
+      const c = new Combat({ deck: ids.map(spec), party: PARTY, hp: 130, maxHp: 130, enemies, seed: 17, relics: [], mutations: [], act: 1 });
+      let think = 0.4, idleSince = 0;
+      for (let step = 0; step < 30 * 300 && c.phase !== 'END'; step++) {
+        c.update(1 / 30);
+        think -= 1 / 30;
+        if (think > 0) continue;
+        think = 0.8;
+        const a = decide(c, { profile: 'regular', rng: () => 0.5 });
+        perform(c, a);
+        if (a.type !== 'wait' || c.combo || c.executing) idleSince = c.t;
+        assert.ok(c.t - idleSince < 25, `${name} vs ${enemies}: stranded for 25s at t=${c.t.toFixed(1)}`);
+        integrity(c);
+      }
+      assert.equal(c.phase, 'END', `${name} vs ${enemies}: the fight ends`);
+    }
+  }
+});
