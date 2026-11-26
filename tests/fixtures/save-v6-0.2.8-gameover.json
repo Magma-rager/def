@@ -1,0 +1,945 @@
+{
+  "version": 6,
+  "seed": 1001,
+  "act": 3,
+  "party": [
+    {
+      "id": "V"
+    },
+    {
+      "id": "C"
+    },
+    {
+      "id": "S"
+    }
+  ],
+  "hp": 112,
+  "maxHp": 130,
+  "deck": [
+    {
+      "uid": "c1",
+      "id": "scrapline",
+      "up": true,
+      "graft": "cached",
+      "rankMod": 0,
+      "variant": "A"
+    },
+    {
+      "uid": "c2",
+      "id": "scrapline",
+      "up": true,
+      "graft": null,
+      "rankMod": 0,
+      "variant": "B"
+    },
+    {
+      "uid": "c3",
+      "id": "scrapline",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": "A"
+    },
+    {
+      "uid": "c4",
+      "id": "rivet_jab",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": "A"
+    },
+    {
+      "uid": "c5",
+      "id": "rivet_jab",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": "B"
+    },
+    {
+      "uid": "c6",
+      "id": "hotwire",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": "B"
+    },
+    {
+      "uid": "c7",
+      "id": "piston_strike",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": "A"
+    },
+    {
+      "uid": "c8",
+      "id": "piston_strike",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": "B"
+    },
+    {
+      "uid": "c9",
+      "id": "scrapfall",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c10",
+      "id": "thermal_lance",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c11",
+      "id": "bolt_volley",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c12",
+      "id": "mend_circuit",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c13",
+      "id": "salvage",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c14",
+      "id": "gear_swap",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c15",
+      "id": "polarity_shift",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c16",
+      "id": "gear_swap",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c17",
+      "id": "gear_swap",
+      "up": false,
+      "graft": "quick",
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c18",
+      "id": "gear_swap",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c19",
+      "id": "thermal_lance",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c20",
+      "id": "static_bloom",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c21",
+      "id": "gear_swap",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c22",
+      "id": "tinder_toss",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c23",
+      "id": "short_circuit",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c24",
+      "id": "suit_storm",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c25",
+      "id": "polarity_shift",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c26",
+      "id": "prism_cut",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c27",
+      "id": "gear_swap",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    }
+  ],
+  "nextUid": 28,
+  "relics": [
+    "beta_badge",
+    "lucky_rivet",
+    "scrap_heart",
+    "mirror_lens",
+    "spare_pockets",
+    "counter_spring"
+  ],
+  "mutations": [
+    "duality_engine",
+    "perfect_pitch"
+  ],
+  "scrap": 109,
+  "bosses": {
+    "1": "scrap_tyrant",
+    "2": "mirror_array",
+    "3": "the_corruptor"
+  },
+  "map": {
+    "act": 3,
+    "nodes": [
+      {
+        "id": "n3_0",
+        "depth": 0,
+        "y": 0.16811898212181403,
+        "type": "battle",
+        "trait": "STATIC",
+        "edges": [
+          "n3_3"
+        ],
+        "visited": true
+      },
+      {
+        "id": "n3_1",
+        "depth": 0,
+        "y": 0.4591131378702509,
+        "type": "battle",
+        "trait": null,
+        "edges": [
+          "n3_5",
+          "n3_4"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_2",
+        "depth": 0,
+        "y": 0.8401130470951709,
+        "type": "battle",
+        "trait": "QUIET_CHANNEL",
+        "edges": [
+          "n3_6"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_3",
+        "depth": 1,
+        "y": 0.14237346957088448,
+        "type": "battle",
+        "trait": "QUIET_CHANNEL",
+        "edges": [
+          "n3_7"
+        ],
+        "visited": true
+      },
+      {
+        "id": "n3_4",
+        "depth": 1,
+        "y": 0.4113703742274083,
+        "type": "battle",
+        "trait": "QUIET_CHANNEL",
+        "edges": [
+          "n3_8"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_5",
+        "depth": 1,
+        "y": 0.582135088776704,
+        "type": "event",
+        "trait": null,
+        "edges": [
+          "n3_9"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_6",
+        "depth": 1,
+        "y": 0.8446761590515962,
+        "type": "event",
+        "trait": null,
+        "edges": [
+          "n3_10"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_7",
+        "depth": 2,
+        "y": 0.13228255493741017,
+        "type": "battle",
+        "trait": "BLACKOUT",
+        "edges": [
+          "n3_11",
+          "n3_12"
+        ],
+        "visited": true
+      },
+      {
+        "id": "n3_8",
+        "depth": 2,
+        "y": 0.39012666525377426,
+        "type": "event",
+        "trait": null,
+        "edges": [
+          "n3_12"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_9",
+        "depth": 2,
+        "y": 0.5973932831984712,
+        "type": "surgery",
+        "trait": null,
+        "edges": [
+          "n3_12",
+          "n3_13"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_10",
+        "depth": 2,
+        "y": 0.8613813744625076,
+        "type": "battle",
+        "trait": null,
+        "edges": [
+          "n3_13",
+          "n3_12"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_11",
+        "depth": 3,
+        "y": 0.15374987117247654,
+        "type": "elite",
+        "trait": null,
+        "edges": [
+          "n3_14"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_12",
+        "depth": 3,
+        "y": 0.5105059735787412,
+        "type": "shop",
+        "trait": null,
+        "edges": [
+          "n3_15",
+          "n3_14"
+        ],
+        "visited": true
+      },
+      {
+        "id": "n3_13",
+        "depth": 3,
+        "y": 0.8298232223140076,
+        "type": "battle",
+        "trait": null,
+        "edges": [
+          "n3_16"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_14",
+        "depth": 4,
+        "y": 0.15825288365983092,
+        "type": "treasure",
+        "trait": null,
+        "edges": [
+          "n3_17"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_15",
+        "depth": 4,
+        "y": 0.5290468373801559,
+        "type": "battle",
+        "trait": "QUIET_CHANNEL",
+        "edges": [
+          "n3_19",
+          "n3_18"
+        ],
+        "visited": true
+      },
+      {
+        "id": "n3_16",
+        "depth": 4,
+        "y": 0.7928645506501198,
+        "type": "battle",
+        "trait": "SCRAP_CACHE",
+        "edges": [
+          "n3_20"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_17",
+        "depth": 5,
+        "y": 0.1041238701203838,
+        "type": "event",
+        "trait": null,
+        "edges": [
+          "n3_21"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_18",
+        "depth": 5,
+        "y": 0.35139867101679556,
+        "type": "battle",
+        "trait": null,
+        "edges": [
+          "n3_22"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_19",
+        "depth": 5,
+        "y": 0.5852219786378555,
+        "type": "battle",
+        "trait": "HOTWIRE",
+        "edges": [
+          "n3_23",
+          "n3_22"
+        ],
+        "visited": true
+      },
+      {
+        "id": "n3_20",
+        "depth": 5,
+        "y": 0.8468841964175227,
+        "type": "battle",
+        "trait": null,
+        "edges": [
+          "n3_24",
+          "n3_23"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_21",
+        "depth": 6,
+        "y": 0.11177035740111023,
+        "type": "battle",
+        "trait": null,
+        "edges": [
+          "n3_25"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_22",
+        "depth": 6,
+        "y": 0.3863473461737158,
+        "type": "rest",
+        "trait": null,
+        "edges": [
+          "n3_26"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_23",
+        "depth": 6,
+        "y": 0.654270226357039,
+        "type": "battle",
+        "trait": "SCRAP_CACHE",
+        "edges": [
+          "n3_26",
+          "n3_25"
+        ],
+        "visited": true
+      },
+      {
+        "id": "n3_24",
+        "depth": 6,
+        "y": 0.9142118187708548,
+        "type": "event",
+        "trait": null,
+        "edges": [
+          "n3_27"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_25",
+        "depth": 7,
+        "y": 0.15779926317433515,
+        "type": "rest",
+        "trait": "QUIET_CHANNEL",
+        "edges": [
+          "n3_boss"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_26",
+        "depth": 7,
+        "y": 0.5476238195279923,
+        "type": "rest",
+        "trait": "QUIET_CHANNEL",
+        "edges": [
+          "n3_boss"
+        ],
+        "visited": true
+      },
+      {
+        "id": "n3_27",
+        "depth": 7,
+        "y": 0.8122704056867709,
+        "type": "shop",
+        "trait": "SCRAP_CACHE",
+        "edges": [
+          "n3_boss"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n3_boss",
+        "depth": 8,
+        "y": 0.5,
+        "type": "boss",
+        "trait": null,
+        "edges": [],
+        "visited": true
+      }
+    ],
+    "bossId": "the_corruptor"
+  },
+  "position": "n3_boss",
+  "path": [
+    "n3_0",
+    "n3_3",
+    "n3_7",
+    "n3_12",
+    "n3_15",
+    "n3_19",
+    "n3_23",
+    "n3_26",
+    "n3_boss"
+  ],
+  "log": [
+    {
+      "act": 1,
+      "node": "n1_2",
+      "type": "battle",
+      "trait": null,
+      "at": 1
+    },
+    {
+      "act": 1,
+      "node": "n1_5",
+      "type": "battle",
+      "trait": "STATIC",
+      "at": 2
+    },
+    {
+      "act": 1,
+      "node": "n1_7",
+      "type": "battle",
+      "trait": null,
+      "at": 3
+    },
+    {
+      "act": 1,
+      "node": "n1_11",
+      "type": "battle",
+      "trait": "WILD_SIGNAL",
+      "at": 4
+    },
+    {
+      "act": 1,
+      "node": "n1_15",
+      "type": "surgery",
+      "trait": null,
+      "at": 5
+    },
+    {
+      "act": 1,
+      "node": "n1_18",
+      "type": "event",
+      "trait": null,
+      "at": 6
+    },
+    {
+      "act": 1,
+      "node": "n1_21",
+      "type": "shop",
+      "trait": null,
+      "at": 7
+    },
+    {
+      "act": 1,
+      "node": "n1_24",
+      "type": "shop",
+      "trait": null,
+      "at": 8
+    },
+    {
+      "act": 1,
+      "node": "n1_boss",
+      "type": "boss",
+      "trait": null,
+      "at": 9
+    },
+    {
+      "act": 2,
+      "node": "n2_1",
+      "type": "battle",
+      "trait": null,
+      "at": 10
+    },
+    {
+      "act": 2,
+      "node": "n2_4",
+      "type": "event",
+      "trait": "WILD_SIGNAL",
+      "at": 11
+    },
+    {
+      "act": 2,
+      "node": "n2_6",
+      "type": "battle",
+      "trait": null,
+      "at": 12
+    },
+    {
+      "act": 2,
+      "node": "n2_9",
+      "type": "battle",
+      "trait": "SCRAP_CACHE",
+      "at": 13
+    },
+    {
+      "act": 2,
+      "node": "n2_12",
+      "type": "shop",
+      "trait": null,
+      "at": 14
+    },
+    {
+      "act": 2,
+      "node": "n2_15",
+      "type": "surgery",
+      "trait": null,
+      "at": 15
+    },
+    {
+      "act": 2,
+      "node": "n2_18",
+      "type": "battle",
+      "trait": "HOTWIRE",
+      "at": 16
+    },
+    {
+      "act": 2,
+      "node": "n2_22",
+      "type": "rest",
+      "trait": null,
+      "at": 17
+    },
+    {
+      "act": 2,
+      "node": "n2_boss",
+      "type": "boss",
+      "trait": null,
+      "at": 18
+    },
+    {
+      "act": 3,
+      "node": "n3_0",
+      "type": "battle",
+      "trait": "STATIC",
+      "at": 19
+    },
+    {
+      "act": 3,
+      "node": "n3_3",
+      "type": "battle",
+      "trait": "QUIET_CHANNEL",
+      "at": 20
+    },
+    {
+      "act": 3,
+      "node": "n3_7",
+      "type": "battle",
+      "trait": "BLACKOUT",
+      "at": 21
+    },
+    {
+      "act": 3,
+      "node": "n3_12",
+      "type": "shop",
+      "trait": null,
+      "at": 22
+    },
+    {
+      "act": 3,
+      "node": "n3_15",
+      "type": "battle",
+      "trait": "QUIET_CHANNEL",
+      "at": 23
+    },
+    {
+      "act": 3,
+      "node": "n3_19",
+      "type": "battle",
+      "trait": "HOTWIRE",
+      "at": 24
+    },
+    {
+      "act": 3,
+      "node": "n3_23",
+      "type": "battle",
+      "trait": "SCRAP_CACHE",
+      "at": 25
+    },
+    {
+      "act": 3,
+      "node": "n3_26",
+      "type": "rest",
+      "trait": "QUIET_CHANNEL",
+      "at": 26
+    },
+    {
+      "act": 3,
+      "node": "n3_boss",
+      "type": "boss",
+      "trait": null,
+      "at": 27
+    }
+  ],
+  "pending": {
+    "type": "gameover",
+    "victory": true
+  },
+  "stats": {
+    "battles": 17,
+    "combos": 73,
+    "perfect": 31,
+    "cashouts": 42,
+    "forced": 0,
+    "longCombos": 48,
+    "churns": 0,
+    "guardGained": 782,
+    "guardAbsorbed": 401,
+    "relays": 165,
+    "crosses": 92,
+    "steps": 91,
+    "variantPlays": {
+      "A": 211,
+      "B": 199,
+      "EX": 14
+    },
+    "momentumSpent": 255,
+    "flowGained": 17.25,
+    "reservePlays": 0,
+    "interferencePayoffs": 84,
+    "damage": 5629,
+    "maxHit": 39,
+    "longest": 7,
+    "finishers": 27,
+    "damageTaken": 150,
+    "interference": 29,
+    "elites": 0,
+    "cardsPlayed": 437,
+    "bestComboDamage": 150,
+    "exActivations": 76,
+    "exByRecipe": {
+      "cross_current": 7,
+      "tandem_signal": 15,
+      "three_way_circuit": 10,
+      "prism_sequence": 3,
+      "iron_harmony": 1,
+      "quick_settlement": 27,
+      "second_wind": 4,
+      "interference_reversal": 5,
+      "final_harmonic": 2,
+      "pressure_release": 2
+    },
+    "exOverlaps": 7,
+    "exDamage": 592
+  },
+  "flags": {
+    "praisedRelay": true
+  },
+  "seenEvents": [
+    "vending",
+    "dev_door"
+  ],
+  "removeCost": 75,
+  "prepToken": null,
+  "bossDecisions": [
+    {
+      "act": 1,
+      "boss": "scrap_tyrant",
+      "prep": "prepared",
+      "planId": "brace",
+      "rareCard": null,
+      "adapt": null,
+      "evidence": null,
+      "result": "victory",
+      "mutation": "duality_engine"
+    },
+    {
+      "act": 2,
+      "boss": "mirror_array",
+      "prep": "prepared",
+      "planId": "brace",
+      "rareCard": null,
+      "adapt": "flow",
+      "evidence": {
+        "k": "{a}s of bonus Flow gained",
+        "p": {
+          "a": {
+            "n": 9.499999999999998,
+            "d": 1
+          }
+        }
+      },
+      "result": "victory",
+      "mutation": "perfect_pitch"
+    },
+    {
+      "act": 3,
+      "boss": "the_corruptor",
+      "prep": "prepared",
+      "planId": "brace",
+      "rareCard": null,
+      "adapt": "cashout",
+      "evidence": {
+        "k": "{a} of {b} combos ended in a Cash Out",
+        "p": {
+          "a": 28,
+          "b": 54
+        }
+      },
+      "result": "victory"
+    }
+  ],
+  "battleCount": 17,
+  "lastFormation": "predator_needle,interference_mite",
+  "nextBattleMod": null,
+  "tutorial": false,
+  "startedAt": 1795725096436,
+  "floors": 27,
+  "bossesDefeated": [
+    "scrap_tyrant",
+    "mirror_array",
+    "the_corruptor"
+  ],
+  "enemiesSeen": [
+    "rush_hound",
+    "interference_mite",
+    "wire_jammer",
+    "scrap_tyrant",
+    "needle_wing",
+    "bulwark_signal",
+    "suit_scrambler",
+    "latch_wisp",
+    "signal_hound",
+    "mirror_array",
+    "scrap_overseer",
+    "predator_needle",
+    "iron_maw",
+    "the_corruptor"
+  ],
+  "relicsSeen": [
+    "beta_badge",
+    "lucky_rivet",
+    "scrap_heart",
+    "mirror_lens",
+    "spare_pockets",
+    "counter_spring"
+  ],
+  "exFound": [
+    "cross_current",
+    "tandem_signal",
+    "three_way_circuit",
+    "prism_sequence",
+    "iron_harmony",
+    "quick_settlement",
+    "second_wind",
+    "interference_reversal",
+    "final_harmonic",
+    "pressure_release"
+  ]
+}

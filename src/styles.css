@@ -728,3 +728,31 @@ html[lang="ru"] .compact .hand .card-text { max-height: 46px; }
 .stat .lblwrap .free { margin-left: 0; font-size: 0.58em; padding: 0 3px; }
 html[lang="ru"] .stat .lbl { letter-spacing: 0.02em; }
 
+
+/* Permanent progression */
+.panel.starter-panel { width: min(850px, 94vw); display: flex; flex-direction: column; overflow: hidden; }
+.starter-panel > h2, .starter-panel > p, .starter-panel > .row-btns { flex: none; }
+.starter-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(250px, 100%), 1fr)); align-content: start; }
+.starter-panel .starter-list { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 2px 5px 2px 2px; }
+.starter-opt { align-items: start; min-width: 0; cursor: default; }
+button.starter-opt:not(:disabled) { cursor: pointer; }
+.starter-opt:disabled { opacity: 0.8; }
+.starter-opt:focus-visible, .achievement-filter:focus-visible { outline: 2px solid var(--brass-hi); outline-offset: 1px; }
+.starter-opt .rb-ico { flex: none; }
+.starter-opt .so-body { min-width: 0; overflow-wrap: anywhere; }
+.starter-opt .so-body span { font-size: 14px; line-height: 1.15; }
+.achievement-filter { margin-bottom: 8px; padding: 6px; background: var(--char2); color: inherit; border: 1px solid var(--brass-lo); border-radius: 4px; }
+.achievement-grid, .run-progress { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr)); gap: 8px; }
+.achievement-tile, .run-progress section, .run-detail { border: 1px solid var(--brass-lo); border-radius: 5px; padding: 8px 10px; min-width: 0; }
+.achievement-tile p, .run-detail p { margin: 4px 0; }
+.achievement-heading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 10px; }
+.run-progress { margin: 8px 0; }
+.run-progress h3, .run-progress ul { margin: 0; }
+.run-progress ul { padding-inline-start: 18px; }
+.run-record > summary { cursor: pointer; }
+.save-retry { display: grid; place-items: center; }
+html.reduced-motion .progress-toast, html.reduced-motion .progress-toast.out { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .progress-toast { animation: none; transition: none; }
+  .progress-toast.out { transform: none; }
+}

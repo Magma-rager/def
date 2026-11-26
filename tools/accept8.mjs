@@ -6,7 +6,7 @@
 //   node tools/accept8.mjs runs [runs per build=3]
 //        Scenario F: ordinary campaigns played headless through the same engine (Run + Combat) by a
 //        build-focused player (tools/simulate.mjs's acquisition policy): not an interface-level claim.
-//   node tools/accept8.mjs campaign [lang=en] [width=1180] [height=820] [minutes=45]
+//   node tools/accept8.mjs campaign [lang=en] [width=1180] [height=820] [outDir=accept8-out]
 //        Scenario G: a whole three-Act run from the title screen through the interface (the shared UI
 //        bot taps), then the ending, credits, results, Museum and a new run.
 //
@@ -107,7 +107,7 @@ if (MODE === 'runs') {
         if (p.type === 'treasure') { const r = Math.max(0, p.relics.findIndex((id) => RELICS[id].tag === target)); if (run.treasureTake(r)) acq.relics.push(p.relics[r]); run.leaveNode(); continue; }
         if (p.type === 'surgery') { const g = p.grafts.find((x) => GRAFTS[x].tag === target) || p.grafts[0]; const t = run.d.deck.find((x) => fits(x.id) && run.canApplySelect(`graft:${g}`, x)); if (t) run.surgeryApply(t.uid, `graft:${g}`); run.leaveNode(); continue; }
         if (p.type === 'rest') { if (run.d.hp < run.d.maxHp * 0.7) run.restChoose('recover'); run.leaveNode(); continue; }
-        if (p.type === 'event') { const i = p.result ? -1 : EVENTS_FIRST(run); if (i >= 0) run.eventChoose(i); if (run.d.pending.select) { const sel = run.d.pending.select; const t = run.d.deck.find((x) => run.canApplySelect(sel.action, x)); if (t) run.applySelect(sel.action, t.uid); else run.cancelSelect(); } if (run.d.pending.select) run.d.pending.select = null; run.leaveNode(); continue; }
+        if (p.type === 'event') { const i = p.result ? -1 : EVENTS_FIRST(run); if (i >= 0) run.eventChoose(i); if (run.d.pending.select) { const sel = run.d.pending.select; const t = run.d.deck.find((x) => run.canApplySelect(sel.action, x)); if (t) run.applySelect(sel.action, t.uid); else run.cancelSelect(); } if (!run.leaveNode()) throw new Error(`Required selection at ${p.eventId} could not be completed`); continue; }
         run.leaveNode();
       }
       const tags = Object.entries(run.tagCounts()).sort((a, b) => b[1] - a[1]);
@@ -142,13 +142,18 @@ const URL = process.env.SB_URL || 'http://localhost:8123/index.html';
 fs.mkdirSync(outDir, { recursive: true });
 const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: W, height: H }, hasTouch: true });
-await ctx.addInitScript(([l, keys, mode]) => {
+const campaignProfile = MODE === 'campaign' && process.env.SB_CAMPAIGN_PROFILE ?
+  JSON.parse(fs.readFileSync(process.env.SB_CAMPAIGN_PROFILE, 'utf8')) : null;
+await ctx.addInitScript(([l, keys, mode, profile]) => {
   if (localStorage.getItem('signalbreak.meta.v1')) return;
   localStorage.setItem('signalbreak.settings.v1', JSON.stringify({ lang: l }));
-  if (mode === 'campaign') return; // a first-time player: the campaign shows its own lessons
+  if (mode === 'campaign') {
+    if (profile) localStorage.setItem('signalbreak.meta.v1', JSON.stringify(profile));
+    return;
+  }
   const tut = Object.fromEntries(keys.filter((k) => k !== 'technique').map((k) => [k, true]));
   localStorage.setItem('signalbreak.meta.v1', JSON.stringify({ version: 1, totalRuns: 2, defeats: 2, tutorialDone: true, lessonsMigrated: true, tut, runs: [{ result: 'defeat', act: 1, floors: 6, score: 300, seed: 1 }] }));
-}, [LANG, LESSON_KEYS, MODE]);
+}, [LANG, LESSON_KEYS, MODE, campaignProfile]);
 const p = await ctx.newPage();
 const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));
@@ -241,11 +246,24 @@ if (MODE === 'campaign') {
   const MIN = +(process.env.SB_MINUTES || 45);
   await p.goto(URL);
   await p.waitForFunction(() => window.__sb);
+  const previous = await p.evaluate(() => window.__sb.meta.totalRuns);
   await clickText('New Run'); await wait(300);
+  const starter = process.env.SB_CAMPAIGN_STARTER || 'beta_badge';
+  await p.locator(`.starter-panel [data-relic="${starter}"]`).tap();
   await clickText('Begin'); await wait(500);
+  const initial = await p.evaluate(() => ({ relics: window.__sb.run.d.relics, hp: window.__sb.run.d.hp, scrap: window.__sb.run.d.scrap, seed: window.__sb.run.d.seed }));
+  check('start', 'Campaign began with the selected single relic and standard resources', initial.relics.join() === starter && initial.hp === 130 && initial.scrap === 80, JSON.stringify(initial));
   const end = Date.now() + MIN * 60000;
   const seen = { acts: new Set([1]), bosses: [], screens: new Set() };
-  let battles = 0, lastSig = '', sameSince = Date.now(), lastLog = 0, stuckShots = 0;
+  let battles = 0, lastSig = '', sameSince = Date.now(), lastLog = 0;
+  const recoveries = [];
+  const progress = [];
+  const reloadedActs = new Set();
+  const chooseCard = async () => {
+    if (!await tapSel('.modal .deck-grid.select .card:not(.disabled)')) return false;
+    await wait(120);
+    return tapSel('.modal .select-foot .btn.primary:not([disabled])');
+  };
   while (Date.now() < end) {
     const sc = await screen();
     seen.screens.add(sc);
@@ -253,10 +271,16 @@ if (MODE === 'campaign') {
     const st = await p.evaluate(() => { const r = window.__sb.run; const c = window.__sb.battle && window.__sb.battle.combat; return r ? { act: r.d.act, floors: r.d.floors, battles: r.d.battleCount, hp: r.d.hp, pending: r.d.pending && r.d.pending.type, t: c ? Math.floor(c.t / 5) : null, phase: c ? c.phase : null } : null; });
     const sig = `${sc}|${JSON.stringify(st)}`;
     if (sig !== lastSig) { lastSig = sig; sameSince = Date.now(); }
-    if (Date.now() - lastLog > 60000) { lastLog = Date.now(); log(`  campaign: ${sc} ${JSON.stringify(st)}`); }
+    if (Date.now() - lastLog > 60000) {
+      lastLog = Date.now();
+      progress.push({ atSeconds: Math.floor((lastLog - t0) / 1000), screen: sc, state: st });
+      log(`  campaign: ${sc} ${JSON.stringify(st)}`);
+    }
     if (Date.now() - sameSince > 60000) {
       log(`  STUCK on ${sc} ${JSON.stringify(st)}`);
-      if (stuckShots++ < 3) await shot(`G-stuck-${stuckShots}`);
+      const modal = await p.evaluate(() => [...document.querySelectorAll('.modal button')].map((b) => ({ label: b.textContent.trim(), disabled: b.disabled })));
+      recoveries.push({ screen: sc, state: st, modal, atSeconds: Math.floor((Date.now() - t0) / 1000) });
+      if (recoveries.length <= 3) await shot(`G-stuck-${recoveries.length}`);
       for (const label of ['Close', 'Cancel', 'Leave', 'Continue', 'Skip']) if (await clickText(label)) break;
       await p.keyboard.press('Escape');
       sameSince = Date.now();
@@ -267,6 +291,16 @@ if (MODE === 'campaign') {
     if (act) seen.acts.add(act);
     if (sc === 'battle') { battles++; await botBattle(300000); continue; }
     if (sc === 'map') {
+      if (act && !reloadedActs.has(act)) {
+        const snap = () => p.evaluate(() => JSON.stringify(window.__sb.run.d));
+        const before = await snap();
+        await p.reload();
+        await p.waitForFunction(() => window.__sb);
+        await clickText('Continue');
+        await p.waitForFunction(() => window.__sb.run);
+        check(`save-${act}`, 'Continue restores the ordinary checkpoint', before === await snap());
+        reloadedActs.add(act);
+      }
       const id = await p.evaluate(() => { const r = window.__sb.run; const av = r.availableNodes(); const w = { boss: 9, rest: r.d.hp < r.d.maxHp * 0.55 ? 8 : 1, treasure: 6, battle: 4, shop: 3, event: 3, surgery: 2, elite: r.d.hp > r.d.maxHp * 0.75 ? 2 : 0 }; return av.sort((a, b) => (w[r.node(b).type] || 0) - (w[r.node(a).type] || 0))[0]; });
       await tapSel(`.map-node[data-node="${id}"]`); await wait(150); await clickText('Travel'); await wait(300); continue;
     }
@@ -281,15 +315,38 @@ if (MODE === 'campaign') {
       await wait(300);
       continue;
     }
-    if (sc === 'shop' || sc === 'surgery') { await clickText('Leave'); await wait(300); continue; }
+    if (sc === 'shop') {
+      const affordable = await p.evaluate(() => {
+        const r = window.__sb.run;
+        return r.d.pending.stock.cards.findIndex((c) => !c.sold && c.price <= r.d.scrap);
+      });
+      if (affordable >= 0) await tapSel(`.shop-cards .shop-item:nth-child(${affordable + 1})`);
+      await clickText('Leave'); await wait(300); continue;
+    }
+    if (sc === 'surgery') {
+      if (await p.$('.surgery-ops .choice:not([disabled])')) {
+        await tapSel('.surgery-ops .choice:not([disabled])'); await wait(250);
+        if ((await screen()) === 'modal') { await chooseCard(); await wait(250); }
+      }
+      await clickText('Leave'); await wait(300); continue;
+    }
     if (sc === 'treasure') { await tapSel('.reward-relics .relic-badge'); await wait(150); await clickText('Continue'); await clickText('Leave'); await wait(300); continue; }
-    if (sc === 'modal') { await tapSel('.modal .deck-grid .card'); await wait(120); await tapSel('.modal .btn.primary'); await wait(200); continue; }
+    if (sc === 'modal') { await chooseCard(); await wait(200); continue; }
     if (!(await clickText('Continue')) && !(await clickText('Leave'))) await wait(300);
   }
   // a finished run is recorded in the profile (meta.runs[0], src/engine/run.js summary) and the live run is cleared
   const fin = await p.evaluate(() => ({ last: (window.__sb.meta.runs || [])[0] || null, meta: window.__sb.meta }));
-  const last = fin.last;
+  const last = fin.meta.totalRuns === previous + 1 && fin.last?.seed === initial.seed ? fin.last : null;
+  const report = () => ({ seen: { acts: [...seen.acts], bosses: seen.bosses, screens: [...seen.screens] },
+    progress, recoveries, seed: initial.seed, starter, reloadedActs: [...reloadedActs],
+    disposition: last?.result === 'victory' ? (recoveries.length ? 'completed_after_nudge' : 'completed_without_nudge') :
+      (last?.result === 'defeat' ? 'defeat' : 'unresolved_timeout'), errors });
   check(53, 'A three-Act run is finished through the interface (victory recorded)', seen.acts.has(3) && last && last.result === 'victory' && last.act === 3 && last.bosses.length === 3, `acts ${[...seen.acts].join(',')}, bosses ${seen.bosses.join(', ')}, battles ${battles}, recorded ${last ? `${last.result}, act ${last.act}, bosses ${last.bosses.join('/')}` : 'nothing'}`);
+  if (!last || last.result !== 'victory') {
+    await shot('G-incomplete');
+    await b.close();
+    finish(`G-campaign-${LANG}-${W}`, report());
+  }
   for (let i = 0; i < 80 && !['credits', 'results'].includes(await screen()); i++) { if ((await screen()) === 'dialog') await tapSel('.dlg-skip'); else await clickText('Continue'); await wait(200); }
   check(54, 'The ending is shown', seen.screens.has('story') || seen.screens.has('dialog'), [...seen.screens].join(','));
   let sawCredits = (await screen()) === 'credits';
@@ -301,24 +358,37 @@ if (MODE === 'campaign') {
   const stats = await p.evaluate(() => (document.querySelector('.results-body') || {}).textContent || '');
   const shows = (v) => stats.includes(String(v));
   check(57, 'Run statistics are shown and match the recorded run (score, floors, deck, combos)', last && shows(last.score) && shows(last.floors) && shows(last.deckSize) && shows(last.combos), stats.slice(0, 200));
+  check('record', 'One new campaign is recorded and permanent progress is shown', fin.meta.totalRuns === previous + 1 &&
+    !!(await p.$('.results-body .run-progress')) && last?.starter === starter);
   await clickText('Museum'); await wait(400);
   check(58, 'The Museum opens (from the results screen)', !!(await p.$('.modal .museum')));
   await tapSel('.museum [data-tab="Journal"]'); await wait(200);
   const jr = await p.evaluate(() => document.querySelectorAll('.jr-card.found').length);
   check(59, 'Card/relic discoveries and the EX Combo Journal are recorded', jr >= 1 && Object.keys(fin.meta.combos || {}).length >= 1, `${jr} recipes found`);
   await clickText('Close'); await wait(200);
-  const before = await p.evaluate(() => ({ runs: window.__sb.meta.totalRuns, wins: window.__sb.meta.wins || 0, unlocks: JSON.stringify(window.__sb.meta.unlocks || window.__sb.meta.unlocked || {}) }));
+  const availableStart = async () => p.evaluate(async () => {
+    const { starterOptions } = await import('/src/engine/progression.js');
+    return starterOptions(window.__sb.meta).filter((o) => o.available).map((o) => o.id);
+  });
+  const before = await p.evaluate(() => ({ runs: window.__sb.meta.totalRuns }));
+  const priorOptions = await availableStart();
   if (!(await clickText('New Run'))) { await clickText('Title'); await wait(300); await clickText('New Run'); }
-  await wait(300); await clickText('Abandon & start new'); await wait(200); await clickText('Begin'); await wait(500);
+  await wait(300); await clickText('Abandon & start new'); await wait(200);
+  const nextStarter = priorOptions.find((id) => id !== 'beta_badge' && id !== starter) || 'beta_badge';
+  await p.locator(`.starter-panel [data-relic="${nextStarter}"]`).tap();
+  await clickText('Begin'); await wait(500);
   await skipDialogs();
-  const after = await p.evaluate(() => ({ runs: window.__sb.meta.totalRuns, run: !!window.__sb.run, act: window.__sb.run && window.__sb.run.d.act }));
-  check(60, 'A subsequent run begins', after.run && after.act === 1);
-  check(61, 'Persistent unlocks carry over', before.unlocks === (await p.evaluate(() => JSON.stringify(window.__sb.meta.unlocks || window.__sb.meta.unlocked || {}))), before.unlocks.slice(0, 120));
+  const after = await p.evaluate(() => ({ runs: window.__sb.meta.totalRuns, run: !!window.__sb.run, act: window.__sb.run?.d.act,
+    relics: window.__sb.run?.d.relics, hp: window.__sb.run?.d.hp, scrap: window.__sb.run?.d.scrap }));
+  check(60, 'A subsequent run begins with an earned relic and standard resources',
+    after.run && after.act === 1 && after.relics.join() === nextStarter &&
+    nextStarter !== 'beta_badge' && after.hp === 130 && after.scrap === 80);
+  check(61, 'Persistent unlocks carry over', JSON.stringify(priorOptions) === JSON.stringify(await availableStart()), priorOptions.join(','));
   const again = await p.evaluate(() => (window.__sb.meta.runs || [])[0]);
   check(62, 'The previous run was recorded correctly (still the latest record after the new run began)', after.runs >= before.runs && again && last && again.seed === last.seed && again.score === last.score, `runs recorded ${fin.meta.totalRuns}; latest ${again && again.result} score ${again && again.score}`);
   check('—', 'No page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
   await b.close();
-  finish(`G-campaign-${LANG}-${W}`, { seen: { acts: [...seen.acts], bosses: seen.bosses }, errors });
+  finish(`G-campaign-${LANG}-${W}`, report());
 }
 
 // ═══════════════════════════ ui mode — Scenarios A–E ═══════════════════════════
@@ -339,7 +409,7 @@ log(`fixture: seed ${SEED}, first battle node ${FIRST}`);
 await p.goto(URL);
 await p.waitForFunction(() => window.__sb);
 await p.evaluate(() => document.fonts.ready);
-await p.evaluate((seed) => window.__sb.startRun('beta_badge', seed), SEED);
+await p.evaluate((seed) => window.__sb.startFixtureRun('beta_badge', seed), SEED);
 await skipDialogs();
 // first battle: an ordinary fight with the starter deck, played by taps
 await tapSel(`.map-node[data-node="${FIRST}"]`); await wait(150); await clickText('Travel');

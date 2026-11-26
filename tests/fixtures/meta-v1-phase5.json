@@ -1,0 +1,151 @@
+{
+  "version": 1,
+  "runs": [
+    {
+      "result": "victory",
+      "act": 3,
+      "floors": 27,
+      "bosses": [
+        "scrap_tyrant",
+        "mirror_array",
+        "the_corruptor"
+      ],
+      "elites": 1,
+      "deckSize": 26,
+      "relics": [
+        "beta_badge",
+        "lucky_rivet",
+        "scrap_heart",
+        "mirror_lens",
+        "breach_clamp",
+        "quiet_coil",
+        "patch_kit"
+      ],
+      "mutations": [
+        "bastion_protocol",
+        "perfect_pitch"
+      ],
+      "archetype": "guard",
+      "longest": 7,
+      "maxHit": 35,
+      "damage": 5389,
+      "combos": 127,
+      "perfect": 83,
+      "cashouts": 39,
+      "finishers": 31,
+      "score": 1560,
+      "seed": 1001,
+      "decisions": [
+        {
+          "act": 1,
+          "boss": "scrap_tyrant",
+          "prep": "prepared",
+          "planId": "brace",
+          "rareCard": null,
+          "adapt": null,
+          "evidence": null,
+          "result": "victory",
+          "mutation": "bastion_protocol"
+        },
+        {
+          "act": 2,
+          "boss": "mirror_array",
+          "prep": "prepared",
+          "planId": "brace",
+          "rareCard": null,
+          "adapt": "momentum",
+          "evidence": {
+            "k": "{a} Momentum spent",
+            "p": {
+              "a": 165
+            }
+          },
+          "result": "victory",
+          "mutation": "perfect_pitch"
+        },
+        {
+          "act": 3,
+          "boss": "the_corruptor",
+          "prep": "prepared",
+          "planId": "brace",
+          "rareCard": null,
+          "adapt": "momentum",
+          "evidence": {
+            "k": "{a} Momentum spent",
+            "p": {
+              "a": 424
+            }
+          },
+          "result": "victory"
+        }
+      ],
+      "date": 1795725096119,
+      "flags": {
+        "praisedRelay": true
+      }
+    }
+  ],
+  "totalRuns": 1,
+  "wins": 1,
+  "bossesDefeated": {
+    "scrap_tyrant": 1,
+    "mirror_array": 1,
+    "the_corruptor": 1
+  },
+  "enemiesSeen": {
+    "rush_hound": 1,
+    "interference_mite": 1,
+    "scrap_tyrant": 1,
+    "needle_wing": 1,
+    "bulwark_signal": 1,
+    "suit_scrambler": 1,
+    "latch_wisp": 1,
+    "signal_hound": 1,
+    "mirror_array": 1,
+    "scrap_overseer": 1,
+    "predator_needle": 1,
+    "rank_eater": 1,
+    "the_corruptor": 1
+  },
+  "relicsFound": [
+    "beta_badge",
+    "lucky_rivet",
+    "scrap_heart",
+    "mirror_lens",
+    "breach_clamp",
+    "quiet_coil",
+    "patch_kit"
+  ],
+  "cardsSeen": [
+    "scrapline",
+    "rivet_jab",
+    "hotwire",
+    "piston_strike",
+    "scrapfall",
+    "thermal_lance",
+    "bolt_volley",
+    "mend_circuit",
+    "salvage",
+    "brace_up",
+    "dead_drop",
+    "bulwark_shift",
+    "counterweight",
+    "junkstorm",
+    "hold_the_line",
+    "riposte_frame",
+    "static_bloom",
+    "tinder_toss"
+  ],
+  "bestCombo": 7,
+  "maxHit": 35,
+  "bestScore": 1560,
+  "endings": [
+    "core_stabilized"
+  ],
+  "archetypes": {
+    "guard": 1
+  },
+  "tutorialDone": true,
+  "defeats": 0,
+  "devTrust": 1
+}

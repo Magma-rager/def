@@ -425,15 +425,16 @@ if (!PART_A_ONLY) {
       if (bs.cover) partB.cover = true;
       // 27. respond to a telegraph: read the enemy winding up a heavy hit (hold it), once
       if ((!partB.held || !partB.guardInDanger) && (partB.holdTries || 0) < 6 && (!partB.lastHold || Date.now() - partB.lastHold > 4000)) {
-        const heavy = await p.evaluate(() => { const c = window.__sb.battle.combat; const e = c.aliveEnemies().find((x) => x.intent && x.intent.dmg >= 10 && x.atb > 0.5 && x.atb < 0.8); return e ? e.uid : null; });
+        const heavy = await p.evaluate(() => { const c = window.__sb.battle?.combat; const e = c?.aliveEnemies().find((x) => x.intent && x.intent.dmg >= 10 && x.atb > 0.5 && x.atb < 0.8); return e ? e.uid : null; });
         if (heavy) {
-          const rect = await p.evaluate((uid) => { const bs = window.__sb.battle; const r = bs.view.enemyRect(uid); const cv = bs.canvas.getBoundingClientRect(); return r ? [cv.left + r.x + r.w / 2, cv.top + r.y + r.h * 0.6] : null; }, heavy);
+          const rect = await p.evaluate((uid) => { const bs = window.__sb.battle; const r = bs?.view.enemyRect(uid); const cv = bs?.canvas.getBoundingClientRect(); return r ? [cv.left + r.x + r.w / 2, cv.top + r.y + r.h * 0.6] : null; }, heavy);
           if (rect) {
             partB.holdTries = (partB.holdTries || 0) + 1;
             partB.lastHold = Date.now();
             await p.mouse.move(rect[0], rect[1]); await p.mouse.down(); await wait(600); await p.mouse.up(); await wait(150);
             const text = await p.evaluate(() => { const m = document.querySelector('.modal .enemy-detail'); return m ? m.textContent : ''; });
-            const numbers = await p.evaluate((uid) => { const c = window.__sb.battle.combat; const e = c.enemies.find((x) => x.uid === uid); const it = e.intent; return it.kind === 'aoe' ? c.party.map((q) => c.mitigate(e, it.dmg, q, {})) : [c.mitigate(e, it.dmg, c.hitTarget(it.target), {})]; }, heavy);
+            const numbers = await p.evaluate((uid) => { const c = window.__sb.battle?.combat; const e = c?.enemies.find((x) => x.uid === uid); const it = e?.intent; return !it ? null : it.kind === 'aoe' ? c.party.map((q) => c.mitigate(e, it.dmg, q, {})) : [c.mitigate(e, it.dmg, c.hitTarget(it.target), {})]; }, heavy);
+            if (!numbers) continue; // The encounter ended before the hold resolved.
             await shot('27-telegraph');
             partB.held = { text: text.slice(0, 120), numbers, ok: numbers.every((n) => text.includes(String(n))) };
             await tapSel('.modal .btn.primary');
@@ -562,15 +563,28 @@ if (!PART_A_ONLY) {
   const q = await c2.newPage();
   await q.goto(URL);
   await q.waitForFunction(() => window.__sb);
-  await q.evaluate(() => window.__sb.startRun('beta_badge', 5));
+  await q.evaluate(() => window.__sb.startFixtureRun('beta_badge', 5));
   await q.waitForTimeout(300);
   for (let i = 0; i < 20 && (await q.$('.dlg-skip')); i++) { await q.click('.dlg-skip').catch(() => {}); await q.waitForTimeout(120); }
   const n0 = await q.evaluate(() => window.__sb.run.availableNodes()[0]);
   await q.tap(`.map-node[data-node="${n0}"]`);
+  // Dispatch this one early press in the page as the button appears, before Playwright's
+  // actionability wait can carry it past the lesson's 450ms input guard.
+  await q.evaluate(() => {
+    window.__earlySkip = new Promise((resolve) => {
+      const observer = new MutationObserver(() => {
+        const button = document.querySelector('.tut-layer:not([hidden]) .coach-skip');
+        if (!button) return;
+        observer.disconnect();
+        button.click();
+        resolve({ open: !!window.__sb.battle.lessonOpen, armed: button.classList.contains('armed') });
+      });
+      observer.observe(document.querySelector('.layer-screen'), { childList: true, subtree: true });
+    });
+  });
   await q.getByRole('button', { name: L('Travel'), exact: true }).click();
   await q.waitForFunction(() => window.__sb.battle && window.__sb.battle.lessonOpen);
-  await q.tap('.coach-skip'); // too soon: ignored
-  const early = await q.evaluate(() => ({ open: !!window.__sb.battle.lessonOpen, armed: !!document.querySelector('.coach-skip.armed') }));
+  const early = await q.evaluate(() => window.__earlySkip);
   await q.waitForTimeout(500);
   await q.tap('.coach-skip'); // arms it
   const armed = await q.evaluate(() => ({ open: !!window.__sb.battle.lessonOpen, hints: window.__sb.settings.hints }));
@@ -604,7 +618,7 @@ if (!PART_A_ONLY) {
   await q.goto(URL);
   await q.waitForFunction(() => window.__sb);
   const m = await q.evaluate((intro) => ({ migrated: window.__sb.meta.lessonsMigrated, all: intro.every((k) => window.__sb.meta.tut[k]) }), INTRO_KEYS);
-  await q.evaluate(() => window.__sb.startRun('beta_badge', 6));
+  await q.evaluate(() => window.__sb.startFixtureRun('beta_badge', 6));
   await q.waitForTimeout(300);
   for (let i = 0; i < 20 && (await q.$('.dlg-skip')); i++) { await q.click('.dlg-skip').catch(() => {}); await q.waitForTimeout(120); }
   const n0 = await q.evaluate(() => window.__sb.run.availableNodes()[0]);

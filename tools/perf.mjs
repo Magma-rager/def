@@ -6,7 +6,7 @@ const ctx = await b.newContext({ viewport: { width: 1194, height: 834 }, deviceS
 const p = await ctx.newPage();
 await p.goto('http://localhost:8123/index.html');
 await p.waitForTimeout(300);
-await p.evaluate(() => { const a = window.__sb; a.meta.tutorialDone = true; a.meta.tut = { start: 1, opened: 1, closer: 1, afterCombo: 1, lock: 1, scramble: 1, jam: 1, glitch: 1, latch: 1 }; a.startRun('beta_badge'); });
+await p.evaluate(() => { const a = window.__sb; a.meta.tutorialDone = true; a.meta.tut = { start: 1, opened: 1, closer: 1, afterCombo: 1, lock: 1, scramble: 1, jam: 1, glitch: 1, latch: 1 }; a.startFixtureRun('beta_badge'); });
 await p.waitForTimeout(200);
 await p.evaluate(() => { document.querySelector('.dlg-skip')?.click(); const r = window.__sb.run; r.enterNode(r.availableNodes()[0]); r.d.pending.enemies = ['wire_jammer', 'rush_hound', 'interference_mite', 'iron_maw']; window.__sb.route(); });
 await p.waitForTimeout(500);

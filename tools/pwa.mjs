@@ -11,6 +11,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { RU } from '../src/i18n/ru.js';
 const { chromium } = createRequire(import.meta.url)('playwright');
 
 const work = path.resolve(process.argv[2] || fs.mkdtempSync(path.join(os.tmpdir(), 'sb-pwa-')));
@@ -56,6 +57,11 @@ const check = (name, ok, info = '') => {
 await start();
 const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: 844, height: 390 }, hasTouch: true, locale: 'ru-RU' });
+// Seed the genuine Phase 8 profile once. The app itself must migrate and retain its earned unlocks.
+const historical = JSON.parse(fs.readFileSync(new URL('../tests/fixtures/meta-v2-phase8.json', import.meta.url)));
+await ctx.addInitScript((profile) => {
+  if (!localStorage.getItem('signalbreak.meta.v1')) localStorage.setItem('signalbreak.meta.v1', JSON.stringify(profile));
+}, historical);
 const errors = [];
 const open = async (url) => {
   const p = await ctx.newPage();
@@ -85,7 +91,7 @@ check('iOS home-screen icon, title and standalone mode declared', head.icon === 
 const manifest = await p.evaluate(async () => (await fetch('manifest.webmanifest')).json());
 check('Manifest: start URL, scope, standalone display, PNG icons', manifest.start_url && manifest.scope && manifest.display === 'standalone' && manifest.icons.some((i) => i.sizes === '512x512'), `${manifest.start_url} ${manifest.scope} ${manifest.display}`);
 check('Other files in the folder still come from the network', !(await p.evaluate(async () => (await fetch('app.html')).text())).includes('rel="manifest"'));
-await p.evaluate(() => { const a = window.__sb; a.meta.tutorialDone = true; a.startRun('beta_badge'); });
+await p.evaluate(() => { const a = window.__sb; a.meta.tutorialDone = true; a.startFixtureRun('beta_badge'); });
 await p.waitForTimeout(500);
 await p.evaluate(() => { const s = document.querySelector('.dlg-skip'); if (s) s.click(); });
 await p.waitForTimeout(300);
@@ -124,6 +130,25 @@ for (const url of [`${HOST}${BASE}index.html`, `${HOST}${BASE}`, `${HOST}${BASE}
   }
   if (p) await p.close();
 }
+p = await open(`${HOST}${BASE}`);
+const tap = (label, container = p) => container.getByRole('button', { name: RU.ui[label] || label, exact: true }).first().tap();
+await tap('Museum');
+await p.locator('.museum [data-tab="Achievements"]').tap();
+check('Offline: migrated victory achievement remains visible', await p.locator('[data-achievement="victory"][data-earned="true"]').isVisible());
+await p.locator('.museum [data-tab="Journal"]').tap();
+check('Offline: Combo Journal opens with saved discoveries', await p.evaluate(() =>
+  Object.keys(window.__sb.meta.combos).length > 0 && !!document.querySelector('.museum-body').innerText.trim()));
+await tap('Close', p.locator('.museum'));
+await tap('New Run');
+await tap('Abandon & start new');
+await p.locator('.starter-panel [data-relic="echo_splice"]').tap();
+await tap('Begin', p.locator('.starter-panel'));
+check('Offline: unlocked relic starts a normal run', await p.evaluate(() => window.__sb.run.d.relics.join() === 'echo_splice'));
+await p.reload();
+await tap('Continue');
+check('Offline: new loadout and achievement survive reload', await p.evaluate(() =>
+  window.__sb.run.d.relics.join() === 'echo_splice' && !!window.__sb.meta.progress.earned.victory));
+await p.close();
 check('Nothing was requested from the network while offline', requests.length === 0, requests.join(' '));
 
 // 3. A new build is published: installed in the background, used from the next launch
@@ -136,6 +161,12 @@ await start();
 const isNext = () => p.evaluate(() => document.documentElement.outerHTML.includes('<!--next-build-->'));
 p = await open(`${HOST}${BASE}index.html`);
 const firstNext = await isNext();
+// Ask for the same update the app requests on foregrounding. Chromium may deduplicate the
+// launch's update with a previous offline attempt for the same registration.
+const updateError = await p.evaluate(async () => {
+  try { await (await navigator.serviceWorker.ready).update(); return ''; }
+  catch (e) { return e.message; }
+});
 let names = [];
 for (let i = 0; i < 40; i++) {
   names = await p.evaluate(() => caches.keys());
@@ -143,7 +174,7 @@ for (let i = 0; i < 40; i++) {
   await p.waitForTimeout(250);
 }
 await p.close();
-check('Update: the new build is cached and the old cache removed', names.join() === 'signalbreak-nextbuild', names.join());
+check('Update: the new build is cached and the old cache removed', names.join() === 'signalbreak-nextbuild', [names.join(), updateError].filter(Boolean).join(' · '));
 p = await open(`${HOST}${BASE}index.html`);
 const secondNext = await isNext();
 await p.close();

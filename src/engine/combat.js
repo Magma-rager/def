@@ -104,6 +104,7 @@ export class Combat {
     this.combo = null;
     this.events = [];
     this.history = [];
+    this.progress = {};
     this.result = null;
     this.scrapEarned = 0;
     this.dividendScrap = 0;
@@ -1171,6 +1172,7 @@ export class Combat {
 
     const api = this.makeApi(entry, inst, d, { mult, bonus, echoing: false, disruptedAtPlay, ctx: c });
     d.fx(api);
+    if (entry.disrupted && entry.dmg > 0) this.progress.responseBattles = 1;
     this.coverCheck(d);
     // Echoing graft (spec §18.2): the first card after a Relay Echoes itself at 30%
     if (relayCard && inst.graft === 'echoing' && this.combo === c) this.echo(entry.index, 0.3, entry);
@@ -1202,7 +1204,7 @@ export class Combat {
     this.refill();
     // Clean Exit: the chain ends as a Cash Out once this card has finished executing
     if (d.category === 'arte' && c.closeAsCashOut) {
-      this.payout(1);
+      this.payout(1, true);
       if (this.phase !== 'END') this.requestEnd('cashout');
       else this.evalRecipes(c, { kind: 'end', end: 'cashout' });
     }
@@ -1313,7 +1315,7 @@ export class Combat {
     const P = this.baseProj();
     if (!this.finishable(cmd.mode, P)) return; // no longer possible (an earlier command was dropped)
     if (cmd.mode === 'cashout') {
-      this.payout(1);
+      this.payout(1, true);
       if (this.phase !== 'END' && this.combo === c) this.finishCombo('cashout');
       else if (this.phase === 'END') this.evalRecipes(c, { kind: 'end', end: 'cashout' }); // the payout won the battle
     } else this.finishCombo('perfect');
@@ -1525,6 +1527,7 @@ export class Combat {
         this.emit({ type: 'atbPush', amount: 0.15, boss: true });
       }
     }
+    if (junk) this.progress.responseBattles = 1;
     this.emit({ type: 'churn', uid, slot, junk });
     this.refill(uid);
     if (churnLog) churnLog.drew = this.hand[slot] || null; // the card that Churn brought in (Salvage Circuit)
@@ -1608,7 +1611,7 @@ export class Combat {
     return { amount: Math.round(amt * pct * scale), quick, guard: Math.round(2 * len * scale) };
   }
 
-  payout(scale) {
+  payout(scale, endsChain = false) {
     const c = this.combo;
     if (!c) return;
     const p = this.payoutAmount(scale);
@@ -1616,6 +1619,7 @@ export class Combat {
     c.quick = p.quick;
     c.payout = p.amount;
     this.emit({ type: 'cashout', amount: p.amount, quick: p.quick, scale, who: c.owner });
+    if (tgt && endsChain && p.amount > 0) this.progress.cashouts = (this.progress.cashouts || 0) + 1;
     if (tgt) this.dealDamage(tgt, p.amount, { src: c.owner, tag: 'cashout', pierce: false, cashout: true });
     this.addGuard(p.guard);
     if (p.quick && this.mutations.has('quick_exit')) this.gainMomentum(2, 'Quick Cash');
@@ -1679,6 +1683,26 @@ export class Combat {
       duration, churned: c.churned, maxRank: Math.max(0, ...c.cards.map((e) => e.rank)),
       strongest: Math.max(0, ...c.cards.map((e) => e.dmg)),
     };
+    // Progress uses resolved attacks and successful chain endings. It is transferred only
+    // with the encounter outcome, so restarting a fight discards this evidence.
+    if (type !== 'forced') {
+      const last = c.cards[c.cards.length - 1];
+      const end = c.cards.slice(-4);
+      const add = (key, condition) => { if (condition) this.progress[key] = (this.progress[key] || 0) + 1; };
+      add('crossChains', c.crosses >= 2 && c.steps >= 1);
+      add('churnPayoff', c.log.some((e, i) => e.k === 'churn' && e.drew &&
+        c.log.slice(i + 1).some((next) => next.k === 'card' && c.cards[next.i].uid === e.drew)));
+      add('burst', c.cards.reduce((spent, e) => spent + e.spent, 0) >= 8);
+      if (type === 'perfect') {
+        const attackingHeroes = new Set(c.cards.filter((e) => e.dmg > 0).map((e) => e.owner)).size;
+        add('relayPair', attackingHeroes === 2 && c.owners.length === 2);
+        add('relayTrio', attackingHeroes === 3);
+        add('rankSix', last?.category === 'arte' && last.rank === 6);
+        add('flowFinish', c.log.some((e) => e.k === 'flow' && e.src === 'buy'));
+        add('ascending', last?.category === 'arte' && end.length === 4 &&
+          end.every((e, i) => e.seg === last.seg && (i === 0 || e.rank > end[i - 1].rank)));
+      }
+    }
     this.history.push(summary);
     this.trackAdaptation(summary);
     this.updateCitation(summary);
@@ -2428,6 +2452,7 @@ export class Combat {
       hp: Math.max(0, Math.round(this.hp)),
       maxHp: this.maxHp,
       stats: this.stats,
+      progress: { ...this.progress, ...(this.adapt?.broken ? { adaptBreak: 1 } : {}) },
       scrapBonus: this.scrapEarned,
       enemies: this.enemies.map((e) => e.id),
       exFound: [...this.exFound],

@@ -47,7 +47,7 @@ const wait = (ms) => p.waitForTimeout(ms);
 await p.goto(URL);
 await p.waitForFunction(() => window.__sb);
 await p.evaluate(() => document.fonts.ready);
-await p.evaluate(() => { const a = window.__sb; a.meta.tutorialDone = true; a.saveMeta(); a.startRun('beta_badge', 1); });
+await p.evaluate(() => { const a = window.__sb; a.meta.tutorialDone = true; a.saveMeta(); a.startFixtureRun('beta_badge', 1); });
 await wait(400);
 for (let i = 0; i < 20 && (await p.$('.dlg-skip')); i++) { await p.click('.dlg-skip').catch(() => {}); await wait(150); }
 // fixture: the stacked deck and the encounter (see the header)

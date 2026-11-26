@@ -1,0 +1,207 @@
+{
+  "version": 2,
+  "runs": [
+    {
+      "result": "victory",
+      "act": 3,
+      "floors": 27,
+      "bosses": [
+        "scrap_tyrant",
+        "mirror_array",
+        "the_corruptor"
+      ],
+      "elites": 0,
+      "deckSize": 27,
+      "relics": [
+        "beta_badge",
+        "lucky_rivet",
+        "scrap_heart",
+        "mirror_lens",
+        "spare_pockets",
+        "counter_spring"
+      ],
+      "mutations": [
+        "duality_engine",
+        "perfect_pitch"
+      ],
+      "archetype": "variant",
+      "longest": 7,
+      "maxHit": 39,
+      "damage": 5629,
+      "combos": 73,
+      "perfect": 31,
+      "cashouts": 42,
+      "finishers": 27,
+      "score": 1520,
+      "seed": 1001,
+      "ex": 76,
+      "exRecipes": [
+        "cross_current",
+        "tandem_signal",
+        "three_way_circuit",
+        "prism_sequence",
+        "iron_harmony",
+        "quick_settlement",
+        "second_wind",
+        "interference_reversal",
+        "final_harmonic",
+        "pressure_release"
+      ],
+      "decisions": [
+        {
+          "act": 1,
+          "boss": "scrap_tyrant",
+          "prep": "prepared",
+          "planId": "brace",
+          "rareCard": null,
+          "adapt": null,
+          "evidence": null,
+          "result": "victory",
+          "mutation": "duality_engine"
+        },
+        {
+          "act": 2,
+          "boss": "mirror_array",
+          "prep": "prepared",
+          "planId": "brace",
+          "rareCard": null,
+          "adapt": "flow",
+          "evidence": {
+            "k": "{a}s of bonus Flow gained",
+            "p": {
+              "a": {
+                "n": 9.499999999999998,
+                "d": 1
+              }
+            }
+          },
+          "result": "victory",
+          "mutation": "perfect_pitch"
+        },
+        {
+          "act": 3,
+          "boss": "the_corruptor",
+          "prep": "prepared",
+          "planId": "brace",
+          "rareCard": null,
+          "adapt": "cashout",
+          "evidence": {
+            "k": "{a} of {b} combos ended in a Cash Out",
+            "p": {
+              "a": 28,
+              "b": 54
+            }
+          },
+          "result": "victory"
+        }
+      ],
+      "date": 1795725096630,
+      "flags": {
+        "praisedRelay": true
+      }
+    }
+  ],
+  "totalRuns": 1,
+  "wins": 1,
+  "bossesDefeated": {
+    "scrap_tyrant": 1,
+    "mirror_array": 1,
+    "the_corruptor": 1
+  },
+  "enemiesSeen": {
+    "rush_hound": 1,
+    "interference_mite": 1,
+    "wire_jammer": 1,
+    "scrap_tyrant": 1,
+    "needle_wing": 1,
+    "bulwark_signal": 1,
+    "suit_scrambler": 1,
+    "latch_wisp": 1,
+    "signal_hound": 1,
+    "mirror_array": 1,
+    "scrap_overseer": 1,
+    "predator_needle": 1,
+    "iron_maw": 1,
+    "the_corruptor": 1
+  },
+  "relicsFound": [
+    "beta_badge",
+    "lucky_rivet",
+    "scrap_heart",
+    "mirror_lens",
+    "spare_pockets",
+    "counter_spring"
+  ],
+  "cardsSeen": [
+    "scrapline",
+    "rivet_jab",
+    "hotwire",
+    "piston_strike",
+    "scrapfall",
+    "thermal_lance",
+    "bolt_volley",
+    "mend_circuit",
+    "salvage",
+    "gear_swap",
+    "polarity_shift",
+    "static_bloom",
+    "tinder_toss",
+    "short_circuit",
+    "suit_storm",
+    "prism_cut"
+  ],
+  "bestCombo": 7,
+  "maxHit": 39,
+  "bestScore": 1520,
+  "endings": [
+    "core_stabilized"
+  ],
+  "archetypes": {
+    "variant": 1
+  },
+  "tutorialDone": true,
+  "defeats": 0,
+  "devTrust": 1,
+  "combos": {
+    "cross_current": {
+      "at": 1795725096630,
+      "count": 7
+    },
+    "tandem_signal": {
+      "at": 1795725096631,
+      "count": 15
+    },
+    "three_way_circuit": {
+      "at": 1795725096631,
+      "count": 10
+    },
+    "prism_sequence": {
+      "at": 1795725096631,
+      "count": 3
+    },
+    "iron_harmony": {
+      "at": 1795725096631,
+      "count": 1
+    },
+    "quick_settlement": {
+      "at": 1795725096631,
+      "count": 27
+    },
+    "second_wind": {
+      "at": 1795725096631,
+      "count": 4
+    },
+    "interference_reversal": {
+      "at": 1795725096631,
+      "count": 5
+    },
+    "final_harmonic": {
+      "at": 1795725096631,
+      "count": 2
+    },
+    "pressure_release": {
+      "at": 1795725096631,
+      "count": 2
+    }
+  }
+}

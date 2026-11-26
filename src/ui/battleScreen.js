@@ -10,7 +10,6 @@ import { drawPortrait } from '../render/rig.js';
 import { h, clear, btn } from './dom.js';
 import { cardEl, cardTooltip, fitText, CAT_GLYPH } from './cardView.js';
 import { LESSONS, LESSON_PACE, pickLesson } from './lessons.js';
-import { recordCombo } from '../engine/save.js';
 import { knownDiscoveries, RECIPE_MAP } from '../data/recipes.js';
 import { seqChips } from './museum.js';
 
@@ -463,6 +462,7 @@ export class BattleScreen {
     if (!events.length) return;
     this.view.consume(events);
     const c = this.combat;
+    let discoveredEnemy = false;
     const ex = new Map(); // EX Combos completed by the same command are shown together
     for (const ev of events) {
       switch (ev.type) {
@@ -480,10 +480,16 @@ export class BattleScreen {
           break;
         case 'comboEnd': this.onComboEnd(ev); break;
         case 'banner': if (ev.text === 'ADAPTATION BROKEN') this.remark('adaptBroken', true); break;
+        case 'summon': {
+          const id = c.enemies.find((e) => e.uid === ev.uid)?.id;
+          if (this.app.run?.discoverEnemy(id)) discoveredEnemy = true;
+          break;
+        }
         case 'phase': this.app.audio.music('boss'); break;
         default: break;
       }
     }
+    if (discoveredEnemy && !ex.size) this.app.save();
     for (const list of ex.values()) this.onExCombo(list);
   }
 
@@ -506,13 +512,11 @@ export class BattleScreen {
   // activates and saved at once — whatever happens to the battle afterwards (docs/COMBAT_SPEC.md §28).
   // One banner per command: the recipes in priority order and what their effects actually gave.
   onExCombo(list) {
-    const fresh = [];
+    const fresh = this.app.discoverRecipes(list);
     for (const ev of list) {
-      const isNew = recordCombo(this.app.meta, ev.id);
-      if (isNew) fresh.push(ev.id);
+      const isNew = fresh.has(ev.id);
       this.exLog.push({ id: ev.id, fresh: isNew, applied: ev.applied, group: ev.group, order: ev.order, len: ev.len, heroes: ev.heroes, sum: { ...ev.sum }, t: this.combat.t });
     }
-    this.app.saveMeta();
     const sum = {};
     for (const ev of list) for (const [k, v] of Object.entries(ev.sum)) sum[k] = typeof v === 'boolean' ? sum[k] || v : (sum[k] || 0) + v;
     const parts = [];
@@ -533,13 +537,13 @@ export class BattleScreen {
     const why = h('div', { class: 'banner-why' }, ...list.map((ev, i) => [i ? h('span', { class: 'plus' }, '+') : null, seqChips(RECIPE_MAP[ev.id], true)]).flat().filter(Boolean));
     const b = h('div', { class: 'banner tone-ex', 'data-ex': list.map((ev) => ev.id).join(',') }, text, why,
       parts.length ? h('div', { class: 'banner-sub' }, parts.join(' · ')) : null,
-      fresh.length ? h('div', { class: 'banner-sub banner-new' }, t('NEW EX COMBO DISCOVERED')) : null);
+      fresh.size ? h('div', { class: 'banner-sub banner-new' }, t('NEW EX COMBO DISCOVERED')) : null);
     this.bannerEl.append(b);
     while (this.bannerEl.children.length > 2) this.bannerEl.firstChild.remove();
-    const hold = fresh.length ? 2600 : 1700;
+    const hold = fresh.size ? 2600 : 1700;
     setTimeout(() => b.classList.add('out'), hold);
     setTimeout(() => b.remove(), hold + 700);
-    this.app.audio.sfx(fresh.length ? 'exNew' : 'ex');
+    this.app.audio.sfx(fresh.size ? 'exNew' : 'ex');
   }
 
   remark(key, once) {

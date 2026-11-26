@@ -12,11 +12,11 @@ import { TRAITS, NODE_TYPES } from '../data/traits.js';
 import { SCENES, SPEAKERS, DEFEAT_LINES } from '../data/story.js';
 import { PREPARED_PLANS, VOLATILE_OUTCOMES, MAP_DEPTHS } from '../engine/run.js';
 import { drawIcon, ICON_PATHS } from '../render/icons.js';
-import { STARTER_OPTIONS } from '../data/relics.js';
-import { unlocks } from '../engine/save.js';
+import { starterOptions } from '../engine/progression.js';
+import { runProgressView, starterRow } from './progressionView.js';
 import { VERSION } from '../version.js';
 import {
-  t, msg, list, LANGS, lang, cardName, relicName, relicText, starterHint, mutName, mutText, tagName, archName,
+  t, msg, list, LANGS, lang, cardName, relicName, relicText, mutName, mutText, tagName, archName,
   adaptName, adaptDesc, adaptBreak, traitName, traitText, nodeName, enemyName, enemyLore, eventTitle, eventText,
   choiceLabel, choiceHint, eventResult, speakerName, speakerTitle, defeatLines as defeatLinesFor, planName, planText,
   volName, volText, themeName, graftName, graftText,
@@ -72,30 +72,37 @@ export function titleScreen(app, root) {
   return () => sc.stop();
 }
 
-export function newRunDialog(app) {
-  const u = unlocks(app.meta);
+export function newRunDialog(app, replace = false) {
   let chosen = 'beta_badge';
-  const opts = h('div', { class: 'starter-list' });
-  const render = () => {
-    clear(opts);
-    for (const opt of STARTER_OPTIONS) {
-      const ok = !opt.unlock || u[opt.unlock];
-      const r = RELICS[opt.id];
-      const b = h('button', { class: `starter-opt ${chosen === opt.id ? 'sel' : ''}`, type: 'button', disabled: !ok },
-        h('span', { class: 'rb-ico', html: app.relicIconSvg(opt.id) }),
-        h('span', { class: 'so-body' }, h('b', {}, relicName(opt.id)), h('span', {}, ok ? relicText(opt.id) : t('Locked — {hint}', { hint: starterHint(opt.id) }))));
-      b.addEventListener('click', () => { chosen = opt.id; render(); app.audio.sfx('click'); });
-      opts.append(b);
+  const options = starterOptions(app.meta);
+  const choose = (id) => {
+    chosen = id;
+    for (const button of opts.children) {
+      const selected = button.dataset.relic === id;
+      button.classList.toggle('sel', selected);
+      button.setAttribute('aria-pressed', String(selected));
     }
+    app.audio.sfx('click');
   };
-  render();
-  const close = app.modal(h('div', { class: 'panel' },
+  const opts = h('div', { class: 'starter-list', tabindex: 0, 'aria-label': t('Starting relics') }, ...options.map((option) => starterRow(app, option, choose)));
+  for (const button of opts.children) {
+    button.setAttribute('aria-pressed', String(button.dataset.relic === chosen));
+    button.classList.toggle('sel', button.dataset.relic === chosen);
+  }
+  const close = app.modal(h('div', { class: 'panel starter-panel' },
     h('h2', {}, t('New Run')),
     h('p', { class: 'dim' }, t('Choose a starting relic. More unlock through the Museum.')),
     opts,
     h('div', { class: 'row-btns' },
       btn(t('Cancel'), () => close(), ''),
-      btn(t('Begin'), () => { close(); app.startRun(chosen); }, 'primary'))), { dismiss: true });
+      btn(t('Begin'), () => { if (app.startRun(chosen, replace)) close(); }, 'primary'))), { dismiss: true });
+}
+
+export function saveRetryScreen(app, root, retry) {
+  clear(root).append(h('div', { class: 'screen save-retry' }, h('div', { class: 'panel' },
+    h('h2', {}, t('Save interrupted')),
+    h('p', {}, t('Progress could not be saved. Check available storage and retry.')),
+    btn(t('Retry save'), retry, 'primary'))));
 }
 
 // ───────────────────────── STORY DIALOGUE ─────────────────────────
@@ -681,6 +688,7 @@ export function resultsScreen(app, root, summary) {
       stat(t('Cash Outs'), summary.cashouts), stat(t('Finishers'), summary.finishers), stat(t('Longest combo'), t('{n} {n|card|cards}', { n: summary.longest })), stat(t('Biggest hit'), summary.maxHit),
       stat(t('EX Combos'), t('{n} · {r} {r|recipe|recipes}', { n: summary.ex || 0, r: (summary.exRecipes || []).length }))),
     decisions,
+    runProgressView(summary.progress),
     h('div', { class: 'row-btns' }, btn(t('Museum'), () => app.openMuseum(), ''), btn(t('Title'), () => app.toTitle(), ''), btn(t('New Run'), () => app.newRunFlow(), 'primary')));
   clear(root).append(h('div', { class: 'results screen' }, canvas, body));
   const sc = liveScene(canvas, { act: win ? 3 : 1, party: true, partyPose: win ? 'victory' : 'idle', dim: 0.45 });

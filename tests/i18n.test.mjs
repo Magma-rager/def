@@ -1,3 +1,4 @@
+import { ACHIEVEMENTS } from '../src/data/achievements.js';
 // Localization: every displayable string has a Russian translation with the same placeholders,
 // game logic is independent of the language, and saved data holds no display text.
 import test from 'node:test';
@@ -7,7 +8,7 @@ import { RU } from '../src/i18n/ru.js';
 import * as I from '../src/i18n/index.js';
 import { collectKeys } from '../tools/i18n-keys.mjs';
 import { CARDS, GRAFTS, ARCHETYPES, CARD_LIST } from '../src/data/cards.js';
-import { RELICS, STARTER_OPTIONS } from '../src/data/relics.js';
+import { RELICS } from '../src/data/relics.js';
 import { ENEMIES } from '../src/data/enemies.js';
 import { EVENTS } from '../src/data/events.js';
 import { MUTATIONS } from '../src/data/mutations.js';
@@ -39,7 +40,8 @@ test('all current content is translated', () => {
   }
   for (const id of Object.keys(GRAFTS)) { filled(RU.grafts[id].name, `graft ${id}`); filled(RU.grafts[id].text, `graft ${id}`); }
   for (const id of Object.keys(RELICS)) { filled(RU.relics[id] && RU.relics[id].name, `relic ${id}`); filled(RU.relics[id].text, `relic ${id}`); }
-  for (const o of STARTER_OPTIONS) filled(RU.starterHints[o.id], `starter hint ${o.id}`);
+  for (const a of ACHIEVEMENTS) for (const text of RU.achievements[a.id] || []) filled(text, `achievement ${a.id}`);
+  assert.deepEqual(Object.keys(RU.achievements).sort(), ACHIEVEMENTS.map((a) => a.id).sort());
   for (const id of Object.keys(MUTATIONS)) { filled(RU.mutations[id].name, `mutation ${id}`); filled(RU.mutations[id].text, `mutation ${id}`); }
   for (const k of Object.keys(ADAPTATIONS)) for (const f of ['name', 'desc', 'breakText']) filled(RU.adaptations[k][f], `adaptation ${k}.${f}`);
   for (const id of Object.keys(TRAITS)) { filled(RU.traits[id].name, `trait ${id}`); filled(RU.traits[id].text, `trait ${id}`); }

@@ -26,7 +26,7 @@ for (const vp of SIZES.split(',')) {
   await p.goto(URL);
   await p.waitForFunction(() => window.__sb);
   await p.evaluate(() => document.fonts.ready);
-  await p.evaluate(() => { const a = window.__sb; a.meta.tutorialDone = true; a.startRun('beta_badge'); });
+  await p.evaluate(() => { const a = window.__sb; a.meta.tutorialDone = true; a.startFixtureRun('beta_badge'); });
   await p.waitForTimeout(300);
   await p.evaluate(() => { const s = document.querySelector('.dlg-skip'); if (s) s.click(); });
   await p.evaluate(() => { const r = window.__sb.run; r.enterNode(r.availableNodes()[0]); window.__sb.route(); });

@@ -35,7 +35,7 @@ p.on('pageerror', (e) => errors.push(e.message));
 await p.goto(URL);
 await p.waitForFunction(() => window.__sb);
 await p.evaluate(() => document.fonts.ready);
-await p.evaluate(() => { const a = window.__sb; a.meta.tutorialDone = true; a.meta.totalRuns = 1; a.startRun('beta_badge'); });
+await p.evaluate(() => { const a = window.__sb; a.meta.tutorialDone = true; a.meta.totalRuns = 1; a.startFixtureRun('beta_badge'); });
 await p.waitForTimeout(500);
 for (let i = 0; i < 12; i++) { const s = await p.$('.dlg-skip'); if (!s) break; await s.click().catch(() => {}); await p.waitForTimeout(250); }
 

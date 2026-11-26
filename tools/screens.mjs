@@ -10,7 +10,7 @@ p.on('pageerror', (e) => errs.push('PAGEERROR ' + e.message));
 p.on('console', (m) => { if (m.type() === 'error' && !m.text().includes('404')) errs.push(m.text()); });
 await p.goto('http://localhost:8123/index.html');
 await p.waitForTimeout(400);
-await p.evaluate(() => { const a = window.__sb; a.meta.tutorialDone = true; a.startRun('beta_badge'); });
+await p.evaluate(() => { const a = window.__sb; a.meta.tutorialDone = true; a.startFixtureRun('beta_badge'); });
 await p.waitForTimeout(200);
 await p.evaluate(() => { document.querySelector('.dlg-skip')?.click(); });
 await p.waitForTimeout(200);

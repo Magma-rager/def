@@ -108,7 +108,7 @@ for (const [W, H] of VIEWPORTS) {
   await ev(() => { window.__sb.museumTab = 'Records'; window.__sb.closeAllModals(); });
 
   // ── a run ──
-  await ev(() => { window.__sb.meta.tutorialDone = true; window.__sb.startRun('beta_badge'); });
+  await ev(() => { window.__sb.meta.tutorialDone = true; window.__sb.startFixtureRun('beta_badge'); });
   await p.waitForTimeout(300);
   await check('story-dialog', true);
   await ev(() => document.querySelector('.dlg-skip').click());

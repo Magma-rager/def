@@ -17,7 +17,7 @@ export const PARTY_BASE = { V: 46, C: 34, S: 38 };
 export const PARTY_HP_BONUS = 12;
 export const PARTY_MAX_HP = PARTY_BASE.V + PARTY_BASE.C + PARTY_BASE.S + PARTY_HP_BONUS;
 export const MAP_DEPTHS = 8; // depths 0..7, boss at depth 8
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 
 // Save version 5 (docs/COMBAT_SPEC.md §19): card ids of the old Opener/Converter/Closer catalogue that
 // Phase 4 withholds (they need Relays) become a converted card of the same hero and rarity; unknown ids
@@ -64,12 +64,18 @@ function migrate(obj) {
     obj.stats = { ...emptyStats(), ...(obj.stats || {}) };
     obj.version = 6;
   }
-  if (obj.version === 6) {
+  if (obj.version === 6 || obj.version === 7) {
     if (!Array.isArray(obj.exFound)) obj.exFound = [];
     obj.exFound = obj.exFound.filter((id) => typeof id === 'string');
     obj.stats = obj.stats || emptyStats();
     if (!obj.stats.exByRecipe || typeof obj.stats.exByRecipe !== 'object') obj.stats.exByRecipe = {};
     if (!Number.isFinite(obj.stats.exActivations)) obj.stats.exActivations = 0;
+  }
+  if (obj.version === 6) {
+    // Only evidence present in the active save can be recovered. The old save did not store
+    // the starting relic separately or remember cards already removed from the deck.
+    obj.progress = { cards: [...new Set((obj.deck || []).map((c) => c.id))], recipes: {}, proofs: {} };
+    obj.version = 7;
   }
   return obj;
 }
@@ -115,6 +121,7 @@ export class Run {
       deck: [],
       nextUid: 1,
       relics: [starterRelic],
+      progress: { starter: starterRelic, cards: [], recipes: {}, proofs: {} },
       mutations: [],
       scrap: 80,
       bosses: {},
@@ -160,6 +167,14 @@ export class Run {
       if (!d || !RANK_RANGE[d.category] || !inst.rankMod) continue;
       inst.rankMod = gaugedRank(d, inst.rankMod) - d.rank;
     }
+    const progress = obj.progress;
+    const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    obj.progress = {
+      ...record(progress),
+      cards: [...new Set((Array.isArray(progress?.cards) ? progress.cards : (obj.deck || []).map((c) => c.id)))],
+      recipes: record(progress?.recipes),
+      proofs: record(progress?.proofs),
+    };
     return new Run(obj);
   }
 
@@ -189,8 +204,18 @@ export class Run {
     const inst = { uid: `c${this.d.nextUid++}`, id, up, graft, rankMod, variant };
     if (recut) inst.recut = true;
     this.d.deck.push(inst);
+    this.discoverCard(id);
     return inst;
   }
+  discoverCard(id) {
+    if (CARDS[id]?.category !== 'junk' && CARDS[id] && !this.d.progress.cards.includes(id)) this.d.progress.cards.push(id);
+  }
+
+  discoverEnemy(id) {
+    if (ENEMIES[id] && !this.d.enemiesSeen.includes(id)) { this.d.enemiesSeen.push(id); return true; }
+    return false;
+  }
+
   card(uid) { return this.d.deck.find((c) => c.uid === uid); }
 
   addRelic(id) {
@@ -242,7 +267,7 @@ export class Run {
       if (d.rarity === 'status') continue;
       for (const t of d.tags) counts[t] = (counts[t] || 0) + 1;
     }
-    for (const r of this.d.relics) { const t = RELICS[r].tag; if (t && RELICS[r].rarity !== 'starter') counts[t] = (counts[t] || 0) + 1; }
+    for (const r of this.d.relics) { const t = RELICS[r].tag; if (t && r !== this.d.progress.starter && RELICS[r].rarity !== 'starter') counts[t] = (counts[t] || 0) + 1; }
     for (const m of this.d.mutations) { const t = MUTATIONS[m].tag; if (t) counts[t] = (counts[t] || 0) + 2; }
     return counts;
   }
@@ -440,7 +465,7 @@ export class Run {
     let prep = {};
     if ((p.kind === 'elite' || isBoss) && this.d.prepToken) prep = { ...this.d.prepToken };
     if (isBoss && p.prep) prep = { ...prep, ...p.prep };
-    for (const id of enemies) if (!this.d.enemiesSeen.includes(id)) this.d.enemiesSeen.push(id);
+    for (const id of enemies) this.discoverEnemy(id);
     return {
       deck: this.d.deck.map((c) => ({ ...c })),
       party: this.d.party.map((x) => ({ ...x })),
@@ -465,9 +490,20 @@ export class Run {
 
   finishBattle(outcome) {
     const p = this.d.pending;
+    if (p?.type !== 'battle') return null;
     const node = this.node(p.nodeId);
     const isBoss = node.type === 'boss';
     this.d.battleCount++;
+    for (const id of outcome.enemies || []) this.discoverEnemy(id);
+    const proofs = this.d.progress.proofs;
+    const actProofs = ((this.d.progress.acts ||= {})[this.d.act] ||= {});
+    const observed = { ...outcome.progress, guardAbsorbed: outcome.stats.guardAbsorbed || 0 };
+    if (outcome.stats.reservePlays > 0) observed.reserveBattles = 1;
+    for (const [key, n] of Object.entries(observed)) {
+      if (!n) continue;
+      proofs[key] = (proofs[key] || 0) + n;
+      actProofs[key] = (actProofs[key] || 0) + n;
+    }
     this.d.nextBattleMod = null;
     if ((p.kind === 'elite' || isBoss) && this.d.prepToken) this.d.prepToken = null;
     // party: the pool carries over (a won battle always leaves at least 1)
@@ -502,6 +538,9 @@ export class Run {
       const dec = this.d.bossDecisions[this.d.bossDecisions.length - 1];
       if (dec) dec.result = 'victory';
       if (this.d.act === 3) {
+        // The final battle routes to the ending rather than the normal boss reward screen.
+        const trophy = Object.keys(RELICS).find((id) => RELICS[id].boss === bossId);
+        if (trophy) this.addRelic(trophy);
         this.d.pending = { type: 'story', scene: 'ending', next: 'victory' };
         return this.d.pending;
       }
@@ -540,12 +579,16 @@ export class Run {
   // a pivot — an archetype the build does not lead with — so a different plan is always on the table.
   // Without a direction, the cards come from different archetypes, so the first picks choose one.
   cardChoices(rng, n, { kind = 'battle', boost = false, grafted = false, minRarity = null, tag = null } = {}) {
-    const pool = rewardPool();
+    const rarityOrder = ['common', 'uncommon', 'rare'];
+    const floor = kind === 'boss' ? 'rare' : minRarity;
+    const pool = rewardPool().filter((card) => !floor || rarityOrder.indexOf(card.rarity) >= rarityOrder.indexOf(floor));
     const counts = this.tagCounts();
     const tags = Object.keys(counts).filter((t) => ARCHETYPES[t]).sort((a, b) => counts[b] - counts[a]);
     // the lead direction: the most-held tag, once it is held twice or leads alone
     const lead = tags[0] && (counts[tags[0]] >= 2 || counts[tags[0]] > (counts[tags[1]] || 0)) ? tags[0] : null;
     const second = lead && tags[1] && counts[tags[1]] >= 2 ? tags[1] : null;
+    const starter = this.d.progress.starter;
+    const openingSignal = !lead && starter !== 'beta_badge' && this.hasRelic(starter) ? RELICS[starter].tag : null;
     const out = [];
     const offeredTags = new Set();
     // Every combo starts with a basic attack: when fewer than 40% of the deck are basic attacks, the
@@ -567,6 +610,7 @@ export class Run {
         const b = cands.filter((c) => c.category === 'basic');
         cands = b.length ? b : pool.filter((c) => c.category === 'basic' && fresh(c));
         // the basic attack offered still leans towards the build when one of its basics exists
+        if (b.length === 0 && cands.length === 0) cands = pool.filter((c) => c.rarity === rarity && fresh(c));
         if (lead && rng.chance(0.6)) { const lb = pool.filter((c) => c.category === 'basic' && c.tags.includes(lead) && fresh(c)); if (lb.length) cands = lb; }
       }
       const pivot = !tag && n >= 3 && i === n - 1;
@@ -576,9 +620,10 @@ export class Run {
         // an archetype outside the build's top two that this offer has not shown yet
         // (any rarity: a tag with no card at the rolled rarity takes its nearest one below, so Reserve and
         // Cash Out, which have no commons, are offered as often as the others)
-        const away = Object.keys(ARCHETYPES).filter((t) => t !== lead && t !== second && !offeredTags.has(t) && pool.some((c) => c.tags.includes(t) && fresh(c)));
+        const away = Object.keys(ARCHETYPES).filter((t) => t !== lead && t !== second && t !== openingSignal && !offeredTags.has(t) && pool.some((c) => c.tags.includes(t) && fresh(c)));
         want = away.length ? rng.pick(away) : null;
       } else if (i === 0 && lead && rng.chance(0.6)) want = lead;
+      else if (i === 0 && openingSignal && rng.chance(0.4)) want = openingSignal;
       else if (i === 1 && second && rng.chance(0.4)) want = second;
       else if (i === 1 && lead && !second && rng.chance(0.3)) want = lead;
       if (want) {
@@ -597,6 +642,7 @@ export class Run {
       }
       if (!cands.length) cands = pool.filter(fresh);
       const pick = rng.pick(cands);
+      if (!pick) break;
       for (const t of pick.tags) offeredTags.add(t);
       out.push({ id: pick.id, up: false, graft: grafted ? rng.pick(graftPool().filter((g) => graftFits(g, pick))) : null });
     }
@@ -816,6 +862,7 @@ export class Run {
         const cat = CARDS[inst.id].category;
         const cands = rewardPool().filter((c) => c.category === cat && c.id !== inst.id);
         inst.id = rng.pick(cands).id;
+        this.discoverCard(inst.id);
         inst.variant = null; inst.rankMod = 0; inst.up = false; delete inst.recut;
         break;
       }
@@ -864,8 +911,10 @@ export class Run {
 
   leaveNode() {
     const p = this.d.pending;
+    if (p?.select?.required) return false;
     if (p && p.type === 'treasure' && !p.taken) this.d.scrap += p.scrap;
     this.d.pending = null;
+    return true;
   }
 
   // Run API handed to event scripts.
@@ -910,9 +959,9 @@ export class Run {
       },
       addRelic: (id) => run.addRelic(id),
       hasRelic: (id) => run.hasRelic(id),
-      tradeableRelics: () => run.d.relics.filter((r) => RELICS[r].rarity !== 'starter').length,
+      tradeableRelics: () => run.d.relics.filter((r) => RELICS[r].rarity !== 'starter' && r !== run.d.progress.starter).length,
       loseRandomRelic: () => {
-        const c = run.d.relics.filter((r) => RELICS[r].rarity !== 'starter');
+        const c = run.d.relics.filter((r) => RELICS[r].rarity !== 'starter' && r !== run.d.progress.starter);
         const r = rng.pick(c);
         run.d.relics = run.d.relics.filter((x) => x !== r);
         return r;
@@ -1073,6 +1122,9 @@ export class Run {
       perfect: S.perfect, cashouts: S.cashouts, finishers: S.finishers, score, seed: this.d.seed,
       ex: S.exActivations || 0, exRecipes: (this.d.exFound || []).slice(),
       decisions: this.d.bossDecisions.slice(), date: Date.now(), flags: { ...this.d.flags },
+      runId: this.d.progress.id, starter: this.d.progress.starter, battles: S.battles,
+      bossesEncountered: this.d.enemiesSeen.filter((id) => ENEMIES[id]?.tier === 'boss'),
+      evidence: { ...this.d.progress.proofs, guardAbsorbed: S.guardAbsorbed }, evidenceByAct: this.d.progress.acts || {},
     };
   }
 }

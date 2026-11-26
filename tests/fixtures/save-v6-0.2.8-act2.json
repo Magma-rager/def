@@ -1,0 +1,701 @@
+{
+  "version": 6,
+  "seed": 1002,
+  "act": 2,
+  "party": [
+    {
+      "id": "V"
+    },
+    {
+      "id": "C"
+    },
+    {
+      "id": "S"
+    }
+  ],
+  "hp": 129,
+  "maxHp": 130,
+  "deck": [
+    {
+      "uid": "c1",
+      "id": "scrapline",
+      "up": true,
+      "graft": "breaker",
+      "rankMod": 0,
+      "variant": "A"
+    },
+    {
+      "uid": "c2",
+      "id": "scrapline",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": "B"
+    },
+    {
+      "uid": "c3",
+      "id": "scrapline",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": "A"
+    },
+    {
+      "uid": "c4",
+      "id": "rivet_jab",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": "A"
+    },
+    {
+      "uid": "c5",
+      "id": "rivet_jab",
+      "up": true,
+      "graft": null,
+      "rankMod": 0,
+      "variant": "B"
+    },
+    {
+      "uid": "c6",
+      "id": "hotwire",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": "B"
+    },
+    {
+      "uid": "c7",
+      "id": "piston_strike",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": "A"
+    },
+    {
+      "uid": "c8",
+      "id": "piston_strike",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": "B"
+    },
+    {
+      "uid": "c9",
+      "id": "scrapfall",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c10",
+      "id": "thermal_lance",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c11",
+      "id": "bolt_volley",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c12",
+      "id": "mend_circuit",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c13",
+      "id": "salvage",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c14",
+      "id": "first_rung",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c15",
+      "id": "rethread",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c16",
+      "id": "capstone",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c17",
+      "id": "step_up",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c18",
+      "id": "rethread",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    },
+    {
+      "uid": "c19",
+      "id": "downshift",
+      "up": false,
+      "graft": null,
+      "rankMod": 0,
+      "variant": null
+    }
+  ],
+  "nextUid": 20,
+  "relics": [
+    "beta_badge",
+    "scrap_heart"
+  ],
+  "mutations": [
+    "ascendant_ladder"
+  ],
+  "scrap": 170,
+  "bosses": {
+    "1": "scrap_tyrant",
+    "2": "mirror_array",
+    "3": "the_corruptor"
+  },
+  "map": {
+    "act": 2,
+    "nodes": [
+      {
+        "id": "n2_0",
+        "depth": 0,
+        "y": 0.12193973873897145,
+        "type": "battle",
+        "trait": null,
+        "edges": [
+          "n2_3"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_1",
+        "depth": 0,
+        "y": 0.5002256749818722,
+        "type": "battle",
+        "trait": "HOTWIRE",
+        "edges": [
+          "n2_5",
+          "n2_6",
+          "n2_4"
+        ],
+        "visited": true
+      },
+      {
+        "id": "n2_2",
+        "depth": 0,
+        "y": 0.8750395282870159,
+        "type": "battle",
+        "trait": null,
+        "edges": [
+          "n2_6"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_3",
+        "depth": 1,
+        "y": 0.10114788398204837,
+        "type": "battle",
+        "trait": null,
+        "edges": [
+          "n2_7"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_4",
+        "depth": 1,
+        "y": 0.3480807205400197,
+        "type": "event",
+        "trait": null,
+        "edges": [
+          "n2_8"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_5",
+        "depth": 1,
+        "y": 0.6623408267187187,
+        "type": "battle",
+        "trait": null,
+        "edges": [
+          "n2_9",
+          "n2_10"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_6",
+        "depth": 1,
+        "y": 0.8975261179439258,
+        "type": "battle",
+        "trait": null,
+        "edges": [
+          "n2_10"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_7",
+        "depth": 2,
+        "y": 0.15935555886826477,
+        "type": "battle",
+        "trait": null,
+        "edges": [
+          "n2_11"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_8",
+        "depth": 2,
+        "y": 0.35875482501578515,
+        "type": "battle",
+        "trait": null,
+        "edges": [
+          "n2_12"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_9",
+        "depth": 2,
+        "y": 0.6027842289098772,
+        "type": "shop",
+        "trait": null,
+        "edges": [
+          "n2_13",
+          "n2_12"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_10",
+        "depth": 2,
+        "y": 0.8957138872850919,
+        "type": "battle",
+        "trait": "STATIC",
+        "edges": [
+          "n2_14"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_11",
+        "depth": 3,
+        "y": 0.08244914256210906,
+        "type": "shop",
+        "trait": null,
+        "edges": [
+          "n2_15"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_12",
+        "depth": 3,
+        "y": 0.40492415699409323,
+        "type": "event",
+        "trait": null,
+        "edges": [
+          "n2_16"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_13",
+        "depth": 3,
+        "y": 0.6354292842530412,
+        "type": "event",
+        "trait": null,
+        "edges": [
+          "n2_17",
+          "n2_18"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_14",
+        "depth": 3,
+        "y": 0.8628283158148407,
+        "type": "elite",
+        "trait": null,
+        "edges": [
+          "n2_18"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_15",
+        "depth": 4,
+        "y": 0.14735010264266749,
+        "type": "battle",
+        "trait": "SCRAP_CACHE",
+        "edges": [
+          "n2_19"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_16",
+        "depth": 4,
+        "y": 0.40612887109746226,
+        "type": "battle",
+        "trait": "HOTWIRE",
+        "edges": [
+          "n2_20"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_17",
+        "depth": 4,
+        "y": 0.6426703928242204,
+        "type": "treasure",
+        "trait": null,
+        "edges": [
+          "n2_21"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_18",
+        "depth": 4,
+        "y": 0.8493009935860755,
+        "type": "battle",
+        "trait": null,
+        "edges": [
+          "n2_22"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_19",
+        "depth": 5,
+        "y": 0.14964759410941042,
+        "type": "elite",
+        "trait": null,
+        "edges": [
+          "n2_23"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_20",
+        "depth": 5,
+        "y": 0.37276501884625757,
+        "type": "event",
+        "trait": null,
+        "edges": [
+          "n2_24",
+          "n2_23"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_21",
+        "depth": 5,
+        "y": 0.5936658211285248,
+        "type": "battle",
+        "trait": null,
+        "edges": [
+          "n2_24",
+          "n2_25"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_22",
+        "depth": 5,
+        "y": 0.8988233623007545,
+        "type": "surgery",
+        "trait": null,
+        "edges": [
+          "n2_25"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_23",
+        "depth": 6,
+        "y": 0.20658055047970264,
+        "type": "battle",
+        "trait": null,
+        "edges": [
+          "n2_26"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_24",
+        "depth": 6,
+        "y": 0.4567899832696033,
+        "type": "battle",
+        "trait": "STATIC",
+        "edges": [
+          "n2_27",
+          "n2_28"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_25",
+        "depth": 6,
+        "y": 0.8493215380857388,
+        "type": "battle",
+        "trait": null,
+        "edges": [
+          "n2_28"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_26",
+        "depth": 7,
+        "y": 0.1392559864053813,
+        "type": "rest",
+        "trait": "QUIET_CHANNEL",
+        "edges": [
+          "n2_boss"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_27",
+        "depth": 7,
+        "y": 0.45780107952499144,
+        "type": "rest",
+        "trait": "QUIET_CHANNEL",
+        "edges": [
+          "n2_boss"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_28",
+        "depth": 7,
+        "y": 0.8807519415044226,
+        "type": "shop",
+        "trait": null,
+        "edges": [
+          "n2_boss"
+        ],
+        "visited": false
+      },
+      {
+        "id": "n2_boss",
+        "depth": 8,
+        "y": 0.5,
+        "type": "boss",
+        "trait": null,
+        "edges": [],
+        "visited": false
+      }
+    ],
+    "bossId": "mirror_array"
+  },
+  "position": "n2_1",
+  "path": [
+    "n2_1"
+  ],
+  "log": [
+    {
+      "act": 1,
+      "node": "n1_1",
+      "type": "battle",
+      "trait": null,
+      "at": 1
+    },
+    {
+      "act": 1,
+      "node": "n1_4",
+      "type": "battle",
+      "trait": null,
+      "at": 2
+    },
+    {
+      "act": 1,
+      "node": "n1_7",
+      "type": "event",
+      "trait": "SCRAP_CACHE",
+      "at": 3
+    },
+    {
+      "act": 1,
+      "node": "n1_10",
+      "type": "battle",
+      "trait": null,
+      "at": 4
+    },
+    {
+      "act": 1,
+      "node": "n1_14",
+      "type": "event",
+      "trait": null,
+      "at": 5
+    },
+    {
+      "act": 1,
+      "node": "n1_18",
+      "type": "shop",
+      "trait": "SCRAP_CACHE",
+      "at": 6
+    },
+    {
+      "act": 1,
+      "node": "n1_22",
+      "type": "surgery",
+      "trait": null,
+      "at": 7
+    },
+    {
+      "act": 1,
+      "node": "n1_25",
+      "type": "rest",
+      "trait": null,
+      "at": 8
+    },
+    {
+      "act": 1,
+      "node": "n1_boss",
+      "type": "boss",
+      "trait": null,
+      "at": 9
+    },
+    {
+      "act": 2,
+      "node": "n2_1",
+      "type": "battle",
+      "trait": "HOTWIRE",
+      "at": 10
+    }
+  ],
+  "pending": {
+    "type": "battle",
+    "nodeId": "n2_1",
+    "kind": "battle"
+  },
+  "stats": {
+    "battles": 4,
+    "combos": 9,
+    "perfect": 3,
+    "cashouts": 6,
+    "forced": 0,
+    "longCombos": 6,
+    "churns": 0,
+    "guardGained": 100,
+    "guardAbsorbed": 33,
+    "relays": 21,
+    "crosses": 23,
+    "steps": 12,
+    "variantPlays": {
+      "A": 34,
+      "B": 30,
+      "EX": 0
+    },
+    "momentumSpent": 44,
+    "flowGained": 0,
+    "reservePlays": 0,
+    "interferencePayoffs": 3,
+    "damage": 884,
+    "maxHit": 33,
+    "longest": 7,
+    "finishers": 3,
+    "damageTaken": 4,
+    "interference": 1,
+    "elites": 0,
+    "cardsPlayed": 65,
+    "bestComboDamage": 100,
+    "exActivations": 14,
+    "exByRecipe": {
+      "three_way_circuit": 2,
+      "cross_current": 3,
+      "quick_settlement": 4,
+      "straight_circuit": 1,
+      "pressure_release": 2,
+      "tandem_signal": 1,
+      "final_harmonic": 1
+    },
+    "exOverlaps": 3,
+    "exDamage": 81
+  },
+  "flags": {},
+  "seenEvents": [
+    "discard_belt",
+    "tutorial_kiosk"
+  ],
+  "removeCost": 75,
+  "prepToken": null,
+  "bossDecisions": [
+    {
+      "act": 1,
+      "boss": "scrap_tyrant",
+      "prep": "prepared",
+      "planId": "brace",
+      "rareCard": null,
+      "adapt": null,
+      "evidence": null,
+      "result": "victory",
+      "mutation": "ascendant_ladder"
+    }
+  ],
+  "battleCount": 4,
+  "lastFormation": "interference_mite,interference_mite,rush_hound",
+  "nextBattleMod": null,
+  "tutorial": false,
+  "startedAt": 1795725490633,
+  "floors": 10,
+  "bossesDefeated": [
+    "scrap_tyrant"
+  ],
+  "enemiesSeen": [
+    "rush_hound",
+    "iron_maw",
+    "interference_mite",
+    "scrap_tyrant"
+  ],
+  "relicsSeen": [
+    "beta_badge",
+    "scrap_heart"
+  ],
+  "exFound": [
+    "three_way_circuit",
+    "cross_current",
+    "quick_settlement",
+    "straight_circuit",
+    "pressure_release",
+    "tandem_signal",
+    "final_harmonic"
+  ]
+}

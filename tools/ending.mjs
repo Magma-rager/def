@@ -11,7 +11,7 @@ await p.evaluate(() => {
   const a = window.__sb;
   a.meta.tutorialDone = true;
   a.meta.tut = { start: 1, opened: 1, closer: 1, afterCombo: 1, lock: 1, scramble: 1, jam: 1, glitch: 1, latch: 1 };
-  a.startRun('beta_badge');
+  a.startFixtureRun('beta_badge');
   const r = a.run;
   r.d.act = 3; r.generateMap(3);
   const bn = r.d.map.nodes.find((n) => n.type === 'boss');

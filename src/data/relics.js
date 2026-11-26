@@ -1,5 +1,7 @@
 // Relics persist for a run. Effects are implemented as hooks inside engine/combat.js and engine/run.js
 // keyed by relic id; the text here is the player-facing contract.
+import { ACHIEVEMENTS } from './achievements.js';
+
 export const RELICS = {
   beta_badge: { name: "Beta Tester's Badge", rarity: 'starter', icon: 'badge', tag: 'churn', text: 'The first Churn each battle is free.' },
   stopwatch_gear: { name: 'Stopwatch Gear', rarity: 'common', icon: 'clock', tag: 'flow', text: 'Your first combo each battle gains +1.0s Flow (the combo cap still applies).' },
@@ -46,16 +48,13 @@ export const RELICS = {
 
 export const RELIC_IDS = Object.keys(RELICS);
 
-// Relics that rewards, shops and events may offer. Echo Splice and Relay Harness need the Relay
-// command (Phase 5): kept for runs that already own them (they have no effect yet), never offered.
+// Relics that rewards, shops and events may offer. Starting eligibility is independent of rarity.
 export function relicPool(exclude = []) {
   return RELIC_IDS.filter((id) => RELICS[id].rarity !== 'starter' && RELICS[id].rarity !== 'boss' && RELICS[id].p4 !== 'withheld' && !exclude.includes(id));
 }
 
-// Relics that may be chosen as the starting relic once unlocked in the Museum.
+// Starting availability is independent of the ordinary acquisition pool.
 export const STARTER_OPTIONS = [
-  { id: 'beta_badge', unlock: null, hint: 'Default' },
-  { id: 'stopwatch_gear', unlock: 'boss1', hint: 'Defeat any Act I boss' },
-  { id: 'pressure_gauge', unlock: 'runs3', hint: 'Finish 3 runs (win or lose)' },
-  { id: 'echo_splice', unlock: 'win', hint: 'Win a run' },
+  { id: 'beta_badge', unlock: null },
+  ...ACHIEVEMENTS.filter((a) => a.reward).map((a) => ({ id: a.reward, unlock: a.id })),
 ];

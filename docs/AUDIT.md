@@ -739,7 +739,7 @@ Each run targets one archetype and acquires only through ordinary offers (reward
 
 ## Version
 
-Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exit gate has passed with evidence here; the patch number counts published builds with changes since that gate; `1.0.0` is the Phase 9 release. The title tagline, the "Patch Notes" event, `package.json` and the iOS project all show the same number (enforced by a test).
+Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exit gate has passed with evidence here; the patch number counts published builds with changes since that gate; `1.0.0` is reserved for the eventual release after the revised roadmap and final beta. The title tagline, the "Patch Notes" event, `package.json` and the iOS project all show the same number (enforced by a test).
 
 | Phase | Exit gate | Status |
 |---|---|---|
@@ -750,7 +750,7 @@ Rule (`src/version.js`): `0.N.x`, where N is the highest roadmap phase whose exi
 
 The table above follows the earlier roadmap. From 2026-11-13 the revised roadmap applies: the number keeps counting from 0.2, the minor number advances when one of the revised roadmap's phase gates is accepted (Phase 1 needs human playtesting for that), and the patch number counts published builds in between.
 
-Current version: **0.2.8** (the beta-feedback patch and its follow-up, plus revised-roadmap Phase 3, shared party HP and individual Defense, Phase 4, basic attacks, artes, support and a persistent hand, Phase 5, the command queue, hero Recovery and Relays, Phase 6, Act I onboarding, Relay accessibility, Act I tuning and telegraphs, and Phase 7, EX Combo recipes, discovery and the Combo Journal; Phase 1 still waits for human playtesting, so the minor number stays at 2; earlier 0.2.0 passed the old Phase 2 gate). The previous build, 0.2.6, is commit `3fd8b6b` (source `0bfcf8f`). Phase 8 (0.2.8) completes the content conversion: techniques, Pressure Valve, behavioural audits of every card, relic, mutation, graft, adaptation, event and service, the reward economy and build differentiation.
+Phase 8 version: **0.2.8** (the beta-feedback patch and its follow-up, plus revised-roadmap Phase 3, shared party HP and individual Defense, Phase 4, basic attacks, artes, support and a persistent hand, Phase 5, the command queue, hero Recovery and Relays, Phase 6, Act I onboarding, Relay accessibility, Act I tuning and telegraphs, and Phase 7, EX Combo recipes, discovery and the Combo Journal; Phase 1 still waits for human playtesting, so the minor number stays at 2; earlier 0.2.0 passed the old Phase 2 gate). The previous build, 0.2.6, is commit `3fd8b6b` (source `0bfcf8f`). Phase 8 (0.2.8) completes the content conversion: techniques, Pressure Valve, behavioural audits of every card, relic, mutation, graft, adaptation, event and service, the reward economy and build differentiation.
 
 ## Not present in this build
 
@@ -783,3 +783,7 @@ These roadmap references have no counterpart in this repository:
 - No test on a physical iPad, iPhone or Safari; Chromium only.
 - Audio has never been heard.
 - Mid-battle saves restart the fight rather than resuming mid-combo.
+
+## Revised roadmap, Phase 9 permanent progression (0.2.9)
+
+The Museum records acquisitions and specific played mechanics across runs. Ten single-relic loadouts use existing relic effects, 27 achievements use campaign, combat, collection or build evidence, and run finalization recovers from an interrupted write. The detailed [Phase 9 report](PHASE9.md) records the Phase 8 lifecycle audit, migration, measured unlock pacing, balance experiments, browser and engine checks, and distribution outcomes.

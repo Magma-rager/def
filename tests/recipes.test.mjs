@@ -1,3 +1,4 @@
+import { addRunRecipe, applyCheckpoint } from '../src/engine/progression.js';
 // Phase 7 EX Combos (docs/COMBAT_SPEC.md §12.4, §28). Every recipe is assembled by legal engine actions —
 // commit, Relay, support, Churn, Reserve, +FLOW, FINISH / CASH OUT — on a stacked hand; nothing writes
 // the chain history directly. Each test checks when the recipe triggers (on the command that completes
@@ -7,7 +8,7 @@ import assert from 'node:assert/strict';
 import { Combat, RULES } from '../src/engine/combat.js';
 import { RECIPES, RECIPE_MAP, RECIPE_IDS, normalizeCombos, knownDiscoveries } from '../src/data/recipes.js';
 import { CARDS, rewardPool, STARTER_DECK } from '../src/data/cards.js';
-import { normalizeMeta, recordCombo, defaultMeta, Save } from '../src/engine/save.js';
+import { normalizeMeta, defaultMeta, Save } from '../src/engine/save.js';
 import { Run } from '../src/engine/run.js';
 import { RNG } from '../src/core/rng.js';
 
@@ -547,16 +548,21 @@ test('every recipe can be assembled from obtainable cards; four from the starter
 test('the Combo Journal record: first discovery, repeats, unknown and damaged ids, idempotent normalisation', () => {
   const m = defaultMeta();
   assert.deepEqual(m.combos, {});
-  assert.equal(recordCombo(m, 'straight_circuit', 1000), true, 'first activation is a discovery');
-  assert.equal(recordCombo(m, 'straight_circuit', 2000), false, 'a repeat is not');
-  assert.equal(recordCombo(m, 'tandem_signal', 3000), true);
+  const run = Run.create({ seed: 90 });
+  addRunRecipe(run, 'straight_circuit', 1000);
+  applyCheckpoint(m, run);
+  assert.ok(m.combos.straight_circuit, 'first activation is a discovery');
+  addRunRecipe(run, 'straight_circuit', 2000);
+  applyCheckpoint(m, run);
+  addRunRecipe(run, 'tandem_signal', 3000);
+  applyCheckpoint(m, run);
   assert.deepEqual(m.combos.straight_circuit, { at: 1000, count: 2 });
   assert.deepEqual(knownDiscoveries(m.combos), ['straight_circuit', 'tandem_signal']);
   // an older Museum record (no combos) loads with an empty Journal and keeps everything else
   const old = { version: 1, runs: [{ result: 'victory' }], totalRuns: 3, wins: 1, bossesDefeated: { scrap_tyrant: 1 }, enemiesSeen: { rush_hound: 2 }, relicsFound: ['beta_badge'], cardsSeen: ['scrapline'], bestCombo: 7, maxHit: 40, bestScore: 900, endings: [], archetypes: { ladder: 2 }, tutorialDone: true, defeats: 2, devTrust: 1, tut: { attack: true }, lessonsMigrated: true };
   const n = normalizeMeta(JSON.parse(JSON.stringify(old)));
   assert.deepEqual(n.combos, {});
-  assert.equal(n.version, 2);
+  assert.equal(n.version, 3);
   for (const k of Object.keys(old)) if (k !== 'version') assert.deepEqual(n[k], old[k], `kept ${k}`);
   assert.deepEqual(normalizeMeta(JSON.parse(JSON.stringify(n))), n, 'normalising twice changes nothing');
   // damaged and unknown entries
@@ -576,12 +582,13 @@ test('Journal discoveries survive saving and loading the Museum record', () => {
   global.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
   try {
     const m = Save.loadMeta();
-    recordCombo(m, 'quick_settlement', 42);
-    Save.saveMeta(m);
+    const run = Run.create({ seed: 91 });
+    addRunRecipe(run, 'quick_settlement', 42);
+    assert.equal(Save.checkpoint(run, m).ok, true);
     const back = Save.loadMeta();
     assert.deepEqual(back.combos, { quick_settlement: { at: 42, count: 1 } });
-    recordCombo(back, 'quick_settlement', 99);
-    Save.saveMeta(back);
+    addRunRecipe(run, 'quick_settlement', 99);
+    assert.equal(Save.checkpoint(run, back).ok, true);
     assert.equal(Save.loadMeta().combos.quick_settlement.count, 2);
   } finally { delete global.localStorage; }
 });

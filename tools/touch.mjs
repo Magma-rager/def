@@ -8,7 +8,7 @@ const errs = [];
 p.on('pageerror', (e) => errs.push(e.message));
 await p.goto('http://localhost:8123/index.html');
 await p.waitForTimeout(300);
-await p.evaluate(() => { const a = window.__sb; a.meta.tutorialDone = true; a.meta.tut = { start: 1, opened: 1, closer: 1, afterCombo: 1, lock: 1, scramble: 1, jam: 1, glitch: 1, latch: 1 }; a.startRun('beta_badge'); });
+await p.evaluate(() => { const a = window.__sb; a.meta.tutorialDone = true; a.meta.tut = { start: 1, opened: 1, closer: 1, afterCombo: 1, lock: 1, scramble: 1, jam: 1, glitch: 1, latch: 1 }; a.startFixtureRun('beta_badge'); });
 await p.waitForTimeout(200);
 await p.evaluate(() => document.querySelector('.dlg-skip')?.click());
 await p.waitForTimeout(200);

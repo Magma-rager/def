@@ -1,6 +1,7 @@
 // SIGNAL//BREAK — application shell: routing between screens, overlays, saving, main loop.
 import { Run } from './engine/run.js';
-import { Save, recordRun } from './engine/save.js';
+import { Save } from './engine/save.js';
+import { addRunRecipe, canStartWith } from './engine/progression.js';
 import { AudioEngine } from './audio/audio.js';
 import { CARDS } from './data/cards.js';
 import { RELICS } from './data/relics.js';
@@ -40,6 +41,7 @@ class App {
     if (migrateLessons(this.meta)) Save.saveMeta(this.meta);
     this.audio = new AudioEngine(this.settings);
     this.run = null;
+    this.progressNotice = new Set();
     this.offline = null; // web app offline cache: null (none), 'caching' or 'ready'
     this.battle = null;
     this.paused = false;
@@ -118,9 +120,39 @@ class App {
   }
 
   // ───────────────────────── persistence ─────────────────────────
-  hasSave() { return !!Save.loadRun(); }
-  save() { if (this.run) Save.saveRun(this.run.serialize()); }
-  saveMeta() { Save.saveMeta(this.meta); }
+  hasSave() { return Save.hasRun(); }
+  storageNotice(ok) {
+    if (!ok && !this.storageWarning) {
+      this.toast(t('Progress could not be saved. Check available storage and retry.'), 'progress-toast');
+    }
+    this.storageWarning = !ok;
+    return ok;
+  }
+  save() {
+    if (!this.run) return true;
+    const saved = Save.checkpoint(this.run, this.meta);
+    if (!this.storageNotice(saved.ok)) return false;
+    this.meta = saved.meta;
+    for (const id of saved.earned) this.progressNotice.add(id);
+    if (!this.battle) this.announceProgress();
+    return true;
+  }
+  saveMeta() { return this.storageNotice(Save.saveMeta(this.meta)); }
+  announceProgress() {
+    const n = this.progressNotice.size;
+    if (!n) return;
+    this.progressNotice.clear();
+    this.toast(t('Achievements earned: {n}', { n }), 'progress-toast');
+  }
+  discoverRecipes(list) {
+    const fresh = new Set();
+    if (!this.run) return fresh;
+    for (const { id } of list) {
+      if (!this.meta.combos[id] && !this.run.d.progress.recipes[id]) fresh.add(id);
+      addRunRecipe(this.run, id);
+    }
+    return this.save() ? fresh : new Set();
+  }
   saveSettings() { Save.saveSettings(this.settings); this.audio.applySettings(this.settings); }
 
   // Switches the interface language, stores the choice, and redraws what is on screen. Run, combat
@@ -163,6 +195,7 @@ class App {
     this.current = [fn, args];
     const r = fn(this, this.layers.screen, ...args);
     if (typeof r === 'function') this.cleanup = r;
+    if (fn.name) this.announceProgress();
   }
 
   toTitle() {
@@ -179,29 +212,53 @@ class App {
   newRunFlow() {
     this.closeAllModals();
     if (this.hasSave()) {
-      this.confirm('Start a new run?', 'Your current run will be abandoned and recorded in the Museum.', 'Abandon & start new', () => {
-        const saved = Run.load(Save.loadRun());
-        if (saved) this.recordEnd(saved, 'abandoned');
-        Save.clearRun();
-        S.newRunDialog(this);
-      });
+      this.confirm(t('Start a new run?'), t('Your current run will be abandoned when the new run begins.'),
+        t('Abandon & start new'), () => S.newRunDialog(this, true));
     } else S.newRunDialog(this);
   }
 
-  // `seedOverride` is for repeatable test runs (tools/accept4.mjs); the game always picks a random seed
-  startRun(starterRelic, seedOverride) {
-    const seed = seedOverride !== undefined ? seedOverride >>> 0 : (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0;
+  startRun(starterRelic, replace = false) {
+    if (!canStartWith(this.meta, starterRelic)) {
+      this.toast(t('Choose an available starting relic.'));
+      return false;
+    }
+    const saved = Save.loadRun();
+    if (saved) {
+      if (replace !== true) return false;
+      const previous = this.run || Run.load(saved);
+      if (!previous || !this.finalize(previous, previous.d.pending?.type === 'gameover' ?
+        (previous.d.pending.victory ? 'victory' : 'defeat') : 'abandoned')) return false;
+    }
+    const seed = (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0;
+    return this.#beginRun(starterRelic, seed);
+  }
+
+  // Deterministic scenario tools use an explicit fixture entry point. Normal play always
+  // goes through startRun, which rejects locked options and protects an existing save.
+  startFixtureRun(starterRelic, seed = (Date.now() ^ Math.floor(Math.random() * 1e9)) >>> 0) {
+    const saved = this.run || Run.load(Save.loadRun());
+    if (saved && !this.finalize(saved, 'abandoned')) return false;
+    return this.#beginRun(starterRelic, seed >>> 0);
+  }
+
+  #beginRun(starterRelic, seed) {
     this.run = Run.create({ seed, starterRelic, tutorial: !this.meta.tutorialDone });
     if (this.meta.totalRuns > 0 && this.meta.tutorialDone) this.run.d.pending = { type: 'story', scene: 'intro_return', next: 'map' };
-    this.save();
+    if (!this.save()) {
+      // Retry the same run if the checkpoint itself failed. If the checkpoint is already on
+      // disk, Continue also recovers it after a reload.
+      this.show(S.saveRetryScreen, () => { if (this.save()) this.route(); });
+      return false;
+    }
     this.route();
+    return true;
   }
 
   continueRun() {
-    const d = Save.loadRun();
-    const run = d && Run.load(d);
-    if (!run) { this.toast('Save data could not be loaded.'); Save.clearRun(); this.show(S.titleScreen); return; }
+    const run = Run.load(Save.loadRun());
+    if (!run) { this.toast(t('Save data could not be loaded.')); this.show(S.titleScreen); return; }
     this.run = run;
+    if (run.d.pending?.type !== 'gameover') this.save();
     this.route();
   }
 
@@ -237,7 +294,7 @@ class App {
       case 'surgery': this.show(S.surgeryScreen); break;
       case 'treasure': this.show(S.treasureScreen); break;
       case 'mutation': this.show(S.mutationScreen); break;
-      case 'gameover': this.endRun(p.victory ? 'victory' : 'defeat'); break;
+      case 'gameover': this.endRun(p.finalize?.result || (p.victory ? 'victory' : 'defeat')); break;
       default: this.show(S.mapScreen);
     }
   }
@@ -281,6 +338,7 @@ class App {
     setup.assist = !!this.settings.relaxed;
     setup.tactical = !!this.settings.tactical; // optional Tactical timing (off unless chosen)
     if (setup.assist) this.run.d.flags.assistUsed = true;
+    if (setup.tactical) this.run.d.flags.tacticalUsed = true;
     this.save();
     this.show(() => {});
     const screen = new BattleScreen(this, setup, (outcome, combat) => this.onBattleEnd(outcome, combat, setup));
@@ -291,35 +349,42 @@ class App {
 
   onBattleEnd(outcome, combat, setup) {
     if (!this.run || this.battle == null) return;
-    const res = this.run.finishBattle(outcome);
-    this.save();
-    if (setup.tutorial && outcome.victory && !this.meta.tutorialDone) {
-      this.meta.tutorialDone = true;
-      this.saveMeta();
+    if (!this.run.finishBattle(outcome)) return;
+    const tutorialWon = setup.tutorial && outcome.victory && !this.meta.tutorialDone;
+    if (!this.save()) { this.show(S.saveRetryScreen, () => { if (this.save()) this.route(); }); return; }
+    if (tutorialWon) {
       this.show(S.mapScreen);
       S.storyDialog(this, sceneText('tutorial_done'), () => this.route());
       return;
     }
-    void res;
     this.route();
   }
 
-  recordEnd(run, result) {
-    const summary = run.summary(result);
-    recordRun(this.meta, summary, { enemiesSeen: run.d.enemiesSeen, relicsSeen: run.d.relicsSeen, cardsSeen: [...new Set(run.d.deck.map((c) => c.id))] });
-    this.saveMeta();
-    return summary;
+  finalize(run, result) {
+    const before = this.meta.progress.earned;
+    const saved = Save.finish(run, result, this.meta);
+    if (saved.meta) this.meta = saved.meta;
+    for (const id of saved.summary?.progress?.achievements || []) {
+      if (!Object.hasOwn(before, id)) this.progressNotice.add(id);
+    }
+    if (!this.storageNotice(saved.ok)) {
+      this.run = run;
+      this.show(S.saveRetryScreen, () => this.endRun(run.d.pending?.finalize?.result || result));
+      return null;
+    }
+    this.run = null;
+    return saved.summary;
   }
 
   endRun(result) {
-    const run = this.run;
-    const summary = this.recordEnd(run, result);
-    Save.clearRun();
-    this.run = null;
-    if (result === 'defeat') {
+    if (!this.run) return;
+    const summary = this.finalize(this.run, result);
+    if (!summary) return;
+    if (summary.result === 'abandoned') { this.toTitle(); return; }
+    if (summary.result === 'defeat') {
       this.show(S.resultsScreen, summary);
       S.storyDialog(this, S.defeatLines(this), () => {});
-    } else this.show(S.creditsScreen, () => this.show(S.resultsScreen, summary)); // the run is already recorded
+    } else this.show(S.creditsScreen, () => this.show(S.resultsScreen, summary));
   }
 
   // ───────────────────────── pause & modals ─────────────────────────
@@ -339,8 +404,8 @@ class App {
         btn(t('View deck'), () => this.viewDeck(), ''),
         btn(t('How to play'), () => this.howToPlay(), ''),
         btn(t('Settings'), () => this.openSettings(), ''),
-        btn(t('Save & quit to title'), () => { close(); this.save(); this.toTitle(); }, ''),
-        this.run ? btn(t('Abandon run'), () => this.confirm(t('Abandon this run?'), t('It will be recorded as abandoned in the Museum.'), t('Abandon'), () => { close(); this.closeAllModals(); const r = this.run; this.recordEnd(r, 'abandoned'); Save.clearRun(); this.run = null; this.toTitle(); }), 'danger') : null)),
+        btn(t('Save & quit to title'), () => { if (this.save()) { close(); this.toTitle(); } }, ''),
+        this.run ? btn(t('Abandon run'), () => this.confirm(t('Abandon this run?'), t('It will be recorded as abandoned in the Museum.'), t('Abandon'), () => { close(); this.closeAllModals(); this.endRun('abandoned'); }), 'danger') : null)),
     { dismiss: true, onClose: () => { this.pauseOpen = false; this.resume(); } });
   }
 
@@ -361,12 +426,13 @@ class App {
       if (closed) return;
       closed = true;
       wrap.remove();
+      if (opts.dismiss) window.removeEventListener('keydown', esc);
       this.modals = this.modals.filter((m) => m !== close);
       if (opts.onClose) opts.onClose();
       if (!this.modals.length && this.battle && this.battle.tutEl.hidden) this.resume();
     };
     if (opts.dismiss) wrap.querySelector('.modal-bg').addEventListener('click', () => { this.audio.sfx('back'); close(); });
-    const esc = (e) => { if (e.key === 'Escape' && this.modals[this.modals.length - 1] === close) { close(); window.removeEventListener('keydown', esc); } };
+    const esc = (e) => { if (e.key === 'Escape' && this.modals[this.modals.length - 1] === close) close(); };
     if (opts.dismiss) window.addEventListener('keydown', esc);
     this.modals.push(close);
     return close;

@@ -648,3 +648,9 @@ Every archetype has at least one recipe. With the starter deck alone the recipe 
 - Churn: Junk Toss +4 per Churn (max +20/+24); Junkstorm +4/+5 per Churn (max +36/+45); Scrap Feed adds 4/5 Guard; Recycler 12/15; Spare Parts adds 5/7 Guard.
 - Flow: Spark Primer +5/+7; Quickdraw 8/10; Slipstream 5/7 twice; Overclock 8/10; Timekeeper +5/+6 per second; Relay Baton now deals 8/10.
 - Interference: Jam Breaker +3/+4; Breach Payload +6/+7.
+
+## 30. Permanent progression (Phase 9)
+
+The Museum profile records acquisitions, actual combat accomplishments, achievements, loadout eligibility and completed-run records. A new profile can win with the default loadout. New Run selects one relic from the available roster using the same eligibility rules as the Museum. Unlocks grant a choice of starting relic and retain ordinary acquisition. A deliberate starter can lightly bias an opening reward slot before an acquired direction forms. The existing timing assists, reward tiers, boss pool and campaign stats remain in force.
+
+Cards and relics are discovered on legitimate acquisition, enemies on encounter or summon and EX recipes on execution. Encounter-based proof is committed with the battle outcome. The finished-run counter for Pressure Gauge uses victories and defeats; earlier eligibility is retained. A v7 run checkpoints durable evidence before applying it to the v3 Museum profile. A stable identity and progress cursor prevent repeat credit after a retry, reload or duplicate callback. See [the Phase 9 report](PHASE9.md) for migration, catalogue, validation and results.

@@ -126,9 +126,9 @@ The version follows the development roadmap, and the title screen shows it ("Pat
 
 - `0.N.x`: N is the highest roadmap phase whose exit gate has passed, with the evidence recorded in `docs/AUDIT.md`.
 - `0.N.P`: P counts published builds with changes since that gate.
-- `1.0.0`: the Phase 9 release.
+- `1.0.0`: the eventual release after the revised roadmap and final beta.
 
-Current: **0.2.8**. Under the first roadmap, phases 0 (audit), 1 (Act I → Act II with saves) and 2 (credits and the return to the main loop) passed. The revised roadmap (2026-11-13) replaced it; its Phase 1, the beta-feedback patch (with a follow-up in 0.2.2), is implemented and waiting for a human playtest; Phase 2 (combat specification, `docs/COMBAT_SPEC.md`) is written and Phase 3 (shared party HP and individual Defense, 0.2.3), Phase 4 (basic attacks, artes, support, a persistent hand and the Momentum economy, 0.2.4), Phase 5 (the command queue, hero Recovery and Relays, 0.2.5), Phase 6 (Act I onboarding, Relay accessibility, Act I tuning and telegraphs, 0.2.6) Phase 7 (EX Combo recipes, discovery and the Combo Journal, 0.2.7) and Phase 8 (techniques, content completion, the reward economy and build differentiation, 0.2.8) are implemented and tested (see `docs/AUDIT.md`). From here the minor number advances when one of the revised roadmap's phase gates is accepted. The number lives in `src/version.js`; `package.json` and the iOS project must match it, and a test enforces that. The line under the title menu shows the build date and source commit.
+Current: **0.2.9**. Phase 9 adds permanent discoveries, achievements, starting relic loadouts and recoverable local saves. See [the Phase 9 report](docs/PHASE9.md) for verification and [the development audit](docs/AUDIT.md) for previous phases. The version comes from `src/version.js`, and tests enforce that the package and iOS project match. The title menu shows the build date and source commit. The next human beta follows completion of the revised roadmap through Phase 12.
 
 ## Verification tools
 

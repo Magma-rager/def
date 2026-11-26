@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import { Combat, RULES } from '../src/engine/combat.js';
 import { Run, VOLATILE_OUTCOMES } from '../src/engine/run.js';
 import { STARTER_DECK } from '../src/data/cards.js';
-import { unlocks, defaultMeta, recordRun } from '../src/engine/save.js';
+import { defaultMeta } from '../src/engine/save.js';
+import { canStartWith, settleRun } from '../src/engine/progression.js';
 import { VERSION } from '../src/version.js';
 import { EVENT_MAP } from '../src/data/events.js';
 import fs from 'node:fs';
@@ -137,11 +138,11 @@ test('Rest, surgery and cache nodes change persistent run state', () => {
 
 test('Museum: an Act I boss kill unlocks a starter relic for later runs', () => {
   const meta = defaultMeta();
-  assert.equal(unlocks(meta).boss1, false);
+  assert.equal(canStartWith(meta, 'stopwatch_gear'), false);
   const run = Run.create({ seed: 51 });
   run.d.bossesDefeated.push('scrap_tyrant');
-  recordRun(meta, run.summary('defeat'), { enemiesSeen: [], relicsSeen: [], cardsSeen: [] });
-  assert.equal(unlocks(meta).boss1, true);
+  settleRun(meta, run, 'defeat');
+  assert.equal(canStartWith(meta, 'stopwatch_gear'), true);
   const next = Run.create({ seed: 52, starterRelic: 'stopwatch_gear' });
   assert.ok(next.d.relics.includes('stopwatch_gear'));
 });

@@ -7,7 +7,7 @@
 // (src/i18n/ru.js) and are looked up here. Game logic never imports this module, so combat, balance
 // and save data are identical in every language.
 import { CARDS, GRAFTS, CATEGORY_NAMES, STRENGTH_NAMES, OWNER_NAMES, ARCHETYPES } from '../data/cards.js';
-import { RELICS, STARTER_OPTIONS } from '../data/relics.js';
+import { RELICS } from '../data/relics.js';
 import { RECIPE_MAP } from '../data/recipes.js';
 import { ENEMIES } from '../data/enemies.js';
 import { EVENT_MAP } from '../data/events.js';
@@ -153,7 +153,6 @@ export function archName(keyOrLabel) {
 
 export const relicName = (id) => (pick('relics', id) || {}).name || RELICS[id].name;
 export const relicText = (id) => (pick('relics', id) || {}).text || RELICS[id].text;
-export const starterHint = (id) => pick('starterHints', id) || (STARTER_OPTIONS.find((o) => o.id === id) || {}).hint || '';
 
 export const mutName = (id) => (pick('mutations', id) || {}).name || MUTATIONS[id].name;
 export const mutText = (id) => (pick('mutations', id) || {}).text || MUTATIONS[id].text;
@@ -178,6 +177,7 @@ export const enemyLore = (id) => enemyT(id).lore || ENEMIES[id].lore;
 export const intentName = (id, key) => ((enemyT(id).intents || {})[key]) || ENEMIES[id].intents[key].name;
 // EX Combo recipes (Phase 7): name and texts (how, effect, hint, purpose).
 export const recipeField = (id, f) => ((pick('recipes', id) || {})[f]) || (RECIPE_MAP[id] ? RECIPE_MAP[id][f] : id);
+export const achievementText = (a, index) => pick('achievements', a.id)?.[index] || (index === 0 ? a.name : a.description);
 export const recipeName = (id) => recipeField(id, 'name');
 // An intent's own description (shown when an enemy is held); plain attacks are described by the UI.
 export const intentDesc = (id, key) => pick('intentDesc', `${id}.${key}`) || ENEMIES[id].intents[key].desc;
