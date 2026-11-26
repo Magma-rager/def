@@ -9,7 +9,7 @@ Baseline source `56efb85`, distribution `6f3f7e9`, 243 passing tests. Local ref 
 | Recent runs, total, wins, defeats | `recordEnd` writes through `recordRun` before credits/results or when explicitly abandoning. Title, returning dialogue and Museum read these values. | The last 30 summaries include outcome labels. The lifetime defeat count also includes abandoned runs, and older outcomes can no longer be individually classified. Pressure Gauge used the inclusive total. |
 | Boss defeats and endings | `Run.finishBattle` credits a boss within the active run. Run finalization copies defeats and the victory ending into the profile. Boss preparation and Museum read the respective run and profile data. | A boss win can be recorded after defeat or abandonment. Profile storage and active-run removal are separate writes. Historical boss totals and wins establish campaign milestones. |
 | Enemies, relics and cards | Encounters and relic acquisition track distinct IDs in the active run. Finalization merges those and the final deck into the Museum. | Enemy figures count runs. Summons absent from the run list and cards taken then removed can be lost from the catalogue. Historical recorded IDs establish discovery. |
-| Best combo, hit and score; build labels | Completed battle stats feed the run; `recordRun` aggregates maxima and final deck direction. Museum and returning dialogue display records. | Ends of runs including defeat or abandonment qualify. A historical tag establishes deck direction, with combat mastery evidence usually unavailable. |
+| Best combo, hit, score and build labels | Completed battle stats feed the run. `recordRun` aggregates maxima and final deck direction. Museum and returning dialogue display records. | Ends of runs including defeat or abandonment qualify. A historical tag establishes deck direction, with combat mastery evidence usually unavailable. |
 | Tutorial and Ozmund’s trust | The lesson controller commits progress in the profile. Tutorial victory sets its flag. Finalization increments trust for the existing story flags. | Existing values survive reload when storage succeeds. Duplicate finalization can duplicate trust. |
 | Combo Journal | Resolved EX activation writes first seen and count immediately. The UI uses it for discovery banners and the Museum Journal. Run statistics count only finished battles. | Discoveries survive defeat, abandonment and restart. Real activations after a restart legitimately contribute to the Journal. Known IDs establish historical discovery. |
 | Settings | Independent settings record, updated from existing controls and loaded on startup. | Language, timing assists and Reduced Motion remain profile-independent. |
@@ -55,11 +55,11 @@ Targets measure committed events or distinct eligible discoveries. “Historical
 
 | Achievement | Category | Measurement and target | Starter reward | Evidence |
 |---|---|---|---|---|
-| Through the Scrapworks | Campaign | Any Act I boss win | Stopwatch Gear | Committed boss outcome; historical |
-| Protocol Broken | Campaign | Any Act II boss win | — | Committed boss outcome; historical |
-| Signal Restored | Campaign | One three-Act victory | Echo Splice | Engine and ordinary campaigns; historical |
-| Every Challenge Answered | Campaign | Six different boss wins | — | All six boss outcomes and eight-run profile; historical |
-| Back for More | Campaign | Three victories or defeats | Pressure Gauge | Real result sequences and immediate-abandon test; historical |
+| Through the Scrapworks | Campaign | Any Act I boss win | Stopwatch Gear | Committed boss outcome, with historical recognition |
+| Protocol Broken | Campaign | Any Act II boss win | — | Committed boss outcome, with historical recognition |
+| Signal Restored | Campaign | One three-Act victory | Echo Splice | Engine and ordinary campaigns, with historical recognition |
+| Every Challenge Answered | Campaign | Six different boss wins | — | All six boss outcomes and eight-run profile and historical recognition |
+| Back for More | Campaign | Three victories or defeats | Pressure Gauge | Real result sequences and immediate-abandon test and historical recognition |
 | Four on the Rise | Combat | One Perfect with four ascending attacks in one hero’s segment | Ladder Rungs | Executed four-card chain |
 | Switching Signals | Combat | Three successful chains containing two Crosses and one Step each | Twin Dials | Executed chains with chosen suits |
 | Ready When Needed | Combat | An actual play from Reserve in three encounters | Spare Pockets | Stash, play and commit test and profile simulations |
@@ -74,14 +74,14 @@ Targets measure committed events or distinct eligible discoveries. “Historical
 | Time Well Spent | Combat | Momentum buys Flow and that chain ends in a Perfect | — | Paid Flow in a completed chain |
 | Invest the Momentum | Combat | Spend eight Momentum on attacks in a successful chain | — | Executed attacks and their costs |
 | A New Combination | Collections | One known EX recipe | — | Activation and migration |
-| Combo Researcher | Collections | Five different EX recipes | — | Campaigns and collection test; historical |
-| Complete Journal | Collections | All 15 recipes | — | Collector profile and existing recipe activation tests; historical |
-| Deep Signal | Collections | One advanced EX recipe | — | Recipe activation and collection test; historical |
-| Field Notes | Collections | 18 different known enemies | — | Encounter/summon tests and ordinary profiles; historical |
-| Curator of Broken Things | Collections | 20 acquired relics | — | Acquisition and ordinary profiles; historical |
-| Know Your Opponents | Collections | Six different bosses encountered | — | All six encounters; historical |
+| Combo Researcher | Collections | Five different EX recipes | — | Campaigns and collection test and historical recognition |
+| Complete Journal | Collections | All 15 recipes | — | Collector profile and existing recipe activation tests and historical recognition |
+| Deep Signal | Collections | One advanced EX recipe | — | Recipe activation and collection test and historical recognition |
+| Field Notes | Collections | 18 different known enemies | — | Encounter/summon tests and ordinary profiles and historical recognition |
+| Curator of Broken Things | Collections | 20 acquired relics | — | Acquisition and ordinary profiles and historical recognition |
+| Know Your Opponents | Collections | Six different bosses encountered | — | All six encounters and historical recognition |
 | Changing Tactics | Mastery | Three proven directional builds in finished runs with an Act I boss win | — | Distinct completed build runs |
-| Signature Victory | Mastery | One campaign win with twice the signature threshold and use in each Act | — | Committed victory and per-Act proof test; collector profile |
+| Signature Victory | Mastery | One campaign win with twice the signature threshold and use in each Act | — | Committed victory and per-Act proof test and collector profile |
 
 Build direction still comes from the run’s acquired cards, relics and mutations. To be recognised the run must finish, defeat an Act I boss and meet the proof threshold for its final direction. The minimums are two Ladder Perfects, five Suit Switching chains, four two-hero Relay chains, three Momentum Burst chains, three paid-Flow Perfects, three Churn payoff chains, five encounters using Reserve, 100 Guard absorption, six Cash Out finishes or three encounters responding to interference. Signature Victory needs twice that amount and positive proof in every Act. An historical archetype label contributes to the traditional build record only.
 
@@ -89,7 +89,7 @@ Build direction still comes from the run’s acquired cards, relics and mutation
 
 Run schema v7 adds stable identity, the selected starter for new runs, acquisition evidence, cumulative committed combat proof and pending finalization. Museum schema v3 adds the settled-run watermark, one active-run cursor, achievements, outcome breakdown and build proof. Storage keys and the separate settings schema are unchanged. Run v3, v4 and v5 work through the earlier fixtures and v6 is covered by captured Phase 8 Act II and game-over saves. Museum fixtures were generated using the actual earlier v1 and v2 game code. They contain ordinary engine-run results, plus the earlier fields that those versions wrote.
 
-A run checkpoint is written first. Its cumulative evidence is folded into the profile after that write. Reprocessing the same checkpoint copies only evidence beyond the profile’s cursor. Finalization checkpoints the result and date, commits the profile, then clears the active run. Success requires storage confirmation. A reload after the profile commit detects the stable settled ID and completes the clear without changing totals. A late callback for an older ID cannot clear a newer active save. Same-seed runs get separate IDs. History eviction keeps the settled watermark. If writing or clearing fails, the UI exposes a retry; a persisted pending checkpoint can be recovered with Continue.
+A run checkpoint is written first. Its cumulative evidence is folded into the profile after that write. Reprocessing the same checkpoint copies only evidence beyond the profile’s cursor. Finalization checkpoints the result and date, commits the profile, then clears the active run. Success requires storage confirmation. A reload after the profile commit detects the stable settled ID and completes the clear without changing totals. A late callback for an older ID cannot clear a newer active save. Same-seed runs get separate IDs. History eviction keeps the settled watermark. If writing or clearing fails, the UI exposes a retry. Continue can recover a persisted pending checkpoint.
 
 Migration preserves legacy outcomes and lifetime totals. Rows with clear result labels are classified. The lifetime difference that cannot be attributed to defeat or abandonment is displayed as earlier outcomes unavailable. An old profile that already qualified for Pressure Gauge from its inclusive total keeps the unlock, even if some runs were abandoned. New abandonment does not count for that condition. Historical dates are never inferred. Mechanical mastery begins with prospective evidence. Reopening the Museum and changing language leave the achievement state alone. Normalization recovers valid fields around missing, duplicate or malformed entries.
 
@@ -114,7 +114,7 @@ The regular policy saw 3.43 first-slot Reserve offers per campaign with Spare Po
 
 ## Long-term progression
 
-Run `node tools/progression.mjs profile 8` and `SB_FIRST_SEED=1007 node tools/progression.mjs profile 6 learner`. Each starts from a fresh profile, commits actual run events and reuses the earned profile in the next run. The variety policy selects among earned starters; the collector targets missing recipes and alternate bosses. Counts describe simulated progression opportunities. They measure neither human playtime nor human enjoyment.
+Run `node tools/progression.mjs profile 8` and `SB_FIRST_SEED=1007 node tools/progression.mjs profile 6 learner`. Each starts from a fresh profile, commits actual run events and reuses the earned profile in the next run. The variety policy selects among earned starters. The collector targets missing recipes and alternate bosses. Counts describe simulated progression opportunities. They measure neither human playtime nor human enjoyment.
 
 | Policy | Results in order | Available loadouts after each run | Final awards | Cards | Relics | Enemies | EX | Bosses defeated |
 |---|---|---|---|---|---|---|---|---|
@@ -125,7 +125,7 @@ Run `node tools/progression.mjs profile 8` and `SB_FIRST_SEED=1007 node tools/pr
 | Collector | WWWLWWWW | 9 → 9 → 10 → 10 → 10 → 10 → 10 → 10 | 27/27 | 52/81 | 26/39 | 23/25 | 15/15 | 6/6 |
 | Learner, defeat-first seed range | LLLLLL | 7 → 7 → 8 → 9 → 9 → 9 | 20/27 | 51/81 | 19/39 | 23/25 | 12/15 | 4/6 |
 
-The first ordinary seed earned eight alternates, including Echo Splice, and had all ten after the third run. The variety profile lost its first run, unlocked Echo Splice on its second and Spare Pockets on its fifth. The defeat-first learner never won its six samples. It still claimed seven options from its first run, Pressure Gauge on run three and Spare Pockets on run four. The ordinary learner and quick policies ended with 0/3 Reserve encounters. This makes Spare Pockets sensitive to player intent. Its requirement can be met with the normal Reserve slots and the starting deck. The collector completed all 27 achievements, all 15 recipes and all six boss wins in eight runs. An exploratory catalogue milestone is quite different from collecting every card or relic.
+The first ordinary seed earned eight alternates, including Echo Splice, and had all ten after the third run. The variety profile lost its first run, unlocked Echo Splice on its second and Spare Pockets on its fifth. The defeat-first learner never won its six samples. It still claimed seven options from its first run, Pressure Gauge on run three and Spare Pockets on run four. The ordinary learner and quick policies ended with 0/3 Reserve encounters. This makes Spare Pockets sensitive to player intent. Its requirement can be met with the normal Reserve slots and the starting deck. The collector completed all 27 achievements, all 15 recipes and all six boss wins in eight runs. An exploratory catalogue milestone is quite different from collecting every card or relic. The measured first-win profile is front-loaded. Later recognition is more heavily weighted toward mastery and collections. Whether that feels well-paced is a final beta question.
 
 ## Acceptance and regression evidence
 
@@ -134,15 +134,16 @@ Run the browser commands below against `npm run serve` on port 8123. They use Pl
 | Command | What it exercises |
 |---|---|
 | `npm test` | 261 passing tests, including 18 added Phase 9 behavioral cases. The existing suites retain coverage of six bosses, eleven adaptations, all fifteen EX recipes, persistence, economy, targeting and timing |
-| `node tools/accept9.mjs ui en 844 390 OUTPUT` and the same in Russian | Fresh profile, locked controls, actual Cash Out/EX unlock, defeat, receipt, reload, use of an earned starter, acquisition/removal/trade, Mirror Shard summons, abandonment and language switching |
+| `node tools/accept9.mjs ui en 844 390 OUTPUT` and the same in Russian | 23/23 in each language. Fresh profile, locked controls, actual Cash Out/EX unlock, defeat, receipt, reload, use of an earned starter, acquisition/removal/trade, Mirror Shard summons, abandonment and language switching |
 | `node tools/accept9.mjs historical ru 844 390 OUTPUT` and the same in English | 6/6 in each language. Captured v2 profile plus active v6 run, unknown dates, preserved deck and prior records |
-| `node tools/accept9.mjs loadouts ru 1180 820 OUTPUT` | 12/12. Explicitly seeded earned eligibility; every actual selector choice applies one relic, respects baseline stats, and survives ordinary abandonment as a discovery |
+| `node tools/accept9.mjs loadouts ru 1180 820 OUTPUT` | 12/12. Explicitly seeded earned eligibility. Every actual selector choice applies one relic, respects baseline stats, and survives ordinary abandonment as a discovery |
 | `node tools/accept9.mjs recovery en 844 390 OUTPUT` and the same in Russian | 3/3 in each language. A captured pending victory and one injected active-save clear failure, then real browser reload and one permanent victory |
 | `node tools/accept9.mjs layout LANG W H OUTPUT` | Seven landscape sizes in both languages. Native scroll body, accessible select/filter controls and footer placement. Checked fresh, locked and fully available rosters |
-| `node tools/accept8.mjs ui en 844 390 OUTPUT` | 51/51. Phase 8 mechanics through the real UI with its documented fixtures |
+| `node tools/accept8.mjs ui en 844 390 OUTPUT` | 51/51 in English and 51/51 in Russian. Phase 8 mechanics through the real UI with its documented fixtures |
 | `node tools/accept8.mjs runs 3` | 10/11. Nine directional families and the four-family gate passed. Reserve did not meet the focused formation criterion on these three seeds |
-| `node tools/accept8.mjs campaign en 1180 820 OUTPUT` and `campaign ru 844 390 OUTPUT` | Ordinary fresh-profile wins in both languages. Each initial run passed 11/11 checks, played 18 battles and advanced through all Acts to ending, credits, results, Museum and new run. Both classified as completed without nudge |
+| `node tools/accept8.mjs campaign en 1180 820 OUTPUT` and `campaign ru 844 390 OUTPUT` | Ordinary fresh-profile wins in both languages. Each initial run passed 11/11 checks, played 18 battles and advanced through all Acts to ending, credits, results, Museum and new run. The Russian rerun with per-Act reloads passed 16/16 checks and won after 16 battles. All three completed without recovery intervention |
 | `node tools/accept5.mjs OUTPUT en 844x390` | 33/33. Command queue, recovery, Relay chain, safety, rewards and reload |
+| `node tools/accept6.mjs en 844 390 OUTPUT` and `--part=a` | A/B reached Act II and restored it with all checks passing. A/C then passed 32/32, including skipping and replaying tips on the corrected tool |
 | `node tools/accept7.mjs en 844 390 OUTPUT` | 47/47. EX activation conditions, actual cancellation results, discovery/replay distinction, Journal and reload |
 | `node tools/targeting.mjs` | 36/36. Player target selection, threats and execution-time targeting |
 | `node tools/pwa.mjs OUTPUT` and `PWA_PATH=/signalbreak/ node tools/pwa.mjs OUTPUT` | 20/20 and 19/19. Cached launches, existing run, play offline, achievements, Journal, unlocked offline start, reload, and service worker replacement |
@@ -172,3 +173,11 @@ Phase 9 UI fixtures arrange card draw and HP to exercise timing-sensitive accomp
 ## Presentation and final beta handoff
 
 Phase 10 work remains on small-screen card readability, EX banner congestion, Museum and loadout presentation, audio, animation, visual consistency and physical-device/browser verification. Phase 11 retains the broader Churn pairing and Reserve acquisition questions. Simulations and interface tests establish reachability and observed behavior. The final beta after the full roadmap will assess whether players find the unlocks rewarding, understand the Museum, and voluntarily explore different strategies at the observed pace.
+
+## Packaging
+
+The web/PWA build and Swift Playgrounds project use 0.2.9. `npm run build:ios` generated the standalone web and artifact HTML, service worker, manifest, and `dist/ios/SignalBreak.swiftpm.zip`. The ZIP passed `unzip -tq`. Its embedded HTML started a fresh run in local Chromium. Native Swift execution on an iPhone or iPad is still unverified. The existing GitHub Pages and Yandex mirror workflow remain the distribution paths. Syncing an App Store record is outside this phase.
+
+The English Echo Splice campaign (seed 397281893) started from the captured Phase 8 profile, restored exact checkpoints in all three Acts, beat the Clockwork Regent, Mirror Array and Signalbreak Core, and recorded a 1560-point victory after 18 battles. It passed 16/16 checks with zero recovery interventions. The Russian fresh campaign (seed 959015332) also passed 16/16 with zero interventions. It restored all three checkpoints, beat the Scrap Tyrant, Mirror Array and Signalbreak Core in 16 battles, and reached an earned-loadout start after results.
+
+The build stamps source commit `c26a13c8f1cd9bb955a14226adcd88dfb82c8bd4`. The Phase 8 distribution remains recoverable at `6f3f7e9ba864e104cc2b83c55b45b3d1b9ee0486`.
