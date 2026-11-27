@@ -33,7 +33,9 @@ plates. Combat type emphasizes effect, ownership, rank and cost. On the compact 
 illustration, graft name and recut history can be read by holding the card. Its live rank, suit,
 cost, effect and current restriction are directly visible. The new dialogue type treatment uses
 speaker accents and roles. Text reveals faster, or all at once with Reduced Motion. Speaker,
-choices, branches and endings still use the existing story data.
+choices, branches and endings still use the existing story data. Both languages now name Hessa
+as the user of Sunderline and explain the Auditor's actual Citation condition. The compact
+EX rail, one-relic loadouts and keyboard focus are explained in How to Relay.
 
 | Performer | Examples of new choreography |
 |---|---|
@@ -82,7 +84,8 @@ The Museum presents eight consistent destinations, grouped across two rows at ph
 Progressive disclosure keeps detailed requirements, build proof, run records and journal
 sequences in their respective pages. Achievement meters use the existing authoritative
 progress value. Starter options show eligibility and leave the confirm and cancel buttons
-available during scrolling. The results progression groups continue to reflect the recorded
+available during scrolling. Tab navigates combat controls, T switches the target, and Enter
+activates the focused control. The results progression groups continue to reflect the recorded
 run. EN tablet and RU phone starter/Museum checks passed keyboard selection, achievement
 filters and the locked/earned states. Real taps, holds, swipes and keyboard actions were used
 in the related Playwright suites.
@@ -192,8 +195,8 @@ artistic quality.
 
 ## Packaged build
 
-Version 0.2.10. The web build and Swift Playgrounds project were generated from source
-commit `e817ceb653c5480518c4f2c17407cfaece1cfeef`. The HTML build stamp is `e817ceb`.
+Version 0.2.10. The web build and Swift Playgrounds project use the source revision in the title
+build stamp. The packaging commit records that source stamp below.
 The generated Swift Playgrounds ZIP passed its integrity check and contains the matching
 game resource. The packaged build passed the Chromium accessibility, rotation and reload
 check. Both PWA layouts passed: 20/20 for the GitHub Pages path and 19/19 for the mirror

@@ -50,6 +50,22 @@ function shortReason(chk, fallback) {
   return fallback;
 }
 
+function recipeResultParts(sum) {
+  const parts = [];
+  if (sum.dmg) parts.push(t('{n} damage', { n: sum.dmg }));
+  if (sum.guard) parts.push(t('+{n} Guard', { n: sum.guard }));
+  if (sum.heal) parts.push(t('+{n} HP', { n: sum.heal }));
+  if (sum.momentum) parts.push(t('+{n} Momentum', { n: sum.momentum }));
+  if (sum.flow) parts.push(t('+{s} Flow', { s: secs(sum.flow, 1) }));
+  if (sum.churn) parts.push(t('+{n} Churn', { n: sum.churn }));
+  if (sum.exposed) parts.push(t('Exposed {s}', { s: secs(sum.exposed, 0) }));
+  if (sum.counter) parts.push(t('Counter {n}', { n: sum.counter }));
+  if (sum.cover) parts.push(t('Cover +{s}', { s: secs(sum.cover, 0) }));
+  if (sum.unlocked) parts.push(t('{n} unlocked', { n: sum.unlocked }));
+  if (sum.echo) parts.push(t('Echo'));
+  return parts;
+}
+
 export class BattleScreen {
   constructor(app, setup, onEnd) {
     this.app = app;
@@ -303,7 +319,7 @@ export class BattleScreen {
   }
 
   onKey(e) {
-    if (this.app.modalOpen() || this.ended) return;
+    if (e.defaultPrevented || this.app.modalOpen() || this.ended) return;
     if (this.lessonOpen) {
       if ((e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') && performance.now() - this.lessonShownAt > 450) { this.closeLesson(false); e.preventDefault(); }
       return;
@@ -326,10 +342,13 @@ export class BattleScreen {
     } else if (digit === 7 || digit === 8) {
       const uid = c.reserve[digit - 7];
       if (uid) this.doPlay(uid);
-    } else if (e.key === ' ' || e.key === 'Enter') { this.doCashOut(); e.preventDefault(); }
-    else if (e.key === 'f' || e.key === 'F') this.doSpend('flow');
-    else if (e.key === 'g' || e.key === 'G') this.doSpend('guard');
-    else if (e.key.toLowerCase() === 't' || (e.key === 'Tab' && !e.shiftKey && (document.activeElement === document.body || document.activeElement === this.canvas))) {
+    } else if (e.key === ' ' || e.key === 'Enter') {
+      if (e.target.closest?.('button, [role="button"], a, input, select, textarea')) return;
+      this.doCashOut();
+      e.preventDefault();
+    } else if (e.code === 'KeyF') this.doSpend('flow');
+    else if (e.code === 'KeyG') this.doSpend('guard');
+    else if (e.code === 'KeyT' && !e.ctrlKey && !e.metaKey && !e.altKey) {
       this.cycleTarget();
       e.preventDefault();
     }
@@ -538,31 +557,23 @@ export class BattleScreen {
     const { list, fresh, settlesAt } = this.lastEx;
     const sum = {};
     for (const ev of list) for (const [k, v] of Object.entries(ev.sum)) sum[k] = typeof v === 'boolean' ? sum[k] || v : (sum[k] || 0) + v;
-    const parts = [];
-    if (sum.dmg) parts.push(t('{n} damage', { n: sum.dmg }));
-    if (sum.guard) parts.push(t('+{n} Guard', { n: sum.guard }));
-    if (sum.heal) parts.push(t('+{n} HP', { n: sum.heal }));
-    if (sum.momentum) parts.push(t('+{n} Momentum', { n: sum.momentum }));
-    if (sum.flow) parts.push(t('+{s} Flow', { s: secs(sum.flow, 1) }));
-    if (sum.churn) parts.push(t('+{n} Churn', { n: sum.churn }));
-    if (sum.exposed) parts.push(t('Exposed {s}', { s: secs(sum.exposed, 0) }));
-    if (sum.counter) parts.push(t('Counter {n}', { n: sum.counter }));
-    if (sum.cover) parts.push(t('Cover +{s}', { s: secs(sum.cover, 0) }));
-    if (sum.unlocked) parts.push(t('{n} unlocked', { n: sum.unlocked }));
-    if (sum.echo) parts.push(t('Echo'));
-    if (list.some((ev) => !ev.applied)) parts.push(t('the battle was already won'));
+    const parts = recipeResultParts(sum);
+    const recap = parts.slice(0, 4);
+    if (!parts.length && list.some((ev) => !ev.applied)) recap.push(t('the battle was already won'));
     const text = h('div', { class: 'banner-text' }, h('span', { class: 'ex-plate' }, 'EX'), list.map((ev) => recipeName(ev.id)).join(' + '));
     // why: each recipe's sequence as symbol chips (the Combo Journal has it in words)
     const why = h('div', { class: 'banner-why' }, ...list.map((ev, i) => [i ? h('span', { class: 'plus' }, '+') : null, seqChips(RECIPE_MAP[ev.id], true)]).flat().filter(Boolean));
     const b = h('div', { class: 'banner tone-ex', 'data-ex': list.map((ev) => ev.id).join(',') }, text, why,
-      parts.length ? h('div', { class: 'banner-sub' }, parts.join(' · ')) : null,
+      recap.length ? h('div', { class: 'banner-sub' }, recap.join(' · ')) : null,
       fresh.size ? h('div', { class: 'banner-sub banner-new' }, t('NEW EX COMBO DISCOVERED')) : null);
     const inspect = btn(t('EX details'), () => {
       const detail = h('div', { class: 'panel ex-detail' },
         h('h2', {}, t('EX Combos')),
         ...list.map((ev) => h('section', {}, h('h3', {}, recipeName(ev.id)),
           seqChips(RECIPE_MAP[ev.id]), h('p', {}, recipeField(ev.id, 'how')),
-          h('p', {}, recipeField(ev.id, 'effect')))),
+          h('p', {}, recipeField(ev.id, 'effect')),
+          h('p', { class: 'gold' }, ev.applied ? recipeResultParts(ev.sum).join(' · ') : t('the battle was already won')),
+          fresh.has(ev.id) ? h('p', { class: 'dim' }, t('NEW EX COMBO DISCOVERED')) : null)),
         parts.length ? h('p', { class: 'gold' }, parts.join(' · ')) : null);
       const close = this.app.modal(detail, { dismiss: true });
       detail.append(btn(t('Close'), () => close(), 'primary'));
@@ -1114,6 +1125,11 @@ export class BattleScreen {
           const inst = c.cards.get(uid);
           const el = miniCard(c, uid, inst);
           el.addEventListener('click', () => this.doPlay(uid));
+          el.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            this.doPlay(uid);
+          });
           let lp;
           // hold for details; a re-render under the finger removes this element, so check it is still shown
           el.addEventListener('pointerdown', () => { lp = setTimeout(() => { if (el.isConnected) this.showDetail(uid); }, 480); });

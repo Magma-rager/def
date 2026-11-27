@@ -110,16 +110,18 @@ async function captureLayout() {
           }
         }
         bs.onExCombo(['straight_circuit','cross_current','healing_cadence'].map((id,order)=>({
-          id,order,applied:true,group:1,sum:{dmg:18,guard:5,momentum:2,heal:4},len:4,heroes:1,
+          id,order,applied:true,group:1,sum:{dmg:18,guard:5,momentum:2,heal:4,flow:1.5,churn:1,echo:true},len:4,heroes:1,
         })));
         const bounds = (q) => document.querySelector(q).getBoundingClientRect();
         const adapt = bounds('.adapt-panel'), ex = bounds('.tone-ex'), health = bs.view.partyBarRect();
+        const summary = document.querySelector('.ex-rail .banner-sub:not(.banner-new)');
+        const summaryFits = summary.scrollWidth <= summary.clientWidth + 1;
         const aboveTray = adapt.bottom <= ex.top && health.y+health.h <= adapt.top;
         const noCover = [...document.querySelectorAll('.controls button,.hand,.pause-btn')].every((n) => {
           const r=n.getBoundingClientRect();
           return r.top >= ex.bottom-.75 || r.bottom <= ex.top+.75;
         });
-        return { minimum, issues, aboveTray, noCover, field:document.querySelector('.field').clientHeight };
+        return { minimum, issues, aboveTray, noCover, summaryFits, field:document.querySelector('.field').clientHeight };
       },CARD_LIST.filter((d) => d.p4 !== 'withheld').map((d) => d.id));
       console.log(lang,size,JSON.stringify({ ...record, issues:record.issues.length }));
       if (record.issues.length) console.log('clipping',JSON.stringify(record.issues));
@@ -129,7 +131,7 @@ async function captureLayout() {
     }
   }
   fs.writeFileSync(`${out}/layout.json`,JSON.stringify(result,null,2)+'\n');
-  assert.ok(result.every((r)=>r.aboveTray && r.noCover && r.minimum.text >= 12 && r.minimum.reason >= 12),'readable text and geometrically separate combat regions');
+  assert.ok(result.every((r)=>r.aboveTray && r.noCover && r.summaryFits && r.minimum.text >= 12 && r.minimum.reason >= 12),'readable text and geometrically separate combat regions');
   assert.ok(result.every((r)=>!r.issues.length),'all tested card text is visible');
 }
 
@@ -285,7 +287,7 @@ async function access() {
   await p.getByRole('button',{name:'Settings',exact:true}).click();
   await p.locator('#set-muted').check();
   await p.getByRole('button',{name:'Done',exact:true}).click();
-  await fixture(p,2,['mirror_array']);
+  await fixture(p,2,['mirror_array','wire_jammer']);
   const measured=await p.evaluate(()=>{
     const app=window.__sb, bs=app.battle;
     bs.consumeEvents([
@@ -297,6 +299,19 @@ async function access() {
       local:m.fx.some((f)=>f.kind==='signal' && f.shape==='mend'),muted:app.settings.muted};
   });
   assert.deepEqual(measured,{reduced:true,paused:true,particles:0,screenFlash:0,local:true,muted:true});
+  await p.evaluate(() => {
+    window.__sb.paused = false;
+    document.activeElement.blur();
+  });
+  const selectedTarget = () => p.evaluate(() => window.__sb.battle.combat.target);
+  const initial = await selectedTarget();
+  await p.keyboard.press('Tab');
+  assert.ok(await p.evaluate(() => document.activeElement.matches('.battle button')),'Tab reaches the combat controls');
+  await p.keyboard.press('KeyT');
+  assert.notEqual(await selectedTarget(),initial,'T changes the selected enemy');
+  await p.locator('.target-chip').focus();
+  await p.keyboard.press('Enter');
+  assert.equal(await selectedTarget(),initial,'Enter activates the focused target control');
   await p.getByRole('button',{name:'EX details',exact:true}).click();
   await p.locator('.ex-detail').getByText('Healing Cadence',{exact:true}).waitFor();
   await p.locator('.ex-detail').getByRole('button',{name:'Close',exact:true}).click();
@@ -312,7 +327,7 @@ async function access() {
   await p.getByRole('button',{name:'Continue',exact:true}).click();
   await p.waitForFunction(()=>window.__sb.battle?.view.reducedMotion);
   await shot(p,'reduced-muted-after-rotation');
-  fs.writeFileSync(`${out}/access.json`,JSON.stringify({...measured,rotation:true,details:true,reload:true},null,2)+'\n');
+  fs.writeFileSync(`${out}/access.json`,JSON.stringify({...measured,keyboard:true,rotation:true,details:true,reload:true},null,2)+'\n');
   await p.close();
 }
 

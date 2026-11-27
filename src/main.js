@@ -618,7 +618,9 @@ class App {
       h('div', { class: 'htp-sec htp-tips' }, h('h3', {}, t('All tutorial tips')),
         h('p', { class: 'dim' }, t('The tips appear once each, when they become useful in a battle. Settings → Replay tutorial hints shows them again.')),
         ...LESSONS.map((L) => { const [tl, bd] = block('lessons', L.key, [L.title, L.body]); return h('details', { class: 'htp-tip' }, h('summary', {}, tl), h('div', { html: bd })); })),
-      sec('keyboard', 'Keyboard', '<b>Q / W / E</b> choose Hessa / Corvin / Pin (during a combo: Relay to them; for Braced: the hero to protect) · <b>1–6</b> play · <b>Shift+1–6</b> Churn · <b>Alt+1–6</b> Reserve · <b>7/8</b> play Reserve · <b>Backspace</b> take back the last waiting card · <b>Space</b> Finish / Cash Out · <b>F</b> +Flow · <b>G</b> +Guard · <b>Tab</b> cycle target · <b>Esc</b> pause'),
+      sec('ex', 'EX Combos', 'EX recipes add an effect when you play their sequence. All recipes work from the first run. The strip below the battlefield groups recipes that resolve together. Open <b>EX details</b> to see their effects, and visit the Museum’s <b>Combo Journal</b> to review what you have discovered.'),
+      sec('starters', 'Starting relics', 'Choose one available relic at the start of a run. A different relic replaces the default badge and helps you try a new strategy. See <b>Starters</b> in the Museum for requirements and progress.'),
+      sec('keyboard', 'Keyboard', '<b>Q / W / E</b> choose Hessa / Corvin / Pin (during a combo: Relay to them; for Braced: the hero to protect) · <b>1–6</b> play · <b>Shift+1–6</b> Churn · <b>Alt+1–6</b> Reserve · <b>7/8</b> play Reserve · <b>Backspace</b> take back the last waiting card · <b>Space</b> Finish / Cash Out when no control has focus · <b>F</b> +Flow · <b>G</b> +Guard · <b>T</b> cycle target · <b>Tab</b> move focus · <b>Esc</b> pause'),
       h('div', { class: 'row-btns end' }, btn(t('Close'), () => close(), 'primary'))), { dismiss: true });
   }
 }

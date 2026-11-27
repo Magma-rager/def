@@ -22,7 +22,7 @@ export const SCENES = {
     { who: 'gran', text: 'Alright. Let\'s see how broken this is.' },
   ],
   tutorial_done: [
-    { who: 'gran', text: '...Hold on. Weak, Strong, then an arte, all inside three seconds, and the next hero picks up the hand like a baton?' },
+    { who: 'gran', text: '...Hold on. Weak, Strong, then an arte, and the next hero picks up the same hand like a baton?' },
     { who: 'gran', text: 'That\'s not broken. That\'s good. That\'s really good.' },
     { who: 'dev', text: 'It is NOT good. It\'s a legacy system. Please use the normal attacks.' },
     { who: 'gran', text: 'There are no normal attacks, Ozmund.' },
@@ -34,7 +34,7 @@ export const SCENES = {
   ],
   boss_intro_scrap_tyrant: [
     { who: 'dev', text: 'The Scrap Tyrant is built from every feature I cut. It eats Churn charges. It hides behind barriers. It\'s, um, a metaphor.' },
-    { who: 'gran', text: 'A metaphor with Guard. Pin, Sunderline pierces. Remember that.' },
+    { who: 'gran', text: 'A metaphor with Guard. Hessa, Sunderline pierces it. Remember that.' },
   ],
   boss_win_act1: [
     { who: 'dev', text: 'You beat it. With RELAY. Do you know how many internal playtesters quit at the first boss? All of them. Both of them.' },
@@ -48,7 +48,7 @@ export const SCENES = {
     { who: 'C', text: 'He says that like we were going to.' },
   ],
   boss_intro_protocol_auditor: [
-    { who: 'dev', text: 'The Protocol Auditor logs every pattern. Open with the same suit twice and it writes you a Citation. Variety is MANDATORY.' },
+    { who: 'dev', text: 'The Protocol Auditor checks your last two combos. Open with the same strength or finish with the same arte, and it writes you a Citation. Variety is MANDATORY.' },
     { who: 'gran', text: 'An enemy that punishes autopilot. Ozmund, that\'s a good design.' },
     { who: 'dev', text: 'It\'s a PUNISHMENT design!' },
   ],
@@ -95,7 +95,7 @@ export const DEFEAT_LINES = [
 
 // Mid-battle developer remarks ("patch notes"), keyed by trigger.
 export const DEV_REMARKS = {
-  longCombo: ['PATCH NOTE: 6-card combos were "never tested." Clearly.', 'Ozmund: "That chain is longer than my design doc."', 'PATCH NOTE: Relay chain length is now technically unlimited. Oops.'],
+  longCombo: ['PATCH NOTE: 6-card combos were "never tested." Clearly.', 'Ozmund: "That chain is longer than my design doc."', 'PATCH NOTE: Passing the baton keeps your combo. It also keeps the clock.'],
   cashSpam: ['Ozmund: "Cash Out was meant to be an emergency button, not a lifestyle."', 'PATCH NOTE: Cash Out is fine. Stop using it.'],
   churnSpam: ['Ozmund: "The Churn button is not a slot machine."', 'PATCH NOTE: Reduced fun of Churn by 0%. Couldn\'t find the variable.'],
   tripleRelay: ['Ozmund: "All three of them in one combo? That\'s... that\'s how I drew it on the napkin."', 'PATCH NOTE: Fixed an issue where the party felt like a team.'],
