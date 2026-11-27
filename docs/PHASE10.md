@@ -37,6 +37,10 @@ choices, branches and endings still use the existing story data. Both languages 
 as the user of Sunderline and explain the Auditor's actual Citation condition. The compact
 EX rail, one-relic loadouts and keyboard focus are explained in How to Relay.
 
+The hero rigs grew from 13 to 34 clips and from 16 to 26 poses per hero. The short battlefield
+reserves space below all three heroes for their name, Defense and Recovery. This includes
+Pin's forward position at the smallest viewports.
+
 | Performer | Examples of new choreography |
 |---|---|
 | Hessa | Drops her centre of gravity and drives through the hammer in Fortress Slam. Sunderline leads with a longer two-handed sweep and a cutting trace. Defensive Artes plant the feet, turn the shield and throw a plated arc. |
@@ -213,6 +217,6 @@ also applied 47 px left and right safe-area insets and a 21 px bottom inset. All
 slots and the tested controls stayed within the safe area, and card effects remained at
 12 CSS px.
 
-The distribution's source revision is `2c8300f7f680d2612c6a8ef61ec05bdd8e01ea65` and its
-HTML stamp is `2c8300f`. The final source includes the Cash Out retargeting regression and
-the four-slot Reserve, grouped EX and Braced-picker readability corrections.
+The distribution's source revision is `c3b3dac86820815f0735c3dea453db7d3867bdb9` and its
+HTML stamp is `c3b3dac`. The final source includes the Cash Out retargeting regression and
+the four-slot Reserve, grouped EX, Braced-picker and Defense readability corrections.
