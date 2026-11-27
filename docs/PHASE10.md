@@ -189,3 +189,14 @@ at small sizes. The resulting style owes much to the prior rigs and artwork. The
 show creative and integration capability within the established game. They provide no
 independent comparison of original character art, perceived musical quality or human-rated
 artistic quality.
+
+## Packaged build
+
+Version 0.2.10. The web build and Swift Playgrounds project were generated from source
+commit `e817ceb653c5480518c4f2c17407cfaece1cfeef`. The HTML build stamp is `e817ceb`.
+The generated Swift Playgrounds ZIP passed its integrity check and contains the matching
+game resource. The packaged build passed the Chromium accessibility, rotation and reload
+check. Both PWA layouts passed: 20/20 for the GitHub Pages path and 19/19 for the mirror
+path. The browser used an offline cache, no network requests, Cyrillic fonts, an existing
+run, the Museum, Journal and an unlocked alternative starter. The updated build installed
+and then opened offline.
