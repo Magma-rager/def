@@ -1,8 +1,8 @@
 // Offline cache for SIGNAL//BREAK. Installed on the first online launch; afterwards the game
 // starts from the cache, with or without a connection. A new build installs in the background
 // and is used from the next launch.
-const BUILD = '0adebab12346';
-const PAGE_HASH = 'a6e7646822faa3e9b0e2931865ca2ad6b83c126fc10f66ac5b570d713537932f';
+const BUILD = '058596c3abb0';
+const PAGE_HASH = '31681edbe19c5893925a2851545781d9475475e67faeb5580f7a79c424fbaef5';
 const PREFIX = 'signalbreak:' + self.registration.scope + ':';
 const CACHE = PREFIX + BUILD;
 const CORE = ["./index.html","./manifest.webmanifest","./icon.svg","./icon-180.png","./icon-192.png","./icon-512.png"];
