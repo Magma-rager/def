@@ -212,3 +212,7 @@ recap corrections. At 844×390, Chromium's device emulation
 also applied 47 px left and right safe-area insets and a 21 px bottom inset. All six hand
 slots and the tested controls stayed within the safe area, and card effects remained at
 12 CSS px.
+
+The distribution's source revision is `2c8300f7f680d2612c6a8ef61ec05bdd8e01ea65` and its
+HTML stamp is `2c8300f`. The final source includes the Cash Out retargeting regression and
+the four-slot Reserve, grouped EX and Braced-picker readability corrections.
