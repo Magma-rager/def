@@ -475,7 +475,7 @@ const ui = {
   'RELAY {n} · +{b}%': 'ЭСТАФЕТА {n} · +{b}%',
   'FLOW {s} · EXECUTING': 'ПОТОК {s} · ВЫПОЛНЕНИЕ',
   'ALL HEROES RECOVERING · {s}': 'ВСЕ ГЕРОИ ВОССТАНАВЛИВАЮТСЯ · {s}',
-  '<b>BRACE</b>: tap a hero · ✕': '<b>СТОЙКА</b>: коснитесь героя · ✕',
+  'Choose hero': 'Выбор героя',
   'Ready in {s}s': 'Готов через {s} с',
   'Finishing the combo…': 'Комбо завершается…',
   '<b>{hero}</b>: start with a basic attack ◆': '<b>{hero}</b>: начните с базовой атаки ◆',

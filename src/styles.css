@@ -882,6 +882,7 @@ html.reduced-motion .progress-toast, html.reduced-motion .progress-toast.out { t
 .ex-rail > .tone-ex.out { transform: none; }
 .ex-rail .banner-text { font-size: 14px; letter-spacing: 0; line-height: 1; color: #c5f5ef; text-shadow: none; }
 .ex-rail .banner-text .ex-plate { font-size: 11px; margin-right: 5px; padding: 0 3px; }
+.ex-rail .ex-group .banner-text { grid-column: 1 / -1; }
 .ex-rail .banner-sub { font-size: 12px; line-height: 1.04; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ex-rail .banner-why { grid-area: 1/2/2/3; overflow: hidden; justify-content: end; margin: 0; }
 .ex-rail .banner-new { color: #f2d69e; font-size: 10px; letter-spacing: .035em; text-align: right; }
@@ -897,6 +898,22 @@ html.reduced-motion .progress-toast, html.reduced-motion .progress-toast.out { t
 }
 .compact .deck .hand { gap: 4px; min-height: 0; }
 .compact .deck .reserve { height: var(--card-h); }
+.compact .deck .reserve.many > .next-cell { height: 14px; }
+.compact .deck .reserve.many > .zone-label { line-height: .85; }
+.compact .reserve-slots.many .res-card {
+  grid-template-columns: auto 1fr;
+  grid-template-rows: repeat(2, minmax(0,1fr));
+  padding: 0 2px;
+  align-items: center;
+}
+.compact .reserve-slots.many .res-card .rr { grid-area: 1/1/2/2; font-size: 10px; }
+.compact .reserve-slots.many .res-card .rv,
+.compact .reserve-slots.many .res-card .rc { grid-area: 2/1/3/2; margin: 0; padding: 0 1px; }
+.compact .reserve-slots.many .res-card .rn {
+  grid-area: 1/2/3/3; margin-left: 2px; font-size: 8px; line-height: 1;
+  overflow: visible; overflow-wrap: anywhere;
+}
+.compact .combo-next.picking { font-size: 12px; }
 .compact .deck .controls {
   display: grid; grid-column: 1/-1; grid-template-columns: minmax(55px,.68fr) 1.35fr 1.45fr 1.15fr;
   align-items: stretch; width: 100%; gap: 6px; height: var(--deck-action-h);
@@ -939,6 +956,7 @@ html.reduced-motion .progress-toast, html.reduced-motion .progress-toast.out { t
 .compact .hand .card.legal .card-frame { box-shadow: 0 0 0 1px #f6d890, inset 0 0 0 1px #f6d890; }
 .compact .ex-rail > .tone-ex { grid-template-columns: minmax(0,1fr) auto; }
 .compact .ex-rail .banner-text { font-size: 12px; }
+.compact .ex-rail .ex-group .banner-text { grid-column: 1; }
 .compact .ex-rail .banner-why { display: none; }
 .compact .ex-rail .banner-sub:not(.banner-new) { grid-row: 2; }
 .compact .ex-rail .banner-new { grid-area: 1/2/3/3; max-width: 76px; white-space: normal; }

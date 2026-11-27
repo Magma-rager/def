@@ -109,6 +109,30 @@ async function captureLayout() {
             }
           }
         }
+        if (document.documentElement.classList.contains('compact')) {
+          c.relics.add('spare_pockets');
+          c.mutations.add('deep_pockets');
+          for (let i=0;i<ids.length;i+=4) {
+            c.reserve = ids.slice(i,i+4).map((id) => {
+              const uid = `reserve-${id}`;
+              c.cards.set(uid,{uid,id,up:false});
+              return uid;
+            });
+            bs.updateHud(true);
+            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+            for (const [uid, el] of bs.resEls) {
+              const name = el.querySelector('.rn');
+              const range = document.createRange();
+              range.selectNodeContents(name);
+              const text = range.getBoundingClientRect();
+              const frame = el.getBoundingClientRect();
+              if (text.bottom > frame.bottom + 1 || text.top < frame.top - 1 || text.right > frame.right + 1) {
+                issues.push({ key:'reserve', card:uid, text:name.textContent,
+                  extra:Math.round(Math.max(text.bottom-frame.bottom,text.right-frame.right,frame.top-text.top)) });
+              }
+            }
+          }
+        }
         bs.onExCombo(['straight_circuit','cross_current','healing_cadence'].map((id,order)=>({
           id,order,applied:true,group:1,sum:{dmg:18,guard:5,momentum:2,heal:4,flow:1.5,churn:1,echo:true},len:4,heroes:1,
         })));

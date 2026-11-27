@@ -35,6 +35,11 @@ function miniCard(c, uid, inst) {
 // in a short slot (3-4 slots, small screens) the name wraps around them and uses the full height.
 function fitReserveCard(el) {
   if (!el.isConnected) return;
+  if (el.closest('.reserve-slots.many') && document.documentElement.classList.contains('compact')) {
+    el.classList.remove('dense');
+    el.querySelector('.rn').style.removeProperty('--fit');
+    return;
+  }
   const rn = el.querySelector('.rn');
   const over = () => el.scrollHeight > el.clientHeight + 1;
   el.classList.remove('dense');
@@ -561,9 +566,8 @@ export class BattleScreen {
     const recap = parts.slice(0, 4);
     if (!parts.length && list.some((ev) => !ev.applied)) recap.push(t('the battle was already won'));
     const text = h('div', { class: 'banner-text' }, h('span', { class: 'ex-plate' }, 'EX'), list.map((ev) => recipeName(ev.id)).join(' + '));
-    // why: each recipe's sequence as symbol chips (the Combo Journal has it in words)
-    const why = h('div', { class: 'banner-why' }, ...list.map((ev, i) => [i ? h('span', { class: 'plus' }, '+') : null, seqChips(RECIPE_MAP[ev.id], true)]).flat().filter(Boolean));
-    const b = h('div', { class: 'banner tone-ex', 'data-ex': list.map((ev) => ev.id).join(',') }, text, why,
+    const why = list.length === 1 ? h('div', { class: 'banner-why' }, seqChips(RECIPE_MAP[list[0].id], true)) : null;
+    const b = h('div', { class: `banner tone-ex${why ? '' : ' ex-group'}`, 'data-ex': list.map((ev) => ev.id).join(',') }, text, why,
       recap.length ? h('div', { class: 'banner-sub' }, recap.join(' · ')) : null,
       fresh.size ? h('div', { class: 'banner-sub banner-new' }, t('NEW EX COMBO DISCOVERED')) : null);
     const inspect = btn(t('EX details'), () => {
@@ -799,7 +803,7 @@ export class BattleScreen {
     if (force || hintSig !== this.hintSig) {
       this.hintSig = hintSig;
       const narrowStrip = this.deck.getBoundingClientRect().width < 900;
-      if (this.pick) this.setNext(t('<b>BRACE</b>: tap a hero · ✕'));
+      if (this.pick) this.setNext(t('Choose hero'));
       else if (P.open) {
         const hero = ownerName(P.hero);
         if (P.finish) this.setNext(t('Finishing the combo…'));

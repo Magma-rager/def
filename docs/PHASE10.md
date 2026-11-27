@@ -78,7 +78,9 @@ Russian card name could fit at 11.25 px; its effect remained 12 px. The Reserve/
 preview and other secondary labels retain smaller type. All six compact hand slots and the
 lower action rail stay on screen. Enlarging the deck at 740×360 leaves a 141 px battlefield,
 the smallest field in this sweep. This is a measurable layout tradeoff. Physical readability
-and touch comfort still require device testing.
+and touch comfort still require device testing. The four-slot Reserve layout places rank and
+suit beside the card name in two rows, which preserves long Russian names. The Braced picker
+uses a short localized instruction beside its cancel control.
 
 The Museum presents eight consistent destinations, grouped across two rows at phone widths.
 Progressive disclosure keeps detailed requirements, build proof, run records and journal
