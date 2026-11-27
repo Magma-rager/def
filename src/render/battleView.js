@@ -970,20 +970,38 @@ export class BattleView {
   drawEnemyHud(ctx, t) {
     const c = this.combat;
     const compact = this.h < 300;
+    const occupied = [];
     for (const a of this.enemyActors.values()) {
       const e = c.enemies.find((x) => x.uid === a.uid);
       if (!e || !e.alive) continue;
       if (e.tier === 'boss') { this.drawBossHud(ctx, e, t); continue; }
-      const [x, y, sc, b] = this.enemyPos(a);
-      const bw = Math.max(compact ? 64 : 80, Math.min(130, (b[2] - b[0]) * sc));
-      const top = y + b[1] * sc - (compact ? 22 : 30);
-      const bx = x + (b[0] + b[2]) * 0.5 * sc - bw / 2;
-      this.drawBars(ctx, e, bx, top, bw, compact, t);
+      const row = this.enemyHudPosition(ctx, e, a, compact, occupied);
+      const { x, y, sc, b, bx, top, bw, nameX } = row;
+      occupied.push(row);
+      this.drawBars(ctx, e, bx, top, bw, compact, t, nameX);
       if (c.target === e.uid) this.drawTargetMarker(ctx, x + (b[0] + b[2]) * 0.5 * sc, y + b[1] * sc * 0.5, (b[2] - b[0]) * sc, -b[1] * sc, t, e.uid, y + b[3] * sc);
     }
   }
 
-  drawBars(ctx, e, bx, top, bw, compact, t) {
+  enemyHudPosition(ctx, e, actor, compact, occupied) {
+    const [x, y, sc, b] = this.enemyPos(actor);
+    const bw = Math.max(compact ? 64 : 80, Math.min(130, (b[2] - b[0]) * sc));
+    const bx = x + (b[0] + b[2]) * 0.5 * sc - bw / 2;
+    const fs = compact ? 12 : 13;
+    let top = y + b[1] * sc - (compact ? 22 : 30);
+    ctx.font = `700 ${fs}px "Barlow Condensed", "Arial Narrow", sans-serif`;
+    const nameWidth = ctx.measureText(enemyName(e.id, e.lvl).toUpperCase()).width;
+    const nameX = Math.min(bx, this.w - nameWidth - 7);
+    const nameRight = nameX + nameWidth;
+    const toolbar = this.hudToolbar;
+    if (toolbar && Math.max(bx + bw, nameRight) >= toolbar.left - 4) top = Math.max(top, toolbar.bottom + fs + 3);
+    for (const row of [...occupied].sort((p,q) => p.top - q.top)) {
+      if (nameX < row.nameRight + 5 && nameRight + 5 > row.nameX && Math.abs(top - row.top) < fs + 3) top = row.top + fs + 3;
+    }
+    return { x, y, sc, b, bx, top, bw, nameX, nameRight };
+  }
+
+  drawBars(ctx, e, bx, top, bw, compact, t, nameX = bx) {
     const c = this.combat;
     const fs = compact ? 12 : 13;
     // name
@@ -992,9 +1010,9 @@ export class BattleView {
     ctx.textBaseline = 'bottom';
     const name = enemyName(e.id, e.lvl).toUpperCase();
     ctx.fillStyle = 'rgba(20,8,14,0.85)';
-    ctx.fillText(name, bx + 1, top - 1 + 1);
+    ctx.fillText(name, nameX + 1, top);
     ctx.fillStyle = e.tier === 'elite' ? '#ffb35a' : '#efe2c6';
-    ctx.fillText(name, bx, top - 1);
+    ctx.fillText(name, nameX, top - 1);
     // HP bar
     const hh = compact ? 6 : 8;
     roundRect(ctx, bx - 1, top, bw + 2, hh + 2, 2);

@@ -26,6 +26,7 @@ const guardAll = (name, g) => ({ kind: 'guard', name, desc: `All enemies gain ${
 
 // Pattern helper: cycle through keys by action count.
 const cycle = (...keys) => (e) => keys[e.actCount % keys.length];
+const huntDamage = (combat) => combat.guard < 6 ? 20 : 10;
 
 export const ENEMIES = {
   rail_bailiff: {
@@ -157,7 +158,7 @@ export const ENEMIES = {
     intents: {
       strike: {
         kind: 'atk', name: 'Hunt', dmg: 10, desc: 'Strike the least-defended hero for 10, +10 if your Guard is below 6.',
-        exec: (e, c, it) => c.hitParty(e, it.target, c.edmg(e, 10 + (c.guard < 6 ? 10 : 0))),
+        forecast: huntDamage, exec: (e, c, it) => c.hitParty(e, it.target, c.edmg(e, huntDamage(c))),
       },
       exploit: {
         kind: 'aoe', name: 'Exploit Pattern', dmg: 9, desc: 'Your last two combos ended the same way. Hit every ally for 9.',
@@ -388,7 +389,7 @@ export const FORMATIONS = {
     [3, ['suit_scrambler', 'scrap_overseer', 'needle_wing'], 3],
     [2, ['signal_hound', 'predator_needle'], 4],
     [2, ['churn_snare', 'scrap_overseer', 'wire_jammer'], 5],
-    [3, ['vector_winch', 'predator_needle'], 0],
+    [3, ['vector_winch', 'needle_wing'], 0],
     [2, ['vector_winch', 'bulwark_signal', 'interference_mite'], 3],
   ],
 };

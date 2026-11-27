@@ -677,6 +677,7 @@ export class Combat {
     const uid = this.hand[i];
     if (!uid) return;
     this.hand[i] = null;
+    this.clearChurnMark(uid);
     this.draw.push(uid);
     this.emit({ type: 'tuck', uid, slot: i });
   }
@@ -2132,6 +2133,9 @@ export class Combat {
       target = m ? m.id : null;
     }
     e.intent = { key, name: it.name, kind: it.kind, dmg: it.dmg ? this.edmg(e, it.dmg) : 0, target, desc: it.desc };
+    if (it.forecast) {
+      Object.defineProperty(e.intent, 'dmg', { enumerable:true, get:() => this.edmg(e, it.forecast(this)) });
+    }
   }
 
   hasteEnemy(e, mult, dur) {

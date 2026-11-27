@@ -5,19 +5,19 @@
 // Reserve — never by calling the engine. Used by milestone.mjs, encounter.mjs, uiplay.mjs and
 // accept5.mjs.
 
-export async function uiDecision(p, profile = 'regular') {
-  return p.evaluate(async (prof) => {
+export async function uiDecision(p, profile = 'regular', build = null) {
+  return p.evaluate(async ({ profile, build }) => {
     const bs = window.__sb && window.__sb.battle;
     const c = bs && bs.combat;
     if (!c || c.phase === 'END' || bs.ended) return null;
     const { decide } = await import('/tools/lib/bot.mjs');
-    const a = decide(c, { profile: prof });
+    const a = decide(c, { profile, build });
     if (a.uid) {
       a.zone = c.hand.includes(a.uid) ? 'hand' : c.reserve.includes(a.uid) ? 'reserve' : null;
       a.card = c.def(a.uid).id;
     }
     return a;
-  }, profile);
+  }, { profile, build });
 }
 
 async function center(p, selector) {

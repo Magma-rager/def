@@ -151,6 +151,56 @@ test('new enemies use ally guard, repair and acceleration as forecast', () => {
   assert.equal(tow.enemies[0].intent.key, 'hook');
 });
 
+test('the Core counters Churn and Reserve without removing a full hand plan', () => {
+  const hand = ['scrapline','salvage','pocket_gauge','latchshield','pinprick','piston_strike'];
+  const draw = ['rivet_jab','mend_circuit'];
+  const core = { act:3, enemies:['signalbreak_core'] };
+  const churner = fixture(hand, draw, { ...core, profileArch:'churn' });
+  const charges = churner.churn.charges;
+  churner.coreCounter(churner.enemies[0], { target:'V' });
+  assert.equal(churner.churn.charges,charges-1);
+  assert.equal(churner.churnJamUntil-churner.t,3);
+
+  const planner = fixture(hand, draw, { ...core, profileArch:'reserve' });
+  const kept = find(planner,'pocket_gauge');
+  assert.ok(planner.stash(kept).ok);
+  assert.ok(planner.stash(find(planner,'latchshield')).ok);
+  planner.coreCounter(planner.enemies[0], { target:'V' });
+  assert.deepEqual(planner.reserve,[kept]);
+  assert.ok(planner.verifyZones().ok);
+});
+
+test('Hunt forecasts its actual high damage and updates when the party uses Guard', () => {
+  for (const guard of [0, 7]) {
+    const c = fixture(['scrapline','piston_strike','mend_circuit'], [], { act:3, enemies:['predator_needle'] });
+    const enemy = c.enemies[0];
+    assert.equal(enemy.intent.dmg,c.edmg(enemy,20));
+    c.guard = guard;
+    const expected = c.edmg(enemy,guard < 6 ? 20 : 10);
+    assert.equal(enemy.intent.dmg,expected);
+    const hp = c.hp;
+    c.enemyAct(enemy);
+    assert.equal(hp-c.hp,expected-guard); // Targets Corvin, the hero with 0% Defense.
+  }
+});
+
+test('Index Spring and Reclaim Circuit stack once per combo and do not replenish Churn', () => {
+  const c = fixture(['scrapline','salvage','mend_circuit','piston_strike','scrapfall','bolt_volley'],
+    ['pinprick','index_slug','rivet_jab','quickdraw'], { relics:['index_spring'], mutations:['reclaim_circuit'] });
+  c.selectHero('C');
+  play(c,'scrapline');
+  const charges = c.churn.charges;
+  churn(c,'salvage');
+  play(c,'index_slug');
+  assert.equal(c.guard,12);
+  assert.equal(c.churn.charges,charges-1);
+  assert.ok(c.combo.deadline <= c.flowCap());
+  churn(c,'mend_circuit');
+  play(c,'quickdraw');
+  assert.equal(c.guard,12);
+  assert.equal(c.churn.charges,charges-2);
+});
+
 test('opening offers teach two distinct tools and retain a pivot and the requested rarity', () => {
   const run = Run.create({ seed:701 });
   for (let s=0;s<80;s++) for (const [count, tag] of [[1,'reserve'],[2,'churn']]) {

@@ -791,3 +791,10 @@ The Museum records acquisitions and specific played mechanics across runs. Ten s
 ## Revised roadmap, Phase 10 presentation (0.2.10)
 
 The combat view follows scheduler-confirmed contact, retaining the original combat rules. New hero poses, enemy and boss motion, recipe-specific effects, synthesized cue families and Act lighting details extend the Canvas presentation. The compact hand gives priority to readable bilingual effect text and groups EX results in a separate rail. The [Phase 10 report](PHASE10.md) records the visual comparison, audio measurements, ordinary campaigns, regressions and distribution evidence.
+
+## Revised roadmap, Phase 11 content and balance (0.2.11)
+
+Six cards, two relics, a mutation, a graft, two EX recipes and three enemies extend the
+ordinary campaign. The [Phase 11 report](PHASE11.md) records the acquisition and encounter
+paths, comparisons against the Phase 10 checkpoint, the original Reserve test, the separation
+of policy and Churn changes, browser recovery, and remaining difficulty and device questions.

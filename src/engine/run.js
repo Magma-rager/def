@@ -624,9 +624,7 @@ export class Run {
         // pivot still compete for the other slots, and the player can pass on any card.
         want = this.d.battleCount === 1 ? 'reserve' : 'churn';
       } else if (pivot) {
-        // an archetype outside the build's top two that this offer has not shown yet
-        // (any rarity: a tag with no card at the rolled rarity takes its nearest one below, so Reserve and
-        // Cash Out, which have no commons, are offered as often as the others)
+        // Offer a different build that this reward has not shown, within any promised rarity floor.
         const away = Object.keys(ARCHETYPES).filter((t) => t !== lead && t !== second && t !== openingSignal && !offeredTags.has(t) && eligible.some((c) => c.tags.includes(t) && fresh(c)));
         want = away.length ? rng.pick(away) : null;
       } else if (i === 0 && lead && rng.chance(0.6)) want = lead;
@@ -635,8 +633,7 @@ export class Run {
       else if (i === 1 && lead && !second && rng.chance(0.3)) want = lead;
       if (want) {
         let t = cands.filter((c) => c.tags.includes(want));
-        // a direction with no card of the rolled rarity (Reserve and Cash Out have no commons) takes
-        // the nearest rarity it has, so the lean never silently drops
+        // If the style is unavailable at the rolled rarity, try its nearest permitted rarities.
         if (!t.length && !(i === 0 && needBasic)) {
           const near = { common: ['uncommon', 'rare'], uncommon: ['common', 'rare'], rare: ['uncommon', 'common'] }[rarity] || [];
           for (const r of near) { t = eligible.filter((c) => c.rarity === r && c.tags.includes(want) && fresh(c)); if (t.length) break; }

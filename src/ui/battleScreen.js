@@ -245,6 +245,9 @@ export class BattleScreen {
     let dpr = Math.min(2, window.devicePixelRatio || 1);
     if (r.width * r.height * dpr * dpr > 2.2e6) dpr = Math.max(1, Math.min(dpr, 1.5));
     this.view.resize(Math.max(1, Math.floor(r.width)), Math.max(1, Math.floor(r.height)), dpr);
+    const tools = this.topbar.querySelector('.bt-relics').getBoundingClientRect();
+    const pause = this.topbar.querySelector('.pause-btn').getBoundingClientRect();
+    this.view.hudToolbar = { left: Math.min(tools.left, pause.left)-r.left, bottom: Math.max(tools.bottom, pause.bottom)-r.top };
     for (const [, el] of this.resEls || []) fitReserveCard(el);
     for (const slot of this.slots) if (slot.el) fitCard(slot.el);
   }

@@ -522,7 +522,7 @@ card({
 });
 card({
   id: 'pressure_splice', name: 'Pressure Splice', owner: 'C', category: 'arte', rank: 4, variant: 'EX', rarity: 'common', anim: 'cast', glyph: 'gear',
-  v: { d: [10, 12], b: [6, 8], f: [1.0, 1.3] }, text: 'Deal {d}. If you Churned this combo: next attack deals +{b} and gain {f}s Flow.', tags: ['churn', 'flow'],
+  v: { d: [10, 12], b: [6, 8], f: [1.0, 1.3] }, text: 'Deal {d}. If you Churned this combo: next attack deals +{b} and gain {f}s Flow.', tags: ['churn'],
   fx: (A) => { A.dmg(A.v('d')); if (A.ctx.churned) { A.nextBonus(A.v('b')); A.flow(A.v('f')); } },
 });
 card({
@@ -535,7 +535,7 @@ card({
 });
 card({
   id: 'signal_case', name: 'Signal Case', owner: 'C', category: 'support', variant: 'A', rarity: 'uncommon', anim: 'buff', glyph: 'box',
-  v: { h: [4, 6], f: [0.7, 1.0] }, text: 'Heal {h}. From Reserve during a combo: +{f}s Flow and unlock one card.', tags: ['reserve', 'flow'],
+  v: { h: [4, 6], f: [0.7, 1.0] }, text: 'Heal {h}. From Reserve during a combo: +{f}s Flow and unlock one card.', tags: ['reserve'],
   fx: (A) => { A.heal(A.v('h')); if (A.fromReserve && A.c.combo) { A.flow(A.v('f')); A.unlockOne(); } },
 });
 

@@ -1,5 +1,5 @@
 // Phase 10 visual checks with explicit fixtures. Ordinary campaigns use tools/accept8.mjs campaign.
-// node tools/presentation.mjs gallery|layout|motion|roster|audio|access OUTPUT   (npm run serve)
+// node tools/presentation.mjs gallery|layout|motion|roster|audio|access|formations OUTPUT   (npm run serve)
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -133,7 +133,7 @@ async function captureLayout() {
             }
           }
         }
-        bs.onExCombo(['straight_circuit','cross_current','healing_cadence'].map((id,order)=>({
+        bs.onExCombo(['switchyard','safety_interlock','healing_cadence'].map((id,order)=>({
           id,order,applied:true,group:1,sum:{dmg:18,guard:5,momentum:2,heal:4,flow:1.5,churn:1,echo:true},len:4,heroes:1,
         })));
         const bounds = (q) => document.querySelector(q).getBoundingClientRect();
@@ -158,6 +158,45 @@ async function captureLayout() {
   fs.writeFileSync(`${out}/layout.json`,JSON.stringify(result,null,2)+'\n');
   assert.ok(result.every((r)=>r.aboveTray && r.noCover && r.summaryFits && r.platesFit && r.minimum.text >= 12 && r.minimum.reason >= 12),'readable text and geometrically separate combat regions');
   assert.ok(result.every((r)=>!r.issues.length),'all tested card text is visible');
+}
+
+async function formations() {
+  const cases = [
+    [1, ['rail_bailiff','interference_mite']],
+    [2, ['phase_lantern','bulwark_signal','needle_wing']],
+    [3, ['vector_winch','bulwark_signal','interference_mite']],
+  ];
+  const measurements = [];
+  for (const [lang,size] of [['ru','667x375'],['en','1194x834']]) {
+    const p = await pageAt(lang,size);
+    for (const [act,enemies] of cases) {
+      await fixture(p,act,enemies,'battle');
+      await p.waitForTimeout(3100); // The route overview has gone before examining the battlefield.
+      const evidence = await p.evaluate(() => {
+        const app = window.__sb, bs = app.battle, c = bs.combat;
+        const rows = [];
+        const positions = c.enemies.map((e) => {
+          const compact = bs.view.h < 300;
+          const ctx = bs.canvas.getContext('2d');
+          const row = bs.view.enemyHudPosition(ctx, e, bs.view.enemyActors.get(e.uid), compact, rows);
+          const {x,y,bx,bw,top,nameX,nameRight} = row;
+          const toolbar = bs.view.hudToolbar;
+          const fs = compact ? 12 : 13;
+          const clearsToolbar = Math.max(bx+bw,nameRight) < toolbar.left - 4 || top-fs >= toolbar.bottom;
+          const separated = rows.every((r)=>nameRight <= r.nameX || nameX >= r.nameRight || Math.abs(top-r.top) >= fs+3);
+          rows.push(row);
+          return { x, y, canTarget: bs.view.hitTest(x, y-8) === e.uid, clearsToolbar, separated };
+        });
+        return { selected:c.target, ids:c.enemies.map((e)=>e.id), positions, field:[bs.view.w,bs.view.h] };
+      });
+      assert.deepEqual(evidence.ids,enemies);
+      assert.ok(evidence.positions.every(({x,y,canTarget,clearsToolbar,separated})=>x > 0 && x < evidence.field[0] && y > 0 && y < evidence.field[1] && canTarget && clearsToolbar && separated), JSON.stringify(evidence));
+      await shot(p,`formation-${act}-${lang}-${size}`);
+      measurements.push({lang,size,act,...evidence});
+    }
+    await p.close();
+  }
+  fs.writeFileSync(`${out}/formations.json`,JSON.stringify(measurements,null,2)+'\n');
 }
 
 async function motion() {
@@ -220,6 +259,7 @@ async function roster() {
   const evidence = [];
   for (const [id, def] of Object.entries(ENEMIES)) {
     await fixture(p,def.act,[id],def.tier==='boss'?'boss':'battle');
+    if (['rail_bailiff','phase_lantern','vector_winch'].includes(id)) await p.waitForTimeout(3100);
     const result = await p.evaluate(() => {
       const bs = window.__sb.battle, c=bs.combat;
       const e=c.enemies[0];
@@ -277,7 +317,7 @@ async function audio() {
   await p.locator('.title-menu .btn').first().focus();
   await p.keyboard.press('Space'); // real gesture starts Web Audio
   await p.waitForFunction(()=>window.__sb.audio.ctx?.state==='running');
-  const output=await p.evaluate(async ({ cards,enemies,recipes }) => {
+  const output=await p.evaluate(async ({ cards,enemies,recipes,newFoes,bosses }) => {
     const { AudioEngine,scoreFor }=await import('/src/audio/audio.js');
     const clips=[];
     const rate=24000;
@@ -297,8 +337,9 @@ async function audio() {
       clips.push({ name,rate,peak,rms:Math.sqrt(sq/sample.length),activeRms:Math.sqrt(maxShort/window),clipped,sample:Array.from(sample) });
     };
     const arrange=(a,name)=>{a.track=name;const t=scoreFor(name);for(let i=0;i<9;i++)a.playStep(t,i,.05+i*.18,.18);};
-    for(const name of ['title','battle1','battle2','battle3',...Object.keys(enemies).map((id)=>'boss:'+id)]) await add(name,a=>arrange(a,name));
+    for(const name of ['title','battle1','battle2','battle3',...bosses.map((id)=>'boss:'+id)]) await add(name,a=>arrange(a,name));
     for(const [name,voice,cue] of cards) await add(name,a=>a.sfx('cue',{cue,voice,strong:true}));
+    for(const id of newFoes) await add(id,a=>a.sfx('foe-cue',{kind:'attack',cue:enemies[id],strong:true}));
     for(const [id,cue] of Object.entries(recipes)) await add(id,a=>a.sfx('recipe',{cue}));
     await add('stress-mix',a=>{
       arrange(a,'boss:signalbreak_core');
@@ -309,8 +350,10 @@ async function audio() {
     });
     await add('muted',a=>{arrange(a,'battle3');a.sfx('victory');},true);
     return clips;
-  },{cards:[['fortress_slam','V',CARD_CUES.fortress_slam],['pressure_valve','C',CARD_CUES.pressure_valve],['grand_relay','S',CARD_CUES.grand_relay]],
-    enemies:Object.fromEntries(Object.entries(ENEMY_CUES).filter(([id]) => ENEMIES[id].tier==='boss')),recipes:EX_CUES});
+  },{cards:[['fortress_slam','V'],['pressure_valve','C'],['grand_relay','S'],['latchshield','V'],['pressure_splice','C'],
+    ['ratchet_burst','S'],['signal_case','C']].map(([id,hero])=>[id,hero,CARD_CUES[id]]),
+    enemies:ENEMY_CUES, recipes:EX_CUES, newFoes:['rail_bailiff','phase_lantern','vector_winch'],
+    bosses:Object.keys(ENEMIES).filter((id)=>ENEMIES[id].tier==='boss')});
   const metrics=[];
   for(const {sample,...clip} of output){
     fs.writeFileSync(`${out}/${clip.name.replace(':','-')}.wav`,wave(sample,clip.rate));
@@ -378,6 +421,7 @@ try {
   else if(mode==='roster') await roster();
   else if(mode==='audio') await audio();
   else if(mode==='access') await access();
-  else throw Error('Use gallery, layout, motion, roster, audio or access.');
+  else if(mode==='formations') await formations();
+  else throw Error('Use gallery, layout, motion, roster, audio, access or formations.');
   assert.deepEqual(errors,[]);
 } finally { await browser.close(); }

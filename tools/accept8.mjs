@@ -10,8 +10,9 @@
 //        Scenario G: a whole three-Act run from the title screen through the interface (the shared UI
 //        bot taps), then the ending, credits, results, Museum and a new run.
 //
-// Scenario G is a first-time player (no saved profile): the tutorial battle and every lesson appear and
-// are dismissed by tap; SB_MINUTES (default 45) bounds the run. The bot plays at the 'quick' profile.
+// Scenario G defaults to a fresh profile and the quick policy. SB_MINUTES bounds the run. Optional
+// SB_CAMPAIGN_PROFILE loads a disclosed historical record; SB_CAMPAIGN_STARTER selects an earned starter
+// in the menu; SB_CAMPAIGN_FOCUS prefers that tag in normal offers and uses visible-hand tactics.
 //
 // Disclosed fixtures (ui mode, initialisation only — never an outcome):
 //  · a returning player's profile (every lesson learned except the Phase 8 technique lesson);
@@ -19,7 +20,8 @@
 //    offers Pressure Valve and the Act I boss is the Scrap Tyrant;
 //  · from the second battle on, the deck is a fixed list (the four techniques, the Pressure Valve the
 //    player took, starter cards) in a known draw order, the hand is dealt from it, Momentum starts at
-//    8 and the enemies have more HP, so every scripted chain fits in one fight;
+//    8 and the enemies have more HP, so every scripted chain fits in one fight. The second node is
+//    chosen among normally generated non-locking encounters for the deterministic technique sequence;
 //  · the run is moved next to the Act I boss and that boss's adaptation is set to Payout Audit;
 //  · in Act II, a shop, a surgery and an event (Variant Press) are opened as the current node.
 // Everything after that is a tap; the checks read what the engine and the page recorded.
@@ -35,6 +37,7 @@ import { ADAPTATIONS } from '../src/data/adaptations.js';
 import { RELICS } from '../src/data/relics.js';
 import { MUTATIONS } from '../src/data/mutations.js';
 import { RECIPES } from '../src/data/recipes.js';
+import { ENEMIES } from '../src/data/enemies.js';
 import { decide, perform } from './lib/bot.mjs';
 import { RNG } from '../src/core/rng.js';
 
@@ -229,13 +232,13 @@ async function skipDialogs() {
   }
   return screen();
 }
-async function botBattle(ms = 240000) {
+async function botBattle(ms = 240000, build = null) {
   const end = Date.now() + ms;
   while (Date.now() < end) {
     const s = await S();
     if (!s || s.phase === 'END') break;
     if (s.lesson) { await dismissLesson(); continue; }
-    await uiPerform(p, await uiDecision(p, 'quick'), { touch: true });
+    await uiPerform(p, await uiDecision(p, 'quick', build), { touch: true });
     await wait(110);
   }
   await wait(2200);
@@ -244,15 +247,9 @@ async function botBattle(ms = 240000) {
 // ═══════════════════════════ Scenario G — the whole campaign through the UI ═══════════════════════════
 if (MODE === 'campaign') {
   const MIN = +(process.env.SB_MINUTES || 45);
-  const profilePath = process.env.SB_CAMPAIGN_PROFILE;
-  if (profilePath) {
-    const profile = JSON.parse(fs.readFileSync(profilePath, 'utf8'));
-    await p.addInitScript((saved) => {
-      const key = 'signalbreak.meta.v1';
-      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(saved));
-    }, profile);
-    log(`Returning-profile fixture: ${profilePath}. All subsequent choices use the interface.`);
-  }
+  const focus = process.env.SB_CAMPAIGN_FOCUS || null;
+  if (focus) log(`Prefer normal reward offers tagged ${focus} and use the corresponding visible-hand tactics.`);
+  if (campaignProfile) log(`Returning-profile fixture: ${process.env.SB_CAMPAIGN_PROFILE}. All subsequent choices use the interface.`);
   await p.goto(URL);
   await p.waitForFunction(() => window.__sb);
   const previous = await p.evaluate(() => window.__sb.meta.totalRuns);
@@ -263,7 +260,7 @@ if (MODE === 'campaign') {
   const initial = await p.evaluate(() => ({ relics: window.__sb.run.d.relics, hp: window.__sb.run.d.hp, scrap: window.__sb.run.d.scrap, seed: window.__sb.run.d.seed }));
   check('start', 'Campaign began with the selected single relic and standard resources', initial.relics.join() === starter && initial.hp === 130 && initial.scrap === 80, JSON.stringify(initial));
   const end = Date.now() + MIN * 60000;
-  const seen = { acts: new Set([1]), bosses: [], screens: new Set() };
+  const seen = { acts: new Set([1]), bosses: [], screens: new Set(), enemies: new Set(), acquisitions: new Set() };
   let battles = 0, lastSig = '', sameSince = Date.now(), lastLog = 0;
   const recoveries = [];
   const progress = [];
@@ -298,7 +295,11 @@ if (MODE === 'campaign') {
     if (sc === 'credits' || sc === 'results') break;
     const act = await p.evaluate(() => window.__sb.run && window.__sb.run.d.act);
     if (act) seen.acts.add(act);
-    if (sc === 'battle') { battles++; await botBattle(300000); continue; }
+    if (sc === 'battle') {
+      const ids = await p.evaluate(() => window.__sb.battle?.combat.enemies.map((e) => e.id) || []);
+      for (const id of ids) seen.enemies.add(id);
+      battles++; await botBattle(300000, focus); continue;
+    }
     if (sc === 'map') {
       if (act && !reloadedActs.has(act)) {
         const snap = () => p.evaluate(() => JSON.stringify(window.__sb.run.d));
@@ -313,7 +314,21 @@ if (MODE === 'campaign') {
       const id = await p.evaluate(() => { const r = window.__sb.run; const av = r.availableNodes(); const w = { boss: 9, rest: r.d.hp < r.d.maxHp * 0.55 ? 8 : 1, treasure: 6, battle: 4, shop: 3, event: 3, surgery: 2, elite: r.d.hp > r.d.maxHp * 0.75 ? 2 : 0 }; return av.sort((a, b) => (w[r.node(b).type] || 0) - (w[r.node(a).type] || 0))[0]; });
       await tapSel(`.map-node[data-node="${id}"]`); await wait(150); await clickText('Travel'); await wait(300); continue;
     }
-    if (sc === 'reward') { await tapSel('.reward-cards .card'); await clickText('Take card'); await tapSel('.reward-relics .relic-badge'); await wait(150); await clickText('Continue'); await wait(300); continue; }
+    if (sc === 'reward') {
+      const option = await p.evaluate(async (tag) => {
+        const { CARDS } = await import('/src/data/cards.js');
+        const options = window.__sb.run.d.pending.cards || [];
+        const matching = tag ? options.findIndex((s) => CARDS[s.id].tags.includes(tag)) : -1;
+        const index = Math.max(0, matching);
+        return { index, id: options[index]?.id };
+      }, focus);
+      if (await tapSel(`.reward-cards .card:nth-child(${option.index + 1})`) && await clickText('Take card')) {
+        if (option.id && await p.evaluate((index) => window.__sb.run.d.pending.cardPicked === index, option.index)) seen.acquisitions.add(option.id);
+      }
+      await tapSel('.reward-relics .relic-badge');
+      await wait(150);
+      await clickText('Continue'); await wait(300); continue;
+    }
     if (sc === 'bossprep') { const bossId = await p.evaluate(() => window.__sb.run.d.pending.bossId); seen.bosses.push(bossId); await tapSel('.prep-plans .choice'); await wait(400); continue; }
     if (sc === 'mutation') { await tapSel('.mut-card'); await wait(300); continue; }
     if (sc === 'rest') { if (await p.$('.rest-opt:not([disabled])')) await tapSel('.rest-opt:not([disabled])'); await wait(300); if ((await screen()) === 'modal') continue; await clickText('Continue'); await wait(300); continue; }
@@ -346,7 +361,7 @@ if (MODE === 'campaign') {
   // a finished run is recorded in the profile (meta.runs[0], src/engine/run.js summary) and the live run is cleared
   const fin = await p.evaluate(() => ({ last: (window.__sb.meta.runs || [])[0] || null, meta: window.__sb.meta }));
   const last = fin.meta.totalRuns === previous + 1 && fin.last?.seed === initial.seed ? fin.last : null;
-  const report = () => ({ seen: { acts: [...seen.acts], bosses: seen.bosses, screens: [...seen.screens] },
+  const report = () => ({ seen: { acts: [...seen.acts], bosses: seen.bosses, screens: [...seen.screens], enemies: [...seen.enemies], acquisitions: [...seen.acquisitions] },
     progress, recoveries, seed: initial.seed, starter, reloadedActs: [...reloadedActs],
     disposition: last?.result === 'victory' ? (recoveries.length ? 'completed_after_nudge' : 'completed_without_nudge') :
       (last?.result === 'defeat' ? 'defeat' : 'unresolved_timeout'), errors });
@@ -402,19 +417,34 @@ if (MODE === 'campaign') {
 
 // ═══════════════════════════ ui mode — Scenarios A–E ═══════════════════════════
 // the seed: the first battle's ordinary reward offers Pressure Valve, and the Act I boss is the Scrap Tyrant
-let SEED = null, FIRST = null;
+let SEED = null, FIRST = null, SECOND = null;
 for (let s = 1; s < 20000 && SEED === null; s++) {
   const r = Run.create({ seed: s, starterRelic: 'beta_badge', tutorial: false });
   if (r.d.bosses[1] !== 'scrap_tyrant') continue;
   r.d.pending = null; // the opening story, as the interface clears it
+  r.d.battleCount = 1; // finishBattle commits the count before constructing the first reward
   for (const id of r.availableNodes()) {
     const n = r.node(id);
     if (n.type !== 'battle' || n.trait) continue;
     const rw = r.makeReward(n, 'battle', { scrapBonus: 0 });
-    if (rw.cards.some((c) => c.id === 'pressure_valve')) { SEED = s; FIRST = id; break; }
+    if (!rw.cards.some((c) => c.id === 'pressure_valve')) continue;
+    const route = Run.load(r.serialize());
+    route.enterNode(id);
+    route.battleSetup();
+    route.d.pending = null;
+    for (const next of route.availableNodes()) {
+      if (route.node(next).type !== 'battle' || route.node(next).trait === 'STATIC') continue;
+      const inspect = Run.load(route.serialize());
+      inspect.enterNode(next);
+      const foeIds = inspect.battleSetup().enemies;
+      if (foeIds.some((e) => Object.values(ENEMIES[e].intents).some((it) => ['lock','scramble','reserve','drain'].includes(it.kind)))) continue;
+      SEED = s; FIRST = id; SECOND = next; break;
+    }
+    if (SECOND) break;
   }
 }
-log(`fixture: seed ${SEED}, first battle node ${FIRST}`);
+if (!SECOND) throw new Error('No matching deterministic technique route found');
+log(`fixture: seed ${SEED}, first battle node ${FIRST}, second ${SECOND}`);
 await p.goto(URL);
 await p.waitForFunction(() => window.__sb);
 await p.evaluate(() => document.fonts.ready);
@@ -446,8 +476,7 @@ await p.evaluate(([spec, pv]) => {
   const r = window.__sb.run;
   r.d.deck = spec.map((id, i) => (id === 'PV' ? { ...pv } : { uid: `fx${i}`, id, up: false }));
 }, [DECK, pvInst]);
-const second = await p.evaluate(() => { const r = window.__sb.run; return r.availableNodes().find((id) => r.node(id).type === 'battle' && !r.node(id).trait) || r.availableNodes().find((id) => r.node(id).type === 'battle'); });
-await tapSel(`.map-node[data-node="${second}"]`); await wait(150); await clickText('Travel');
+await tapSel(`.map-node[data-node="${SECOND}"]`); await wait(150); await clickText('Travel');
 await p.waitForFunction(() => window.__sb.battle && window.__sb.battle.combat, null, { timeout: 10000 });
 await p.evaluate(([n, pvUid]) => {
   const c = window.__sb.battle.combat;
@@ -493,9 +522,10 @@ s = await settled();
 tech = s.combo && s.combo.log.find((l) => l.k === 'tech' && l.id === 'cache_hook');
 check('2b', 'Cache Hook played from the Reserve by tap during Pin\'s chain', !!tech, tech ? `performed by ${tech.hero}, rewind ${tech.rewind}` : '');
 check('5b', 'From the Reserve: rank lowered by 2 (4 → 2) and +1 Momentum', before.combo.rank === 4 && s.combo.rank === 2, `${before.combo.rank} → ${s.combo.rank}`);
-await play('splitter');
+const splitPlayed = await play('splitter');
+const splitState = await settled();
 s = await finishChain();
-check('7b', 'Another legal arte follows (Splitter, rank 4) and the chain finishes', s && s.history.at(-1).len >= 4 && integrity(s), s && s.history.at(-1).type);
+check('7b', 'Another legal arte follows (Splitter, rank 4) and the chain finishes', splitPlayed && splitState?.combo?.cards.at(-1)?.id === 'splitter' && s?.history.at(-1)?.len >= 4 && integrity(s), s && s.history.at(-1).type);
 
 // A3 — Prism Cut (Corvin's) in Hessa's chain: EX suit, the next A card Crosses
 await heroReady('V');

@@ -78,6 +78,28 @@ function pickNode(run, rng) {
   return rng.weighted(w);
 }
 
+// Match a Churn's slot to the immediate refill and a later real command resolution.
+function executedChurnDraws(c) {
+  const commands = new Map();
+  const drawn = new Set();
+  let slot = null;
+  let sameTime = 0;
+  let total = 0;
+  for (const event of c.events) {
+    if (event.type === 'churn') {
+      drawn.delete(event.uid);
+      slot = event.junk || event.free ? null : event.slot;
+      sameTime = event.t;
+    } else if (event.type === 'draw' && event.slot === slot && event.t === sameTime) {
+      drawn.add(event.uid);
+      slot = null;
+    } else if (event.type === 'tuck') drawn.delete(event.uid);
+    else if (event.type === 'execStart' && event.uid) commands.set(event.id,event.uid);
+    else if (event.type === 'execResolve' && drawn.delete(commands.get(event.id)) && event.cmdType === 'card') total++;
+  }
+  return total;
+}
+
 export function simulateCampaign(seed, {
   starterRelic = 'beta_badge', reaction = REACT, profile = PROFILE, recipeAware = EX, tactics = TACTICS,
   target = targetFor(seed), meta = null, audit = false, wanted = target || RELICS[starterRelic].tag,
@@ -123,7 +145,7 @@ export function simulateCampaign(seed, {
           observations.encounters.push({ act: setup.act, kind: setup.kind, enemies: setup.enemies, win: out.victory, seconds: t,
             hpLost: before - out.hp, damage: out.stats.damage, absorbed: out.stats.guardAbsorbed, actions: timeline.length,
             minGap: timeline.length > 1 ? Math.min(...timeline.slice(1).map((v,i) => v-timeline[i])) : null,
-            churnPayoff: out.progress.churnPayoff || 0, reservePlays: out.stats.reservePlays, response: out.progress.responseBattles || 0,
+            churnPayoff: out.progress.churnPayoff || 0, executedDraws: executedChurnDraws(c), reservePlays: out.stats.reservePlays, response: out.progress.responseBattles || 0,
             perfect: out.stats.perfect, cashout: out.stats.cashouts, dropped: out.stats.forced, ex: out.stats.exActivations,
             momentum: out.stats.momentumSpent, flow: out.stats.flowGained });
           for (const event of c.events) if (event.type === 'execResolve' && event.cue?.card) add(observations.plays, event.cue.card);
@@ -271,7 +293,7 @@ export function simulateCampaign(seed, {
         log.bossIds = run.d.bossesDefeated.slice();
         log.proofs = run.d.progress.proofs;
         if (observations) observations.acquired = {
-          cards: run.d.progress.cards, relics: run.d.progress.relics, mutations: run.d.mutations,
+          cards: run.d.progress.cards, relics: run.d.relicsSeen, mutations: run.d.mutations,
         };
         log.wantedCards = wanted ? (log.tagCounts[wanted] || 0) : 0;
         log.firstActVictory = run.d.bossesDefeated.some((id) => id === run.d.bosses[1]);
