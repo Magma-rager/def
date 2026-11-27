@@ -173,6 +173,39 @@ async function compact() {
     console.log(act,JSON.stringify(evidence));
   }
 }
+async function cardFit() {
+  await p.addInitScript(() => localStorage.setItem('signalbreak.settings.v1', JSON.stringify({ lang: 'ru', hints: false, muted: true })));
+  await load();
+  await fixture(1, ['rush_hound', 'wire_jammer']);
+  const cards = ['dead_drop', 'mirror_wire', 'pressure_splice'];
+  const installed = await p.evaluate((ids) => {
+    const app = window.__sb;
+    const bs = app.battle;
+    app.paused = true;
+    for (const [i, id] of ids.entries()) {
+      for (const [j, up] of [false, true].entries()) {
+        const pos = i * 2 + j;
+        const uid = `fit${pos}`;
+        if (bs.combat.hand[pos]) bs.combat.discard.push(bs.combat.hand[pos]);
+        bs.combat.cards.set(uid, { uid, id, up });
+        bs.combat.hand[pos] = uid;
+      }
+    }
+    bs.updateHud(true);
+    return bs.combat.verifyZones().ok;
+  }, cards);
+  assert.ok(installed);
+  await p.waitForTimeout(350);
+  const report = await p.locator('.hand .card-frame').evaluateAll((frames) => frames.map((f) => ({
+    name: f.querySelector('.card-name').textContent.trim(),
+    size: parseFloat(getComputedStyle(f.querySelector('.card-text')).fontSize),
+    overflow: f.scrollHeight - f.clientHeight,
+  })));
+  await p.screenshot({ path: `${out}/card-fit.png` });
+  console.log(report);
+  assert.equal(report.length, 6);
+  assert.ok(report.every((f) => f.size >= 12 && f.overflow <= 2));
+}
 async function clock() {
   await load();
   await fixture(1,['rush_hound','rush_hound']);
@@ -221,8 +254,9 @@ try {
   if(mode==='performance') await performanceSample();
   else if(mode==='defeat') await defeat();
   else if(mode==='compact') await compact();
+  else if(mode==='card-fit') await cardFit();
   else if(mode==='clock') await clock();
   else if(mode==='audio') await audioControls();
-  else throw Error('Expected performance, compact, clock, audio or defeat');
+  else throw Error('Expected performance, compact, card-fit, clock, audio or defeat');
   assert.deepEqual(errors,[]);
 } finally { await b.close(); }

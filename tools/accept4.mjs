@@ -160,10 +160,26 @@ check('12a. the replacement is the card the preview showed', s.hand[victimIdx] &
 const basicIdx = s.hand.findIndex((x) => x && x.cat === 'basic');
 const stashed = s.hand[basicIdx];
 const preview11 = s.next;
+const stashTrace = await p.evaluate((uid) => {
+  const c = window.__sb.battle.combat;
+  const emit = c.emit.bind(c);
+  const trace = [];
+  window.phase4Stash = { trace,restore:()=>{ c.emit=emit; } };
+  c.emit = (event) => {
+    if (['draw','stash','enemyAct','jam','reshuffle'].includes(event.type)) {
+      trace.push({ type:event.type, uid:event.uid, slot:event.slot, key:event.key, preview:c.nextCard(), t:c.t,
+        matching:event.uid===uid });
+    }
+    emit(event);
+  };
+  return { next:c.nextCard(), deck:c.draw.length };
+},stashed.uid);
 await swipe(stashed.uid, -60);
 s = await S();
 check('11a. a card swiped up went to Reserve', s.reserve.some((x) => x.uid === stashed.uid), stashed.id);
-check('12b. its slot refilled from the preview', s.hand[basicIdx] && s.hand[basicIdx].uid === preview11);
+const events11 = await p.evaluate(() => { const recording=window.phase4Stash; recording.restore(); return recording.trace; });
+check('12b. its slot refilled from the preview', s.hand[basicIdx] && s.hand[basicIdx].uid === preview11,
+  JSON.stringify({ preview11, beforeSwipe:stashTrace, now:s.hand[basicIdx]?.uid, events:events11 }));
 await shot('11-reserve');
 
 // 13. Corvin or Pin starts a combo (with the Reserve card when it fits)

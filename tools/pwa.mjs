@@ -4,8 +4,8 @@
 // Usage: node tools/pwa.mjs [workDir]   (after npm run build)
 // Copies dist/ to <workDir>/site/def/dist and serves it like GitHub Pages (site under /def/,
 // Cache-Control max-age=600, folder URLs open index.html). PWA_PATH=/signalbreak/ serves the build
-// at that path instead, as on the storage mirror (no site-root redirect then). Chromium stands in
-// for Safari; an iPhone or iPad is still needed to confirm Add to Home Screen itself.
+// at that path instead, as on the storage mirror (no site-root redirect then). This harness runs in Chromium. See the release report
+// for device and browser coverage.
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -78,7 +78,11 @@ await ctx.addInitScript((profile) => {
 const errors = [];
 const open = async (url) => {
   const p = await ctx.newPage();
-  p.on('pageerror', (e) => errors.push(e.message));
+  p.on('pageerror', (e) => {
+    errors.push(p.evaluate(() => [...document.scripts].find((s) => s.textContent.includes('commit:'))
+      ?.textContent.match(/commit:"([^"]+)"/)?.[1] || 'unstamped')
+      .catch(() => 'navigation').then((commit) => `[${commit}] ${e.message}`));
+  });
   await p.goto(url);
   await p.waitForFunction(() => window.__sb, null, { timeout: 10000 });
   return p;
@@ -230,8 +234,9 @@ p = await open(`${HOST}${BASE}`);
 check('Update: the new build starts offline with the same active save and unlock', await isNext() &&
   await p.evaluate(() => window.__sb?.hasSave() && window.__sb.meta.progress.earned.victory));
 
+const pageErrors = await Promise.all(errors);
 await b.close();
-check('No page errors', errors.length === 0, errors.join(' | '));
+check('No page errors', pageErrors.length === 0, pageErrors.join(' | '));
 const failed = results.filter((r) => !r).length;
 console.log(`${results.length - failed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

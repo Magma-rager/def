@@ -258,20 +258,29 @@ async function endChain() {
     if (bsc) await tapCard(bsc); else await wait(300);
   }
 }
-// 10–11. the queue (combo 2)
-await quiet();
-await tapCard(await legal('basic'));
-await wait(80);
-let q1 = shown('queue');
-check(10, 'The queue lesson comes while the first card of a combo plays out', q1 && q1.combo && q1.combo.cards >= 0, q1 ? `combo by ${q1.combo && q1.combo.hero}, shown after ${q1.cards} cards in this battle` : 'not shown');
-s = await S();
-const b2 = await legal('basic');
-if (b2) await tapCard(b2);
-const b3 = await legal('basic');
-if (b3) await tapCard(b3);
-s = await S();
+// 10–11. The next hand may have no legal continuation, or an enemy lesson may take priority.
+// Look for a genuine queue opportunity in the next few combos, just as with the cancel lesson.
 let chips = { exec: 0, wait: 0, held: 0 };
-for (let i = 0; i < 12 && !(chips.exec && chips.wait); i++) { chips = await p.evaluate(() => ({ exec: document.querySelectorAll('.chip.q.exec').length, wait: document.querySelectorAll('.chip.q.wait').length, held: document.querySelectorAll('.slot.held').length })); if (!(chips.exec && chips.wait)) await wait(30); }
+let q1;
+for (let attempt = 0; attempt < 4; attempt++) {
+  await quiet();
+  await tapCard(await legal('basic'));
+  q1 = shown('queue');
+  const follow = await legal('basic') || await legal('arte', (await S()).combo?.hero);
+  if (follow) {
+    const u = await uidOf(follow);
+    await tapSel(`.hand .card[data-uid="${u}"]`);
+  }
+  s = await S();
+  chips = await p.evaluate(() => ({
+    exec: document.querySelectorAll('.chip.q.exec').length,
+    wait: document.querySelectorAll('.chip.q.wait').length,
+    held: document.querySelectorAll('.slot.held').length,
+  }));
+  if (q1 && s.queue.length && chips.exec && chips.wait && chips.held) break;
+  await endChain();
+}
+check(10, 'The queue lesson comes while the first card of a combo plays out', q1 && q1.combo && q1.combo.cards >= 0, q1 ? `combo by ${q1.combo && q1.combo.hero}, shown after ${q1.cards} cards in this battle` : 'not shown');
 check(10, 'Cards committed into the queue while another executes', s.queue.length >= 1, `${s.queue.map((q) => q.card).join(', ')} waiting behind ${s.exec}`);
 check(11, 'Executing and waiting commands look different', chips.exec >= 1 && chips.wait >= 1 && chips.held >= 1, `executing chip ${chips.exec}, waiting chips ${chips.wait}, held slots ${chips.held}`);
 await shot('11-queue');

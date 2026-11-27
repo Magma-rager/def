@@ -18,6 +18,7 @@ for (const [lang, w, h] of [['en', 844, 390], ['ru', 1194, 834], ['ru', 667, 375
   const ctx = await b.newContext({ viewport: { width: w, height: h }, hasTouch: true, isMobile: false });
   await ctx.addInitScript((l) => localStorage.setItem('signalbreak.settings.v1', JSON.stringify({ lang: l, hints: false })), lang);
   const p = await ctx.newPage();
+  await p.clock.install();
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
   await p.goto(URL);
@@ -33,14 +34,15 @@ for (const [lang, w, h] of [['en', 844, 390], ['ru', 1194, 834], ['ru', 667, 375
     const c = bs.combat;
     return { target: c.target, alive: c.aliveEnemies().map((e) => e.uid), chip: document.querySelector('.target-chip .tc-name').textContent, fx: bs.view.targetFx || null };
   });
-  const tapEnemy = async (i) => {
-    const pos = await p.evaluate((k) => {
+  const enemyPoint = (i) => p.evaluate((k) => {
       const v = window.__sb.battle.view;
       const a = [...v.enemyActors.values()][k];
       const [x, y, sc, bb] = v.enemyPos(a);
       const r = v.canvas.getBoundingClientRect();
       return [r.left + x + ((bb[0] + bb[2]) / 2) * sc, r.top + y + (bb[1] * sc) / 2];
-    }, i);
+  }, i);
+  const tapEnemy = async (i) => {
+    const pos = await enemyPoint(i);
     await p.touchscreen.tap(pos[0], pos[1]);
     await p.waitForTimeout(150);
   };
@@ -75,7 +77,7 @@ for (const [lang, w, h] of [['en', 844, 390], ['ru', 1194, 834], ['ru', 667, 375
     const tgt = (await state()).target;
     const hurt = after.filter(([u, v], k) => v < hit.hp[k][1]).map(([u]) => u);
     check(`${tag}: the attack hits the tapped enemy and no other`, hurt.length === 1 && hurt[0] === tgt, `target ${tgt}, damaged ${hurt.join(',') || 'none'}`);
-    // 1c. a queued attack uses the target selected when it starts executing (spec §14): retarget while
+    // 1c. a queued attack uses the target selected when it resolves (spec §14): retarget while
     // it waits and it lands on the new target
     // setup (disclosed): end the open chain, wait out the breather, then put a Weak and a Medium basic
     // attack in the first two slots so one executes while the other waits
@@ -96,16 +98,27 @@ for (const [lang, w, h] of [['en', 844, 390], ['ru', 1194, 834], ['ru', 667, 375
     const at = (u) => p.evaluate((x) => { const el = document.querySelector(`.hand .card[data-uid="${x}"]`); if (!el) return null; const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }, u);
     q.a = await at(q.a);
     q.b = await at(q.b);
+    // Keep this fixture's narrow window independent of screenshot and browser-runner overhead.
+    // The scheduler still advances on actual RAF ticks and all decisions are ordinary touch input.
+    await p.clock.pauseAt(await p.evaluate(() => Date.now() + 200));
     await p.touchscreen.tap(q.a[0], q.a[1]); // executes at once
     await p.touchscreen.tap(q.b[0], q.b[1]); // waits behind it
-    const waiting = await p.evaluate(() => window.__sb.battle.combat.queue.length);
-    const before = await p.evaluate(() => window.__sb.battle.combat.target);
-    await p.waitForTimeout(380); // the first attack lands on the current target; the second still waits
-    const tgts = await p.evaluate(() => window.__sb.battle.combat.aliveEnemies().map((e) => e.uid));
-    await tapEnemy(tgts.indexOf(before) === 1 ? 2 : 1); // retarget while the second attack waits
+    const first = await p.evaluate(() => {
+      const c = window.__sb.battle.combat;
+      return { waiting: c.queue.length, target: c.target, remaining: (c.executing?.resolveAt - c.t) * 1000 };
+    });
+    await p.clock.runFor(Math.ceil(first.remaining) + 32);
+    const between = await p.evaluate(() => ({ hits: window.__hits.length, waiting: window.__sb.battle.combat.queue.length }));
+    const tgts = await state();
+    const point = await enemyPoint(tgts.alive.indexOf(first.target) === 1 ? 2 : 1);
+    await p.touchscreen.tap(point[0], point[1]);
+    await p.clock.resume();
     await p.waitForTimeout(1500);
     const r = await p.evaluate(() => ({ hits: window.__hits.slice(), target: window.__sb.battle.combat.target }));
-    check(`${tag}: a queued attack lands on the target selected when it executes`, waiting === 1 && r.hits.length >= 2 && r.hits[0] === before && r.hits[r.hits.length - 1] === r.target && r.target !== before, `waiting ${waiting}, first hit ${r.hits[0]} (target then ${before}), queued hit ${r.hits[r.hits.length - 1]} (target now ${r.target})`);
+    check(`${tag}: a queued attack lands on the target selected when it executes`,
+      first.waiting === 1 && between.hits === 1 && between.waiting === 1 && r.hits.length >= 2 &&
+      r.hits[0] === first.target && r.hits.at(-1) === r.target && r.target !== first.target,
+      `between attacks ${JSON.stringify(between)}, first hit ${r.hits[0]} (target then ${first.target}), queued hit ${r.hits.at(-1)} (target now ${r.target})`);
     await p.evaluate(() => { const c = window.__sb.battle.combat; if (c.combo) c.requestEnd('forced'); });
     await p.waitForTimeout(1600);
   } else check(`${tag}: the attack hits the tapped enemy and no other`, false, 'no single-target Opener in hand');

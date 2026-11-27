@@ -3,8 +3,9 @@
 // finishes the encounter with taps too. The engine is read for the checks, never driven.
 //
 // Fixture (disclosed): a fresh run (seed 1) whose first battle is set up deterministically before it
-// starts — the encounter is one Foundry Warden (normal-tier HP, so the long chain does not end the
-// fight at once) and the deck is stacked so the opening hand holds Hessa's Weak A1 → Medium B2 →
+// starts — two Iron Maws use their ordinary active ATB and give the entire chain room to resolve.
+// Lockdown is covered by tools/accept6.mjs. A locking enemy could disable the exact Arte this
+// scheduler fixture requires. The deck is stacked so the opening hand holds Hessa's Weak A1 → Medium B2 →
 // Scrapfall, Corvin's Thermal Lance, Pin's Bolt Volley and a Strong basic attack, with Salvage and
 // Mend Circuit next in the draw pile. Every battle action after that is a tap.
 //
@@ -58,7 +59,8 @@ await p.evaluate(() => {
     ['scrapline', 'B'], ['salvage'], ['mend_circuit'], ['rivet_jab', 'A'], ['scrapline', 'A'], ['hotwire', 'B'], ['piston_strike', 'B']];
   r.d.deck = spec.map(([id, variant], i) => ({ uid: `fx${i}`, id, up: false, ...(variant ? { variant } : {}) }));
   r.enterNode('n1_0');
-  r.d.pending.enemies = ['foundry_warden'];
+  r.d.pending.enemies = ['iron_maw', 'iron_maw'];
+  r.d.pending.trait = null;
   app.route();
 });
 await p.waitForFunction(() => window.__sb.battle && window.__sb.battle.combat);
@@ -98,7 +100,19 @@ const tapCard = (uid) => tapSel(`.hand .card[data-uid="${uid}"], .reserve .res-c
 const idle = async (ms = 8000) => { const end = Date.now() + ms; while (Date.now() < end) { const s = await S(); if (!s || (!s.exec && !s.queue.length)) return s; await wait(50); } return S(); };
 const until = async (pred, ms = 8000) => { const end = Date.now() + ms; while (Date.now() < end) { const s = await S(); if (!s || pred(s)) return s; await wait(50); } return S(); };
 // Momentum changes as the engine reports them
-await p.evaluate(() => { window.__mlog = []; const c = window.__sb.battle.combat; const orig = c.emit.bind(c); c.emit = (ev) => { if (ev.type === 'momentum') window.__mlog.push([ev.delta, ev.why]); orig(ev); }; });
+await p.evaluate(() => {
+  window.__mlog = [];
+  window.__chainTrace = [];
+  const c = window.__sb.battle.combat;
+  const emit = c.emit.bind(c);
+  c.emit = (ev) => {
+    if (ev.type === 'momentum') window.__mlog.push([ev.delta, ev.why]);
+    if (['enemyAct', 'lock', 'execResolve', 'comboEnd', 'cancel'].includes(ev.type)) {
+      window.__chainTrace.push({ type: ev.type, key: ev.key, id: ev.id, uid: ev.uid, t: c.t });
+    }
+    emit(ev);
+  };
+});
 
 // 1. all heroes Ready
 let s = await S();
@@ -183,14 +197,21 @@ s = await idle();
 check('17. Pin opened his segment with a basic attack', s.combo && s.combo.hero === 'S' && s.combo.cards.length === 6 && s.combo.cards.at(-1) !== 'thermal_lance');
 const volley = await uidById('bolt_volley');
 const atbBeforeEnd = (await S()).enemy[0].atb;
-await tapCard(volley);
+const volleyState = await p.evaluate((uid) => {
+  const c = window.__sb.battle.combat;
+  return { uid, legality: c.check(uid), atb: c.enemies[0].atb, t: c.t };
+}, volley);
+const volleyTapped = await tapCard(volley);
 s = await until((x) => !x.combo || (!x.exec && !x.queue.length));
 let finishedBy = 'itself (every hero has joined, nothing higher)';
 if (s.combo && s.canFinish) { await tapSel('.ctl.cash'); finishedBy = 'FINISH'; }
 s = await until((x) => !x.combo);
-check('18. Pin\'s arte executed', s.history.length && s.history[0].segments.at(-1).hero === 'S' && s.history[0].segments.at(-1).cards === 2 && s.history[0].len === 7);
+check('18. Pin\'s arte executed', s.history.length && s.history[0].segments.at(-1).hero === 'S' && s.history[0].segments.at(-1).cards === 2 && s.history[0].len === 7,
+  JSON.stringify({ ...volleyState, tapped: volleyTapped, trace: await p.evaluate(() => window.__chainTrace.slice(-8)) }));
 check('19. the party chain ended as a Perfect', s.history[0] && s.history[0].type === 'perfect', `finished by ${finishedBy}`);
-check('20. its history holds all three heroes and two Relays', JSON.stringify(s.history[0].heroes) === '["V","C","S"]' && s.history[0].relays === 2, JSON.stringify(s.history[0].segments.map((g) => `${g.hero}:${g.cards}`)));
+const finalChain = s.history[0];
+check('20. its history holds all three heroes and two Relays', finalChain && JSON.stringify(finalChain.heroes) === '["V","C","S"]' && finalChain.relays === 2,
+  JSON.stringify(finalChain?.segments.map((g) => `${g.hero}:${g.cards}`)));
 const mlog = await p.evaluate(() => window.__mlog);
 const sumWhy = (w) => mlog.filter((x) => x[1] === w).reduce((a, x) => a + x[0], 0);
 const net = mlog.reduce((a, x) => a + x[0], 0);
@@ -240,12 +261,12 @@ const healCmd = s.queue.find((q) => q.uid === heal);
 const reservedWhileQueued = s.reserved;
 const dom23 = await p.evaluate((id) => !!document.querySelector(`.chip.q.wait[data-cmd="${id}"]`), healCmd ? healCmd.id : -1);
 check('23. the queue was visible and controllable (waiting chip, held placeholder)', dom23 && dom5.wait >= 1 && dom5.ghost.length >= 1, JSON.stringify(dom5.ghost));
-await shot('25-waiting');
 if (healCmd) await tapSel(`.chip.q.wait[data-cmd="${healCmd.id}"]`);
 await wait(100);
 s = await S();
 check('25. tapping the waiting heal cancelled it: its 2 Momentum reservation was returned, the card is back',
   !!healCmd && reservedWhileQueued === 2 && s.reserved === 0 && s.momentum >= m25 && s.hand.includes(heal) && !s.queue.some((q) => q.uid === heal), `reserved ${reservedWhileQueued} → ${s.reserved}`);
+await shot('25-cancelled');
 
 // 28. win by ordinary play
 const end28 = Date.now() + 240000;
