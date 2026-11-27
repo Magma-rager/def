@@ -79,6 +79,29 @@ test('every art and EX recipe has a resolved cue, enemy identities are complete 
   assert.ok(Math.abs(clipClock(RULES.ACTION_TIME,.27,RULES.ACTION_TIME,clip)-clip.dur) < 1e-9);
 });
 
+test('a lethal Cash Out keeps its payout effects on the struck enemy when combat retargets', () => {
+  const c = battle();
+  const { v } = renderer(c);
+  const [victim, other] = c.enemies;
+  c.setTarget(victim.uid);
+  for (const uid of ['x', 'y']) {
+    assert.ok(c.commit(uid).ok);
+    for (let i = 0; i < 38; i++) c.update(1/60);
+  }
+  c.drainEvents();
+  victim.hp = 1;
+  assert.ok(c.cashOut().ok);
+  for (let i = 0; i < 38; i++) c.update(1/60);
+  const results = c.drainEvents();
+  assert.equal(c.target, other.uid);
+  assert.equal(results.find((e) => e.type === 'hit' && e.tag === 'cashout').uid, victim.uid);
+  v.consume(results);
+  const [x, y, sc, b] = v.enemyPos(v.enemyActors.get(victim.uid));
+  const coins = v.particles.filter((p) => p.kind === 'coin');
+  assert.equal(coins.length, 10);
+  assert.ok(coins.every((p) => p.x === x + (b[0] + b[2]) * .5 * sc && p.y === y + b[1] * sc * .5));
+});
+
 test('reduced motion keeps local EX results but removes decorative particles, paths and false strikes', () => {
   const { v, sound } = renderer(battle());
   v.reducedMotion = true;

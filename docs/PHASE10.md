@@ -98,7 +98,8 @@ pose to that point. Contact is drawn from the rig to the resolved recipient, or 
 recipient alone when no source applies. Damage numbers, hurt reactions and impact audio come
 from `hit` and `partyHit`. A trajectory shows a fast afterimage of a completed contact over
 several frames. It cannot hit or apply damage independently. Commands cancelled before
-execution produce no strike. The struck target is chosen by the engine at execution. Each
+execution produce no strike. The struck target is chosen by the engine at execution. Cash
+Out's coin effects stay at that target if a lethal payout causes automatic retargeting. Each
 affected hero in an area attack receives their own actual reaction. The EX cue consumes the
 recipe identity and applied outcome. The battle advances on the original scheduler while
 these reactions play.
@@ -130,7 +131,7 @@ progress.
 
 | Check | Evidence |
 |---|---|
-| Automated suite | 265/265. Four new tests cover cue catalogues, bilingual effect placeholders, resolved target and sound timing, cancellation and reduced-motion contact. |
+| Automated suite | 266/266. Five new tests cover cue catalogues, bilingual effect placeholders, resolved target and sound timing, lethal Cash Out retargeting, cancellation and reduced-motion contact. |
 | Opening pacing | Baseline and Phase 10 JSON are byte-identical across `node tools/pacing.mjs 60 --act1 --pace=2.5 --relay=active --json`. Includes learner decision timing, active Relay, enemy pressure, survivability and downtime. |
 | Real selection and execution | Targeting 36/36. Phase 6 RU tutorial and controls 32/32. Phase 7 EX and Journal 47/47 in each language. Phase 8 techniques/rewards/adaptation 51/51. |
 | Ordinary campaigns | EN 1180×820: 16/16, score 1400, 16 fights, Clockwork Regent, Protocol Auditor and Signalbreak Core. RU 844×390: 16/16, score 1600, 16 fights, Scrap Tyrant, Protocol Auditor and the Corruptor. Both saved/reloaded between Acts, played the ending and credits, recorded victory once and began another standard run with an earned starter. No recovery intervention or page error was recorded in either completed campaign. |
@@ -204,9 +205,8 @@ path. The browser used an offline cache, no network requests, Cyrillic fonts, an
 run, the Museum, Journal and an unlocked alternative starter. The updated build installed
 and then opened offline.
 
-The final package was generated from `e1a0406cdd5aba4354d3a09b41ab97b876c623db`
-with HTML stamp `e1a0406`. The offline and accessibility checks above were repeated after
-the keyboard, story and EX recap corrections. At 844×390, Chromium's device emulation
+The offline and accessibility checks above were repeated after the keyboard, story and EX
+recap corrections. At 844×390, Chromium's device emulation
 also applied 47 px left and right safe-area insets and a 21 px bottom inset. All six hand
 slots and the tested controls stayed within the safe area, and card effects remained at
 12 CSS px.

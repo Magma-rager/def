@@ -375,6 +375,9 @@ export class BattleView {
       ...(source ? { sx: source[0], sy: source[1] } : {}), strong: ev.big || !!ev.cue?.recipe,
       ...(ev.echo ? { size: .81 } : {}),
     });
+    if (tag === 'cashout' && !this.reducedMotion) {
+      for (let i = 0; i < 10; i++) this.particles.push({ x: cx, y: cy, vx: (Math.random() - 0.5) * 300, vy: -Math.random() * 360, life: 0, max: 0.9, size: 4, color: '#ffd36a', grav: 700, kind: 'coin', rot: Math.random() * 6, vr: 8 });
+    }
     if (!this.reducedMotion && ev.big) this.shake = Math.max(this.shake, 3.5);
     if (tag !== 'scorch' && (ev.hit || 0) === 0 && !ev.cue?.recipe) {
       this.sfx(ev.blocked && !ev.amount ? 'block' : 'contact', { amount: ev.amount, strong: ev.big, voice: ev.by, cue });
@@ -515,8 +518,6 @@ export class BattleView {
   }
 
   onCashout(ev) {
-    const [tx, ty] = this.targetX(this.combat.target);
-    for (let i = 0; i < (this.reducedMotion ? 0 : 10); i++) this.particles.push({ x: tx, y: ty, vx: (Math.random() - 0.5) * 300, vy: -Math.random() * 360, life: 0, max: 0.9, size: 4, color: '#ffd36a', grav: 700, kind: 'coin', rot: Math.random() * 6, vr: 8 });
     this.sfx('cashout', { quick: ev.quick });
     if (this.hooks.banner && ev.scale >= 1) this.hooks.banner(ev.quick ? tr('QUICK CASH OUT') : tr('CASH OUT'), tr('Payout {n}', { n: ev.amount }), 'gold');
   }
