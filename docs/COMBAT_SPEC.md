@@ -684,3 +684,19 @@ to repair a companion, and Vector Winch accelerates one companion without skippi
 action spacing. Their formations enter from Act I depth 3, Act II depth 1 and Act III depth 0.
 The Core's late Churn response snares for three seconds and drains one charge. Its Reserve
 response latches once per Counter-Strategy. Its existing adaptation still applies separately.
+
+## 33. Phase 12 corrective balancing and durability
+
+Predator Needle's Hunt deals 10 plus a bonus of `max(0, 10 - 2 × floor(Guard))` before
+normal scaling and Defense. Its live forecast and resolution use that same rule. Reflection
+similarly previews the strongest card of the most recent completed combo. The Core's Signal
+Collapse deals 11 base per hero and the late cycle leaves a Tempo Theft opportunity before
+the next Carrier Beam. Winch's Tow accelerates one ally by 25% for 4s and Exposes the Winch
+for 4s. A latch places one uncommitted Reserve card atop the draw pile. It seals empty
+Reserve as before. Tower Plate grants 10 units for +Guard, and Quick Exit adds 30% payout
+while retaining the existing Momentum reward. None changes the starting deck, HP or Scrap.
+
+Run and Museum schemas are unchanged. The checkpoint protocol protects unreadable records
+and detects when the recorded run or profile was edited since this tab loaded or committed
+it. Continue still restarts an unfinished battle. The service worker checks the packaged
+page digest before activation and cleans caches in its own scope after successful install.

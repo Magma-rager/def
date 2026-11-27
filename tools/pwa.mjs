@@ -7,6 +7,8 @@
 // at that path instead, as on the storage mirror (no site-root redirect then). Chromium stands in
 // for Safari; an iPhone or iPad is still needed to confirm Add to Home Screen itself.
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -21,11 +23,11 @@ const PAGES = BASE === '/def/dist/';
 const dist = path.join(site, BASE);
 fs.rmSync(site, { recursive: true, force: true });
 fs.mkdirSync(path.dirname(dist), { recursive: true });
-fs.cpSync('dist', dist, { recursive: true });
+fs.cpSync(process.env.PWA_FROM || 'dist', dist, { recursive: true });
 // the repository root page redirects to the build on github.io; here the host is localhost
 if (PAGES) fs.writeFileSync(path.join(site, 'def', 'index.html'), fs.readFileSync('index.html', 'utf8').replace('/\\.github\\.io$/', '/^localhost$/'));
 
-const PORT = 8200;
+const PORT = Number(process.env.PWA_PORT || 8200);
 const HOST = `http://localhost:${PORT}`;
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
 let requests = [];
@@ -55,6 +57,17 @@ const check = (name, ok, info = '') => {
 };
 
 await start();
+if (process.env.PWA_OFFLINE_CAMPAIGN === '1') {
+  const command = ['tools/accept8.mjs','campaign',process.env.PWA_LANG || 'en','844','390',work];
+  const status = await new Promise((resolve,reject)=>{
+    const child = spawn(process.execPath,command,{stdio:'inherit',env:{...process.env,
+      SB_URL:`${HOST}${BASE}index.html`,SB_CAMPAIGN_OFFLINE:'1'}});
+    child.on('error',reject);
+    child.on('exit',resolve);
+  });
+  await stop();
+  process.exit(status ?? 1);
+}
 const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: 844, height: 390 }, hasTouch: true, locale: 'ru-RU' });
 // Seed the genuine Phase 8 profile once. The app itself must migrate and retain its earned unlocks.
@@ -151,14 +164,45 @@ check('Offline: new loadout and achievement survive reload', await p.evaluate(()
 await p.close();
 check('Nothing was requested from the network while offline', requests.length === 0, requests.join(' '));
 
-// 3. A new build is published: installed in the background, used from the next launch
+// 3. An interrupted deployment exposes the new worker before the matching page.
 await ctx.setOffline(false);
 const page = path.join(dist, 'index.html');
-fs.writeFileSync(page, fs.readFileSync(page, 'utf8').replace('<div id="app"></div>', '<div id="app"></div><!--next-build-->'));
 const sw = path.join(dist, 'sw.js');
-fs.writeFileSync(sw, fs.readFileSync(sw, 'utf8').replace(/signalbreak-[0-9a-f]+/, 'signalbreak-nextbuild'));
+const exactUpgrade = !!process.env.PWA_FROM;
+const nextPage = exactUpgrade ? fs.readFileSync('dist/index.html','utf8') :
+  fs.readFileSync(page, 'utf8').replace('<div id="app"></div>', '<div id="app"></div><!--next-build-->');
+const stamp = exactUpgrade ? nextPage.match(/commit:"[^"]+"/)?.[0] : '<!--next-build-->';
+if (!stamp) throw Error('The actual upgrade package has no source stamp');
+const nextHash = createHash('sha256').update(nextPage).digest('hex');
+const otherCache = `signalbreak:${HOST}/other/:build`;
+const nextWorker = exactUpgrade ? fs.readFileSync('dist/sw.js','utf8') : fs.readFileSync(sw, 'utf8')
+  .replace(/const BUILD = '[0-9a-f]+'/, "const BUILD = 'nextbuild'")
+  .replace(/const PAGE_HASH = '[0-9a-f]+'/, `const PAGE_HASH = '${nextHash}'`);
+const nextId = nextWorker.match(/const BUILD = '([^']+)'/)?.[1];
+const nextCache = `signalbreak:${HOST}${BASE}:${nextId}`;
+fs.writeFileSync(sw,nextWorker);
 await start();
-const isNext = () => p.evaluate(() => document.documentElement.outerHTML.includes('<!--next-build-->'));
+const isNext = () => p.evaluate((marker) => document.documentElement.outerHTML.includes(marker),stamp);
+p = await open(`${HOST}${BASE}index.html`);
+const priorCaches = await p.evaluate(async (other) => { await caches.open(other); return (await caches.keys()).sort(); },otherCache);
+await p.evaluate(async () => { try { await (await navigator.serviceWorker.ready).update(); } catch {} });
+await p.waitForFunction(async () => !(await navigator.serviceWorker.getRegistration()).installing);
+check('Interrupted update: the existing cache is kept and no mismatched build is installed',
+  JSON.stringify(priorCaches) === JSON.stringify(await p.evaluate(async ()=>(await caches.keys()).sort())) && !await isNext());
+await ctx.setOffline(true);
+await p.reload();
+check('Interrupted update: the old build still launches offline with the save',
+  !await isNext() && await p.evaluate(() => window.__sb?.hasSave()));
+await p.close();
+
+// 4. Publish the matching files. A fresh worker byte also makes browsers retry the failed install.
+await ctx.setOffline(false);
+if (exactUpgrade) {
+  for (const asset of ['index.html','manifest.webmanifest','icon.svg','icon-180.png','icon-192.png','icon-512.png']) {
+    fs.copyFileSync(`dist/${asset}`,path.join(dist,asset));
+  }
+} else fs.writeFileSync(page,nextPage);
+fs.writeFileSync(sw,nextWorker+'\n// complete publication\n');
 p = await open(`${HOST}${BASE}index.html`);
 const firstNext = await isNext();
 // Ask for the same update the app requests on foregrounding. Chromium may deduplicate the
@@ -170,11 +214,12 @@ const updateError = await p.evaluate(async () => {
 let names = [];
 for (let i = 0; i < 40; i++) {
   names = await p.evaluate(() => caches.keys());
-  if (names.join() === 'signalbreak-nextbuild') break;
+  if (names.includes(nextCache) && names.length === 2) break;
   await p.waitForTimeout(250);
 }
 await p.close();
-check('Update: the new build is cached and the old cache removed', names.join() === 'signalbreak-nextbuild', [names.join(), updateError].filter(Boolean).join(' · '));
+check('Update: the new build replaces its cache and preserves other scopes',
+  names.includes(nextCache) && names.includes(otherCache) && names.length === 2, [names.join(), updateError].filter(Boolean).join(' · '));
 p = await open(`${HOST}${BASE}index.html`);
 const secondNext = await isNext();
 await p.close();
@@ -182,7 +227,8 @@ check('Update: the next launch runs the new build', !firstNext && secondNext, `l
 await stop();
 await ctx.setOffline(true);
 p = await open(`${HOST}${BASE}`);
-check('Update: the new build starts offline', await isNext());
+check('Update: the new build starts offline with the same active save and unlock', await isNext() &&
+  await p.evaluate(() => window.__sb?.hasSave() && window.__sb.meta.progress.earned.victory));
 
 await b.close();
 check('No page errors', errors.length === 0, errors.join(' | '));

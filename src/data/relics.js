@@ -20,7 +20,7 @@ export const RELICS = {
   churn_gear: { name: 'Churn Gear', rarity: 'common', icon: 'gear', tag: 'churn', text: '+1 max Churn charge. Charges recover 30% faster.' },
   oiled_bearings: { name: 'Oiled Bearings', rarity: 'uncommon', icon: 'gear', tag: 'churn', text: 'Churning no longer costs Flow or advances enemy ATB.' },
   flywheel: { name: 'Flywheel', rarity: 'uncommon', icon: 'gear', tag: 'flow', text: 'Spending Momentum for Flow costs 2 instead of 3.' },
-  tower_plate: { name: 'Tower Plate', rarity: 'common', icon: 'shield', tag: 'guard', text: 'Spending Momentum for Guard grants 12 instead of 8.' },
+  tower_plate: { name: 'Tower Plate', rarity: 'common', icon: 'shield', tag: 'guard', text: 'Spending Momentum for Guard grants 10 instead of 8.' },
   riveted_ledger: { name: 'Riveted Ledger', rarity: 'common', icon: 'coin', tag: 'cashout', text: 'Cash Out payout +30%.' },
   signal_flare: { name: 'Signal Flare', rarity: 'common', icon: 'flare', tag: 'interference', text: 'At battle start, all enemies are Exposed for 6s.' },
   coal_heart: { name: 'Coal Heart', rarity: 'common', icon: 'flame', tag: 'interference', text: 'Scorch you apply is +1.' },

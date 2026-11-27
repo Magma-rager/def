@@ -46,6 +46,7 @@ export class AudioEngine {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     this.connect(new AC());
+    if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
   }
 
   connect(c) {
@@ -328,7 +329,7 @@ export class AudioEngine {
   }
 
   schedule() {
-    if (!this.ctx || !this.track) return;
+    if (!this.ctx || this.ctx.state !== 'running' || !this.track || this.settings.muted) return;
     const T = scoreFor(this.track);
     if (!T) return;
     const stepDur = 60 / T.bpm / 2; // eighth notes

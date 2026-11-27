@@ -798,3 +798,10 @@ Six cards, two relics, a mutation, a graft, two EX recipes and three enemies ext
 ordinary campaign. The [Phase 11 report](PHASE11.md) records the acquisition and encounter
 paths, comparisons against the Phase 10 checkpoint, the original Reserve test, the separation
 of policy and Churn changes, browser recovery, and remaining difficulty and device questions.
+
+## Revised roadmap, Phase 12 pre-beta candidate (0.2.12)
+
+The [Phase 12 report](PHASE12.md) records targeted late-game changes, historical regression
+reproduction, procedural verification, storage and offline update safeguards, packaged browser
+campaigns, performance measurements and platform readiness. The [beta packet](PLAYTEST.md)
+is prepared for the project owner’s post-roadmap beta.

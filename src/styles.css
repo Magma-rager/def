@@ -97,6 +97,7 @@ html.reduced-motion .rotate-phone { animation: none; transform: rotate(-90deg); 
 .title-link { align-self: flex-start; margin-top: -8px; padding: 2px 0; border: 0; background: none; color: var(--cream3); font: inherit; font-size: 0.75em; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .title-link:hover { color: var(--cream); }
 .title-offline { font-size: 0.75em; color: var(--brass-hi); margin-top: -8px; min-height: 1.2em; }
+.title-storage { margin: 0; color: #ffd29f; font-size: 0.84em; max-width: 32em; }
 .lang-switch { display: inline-flex; border: 1px solid var(--brass-lo); border-radius: 4px; overflow: hidden; background: rgba(30, 16, 24, 0.85); }
 .title > .lang-switch { position: absolute; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); z-index: 2; }
 .lang-opt { appearance: none; border: 0; background: transparent; color: var(--cream2); font: inherit; font-weight: 700; font-size: 0.9em; padding: 0 0.9em; min-height: 40px; cursor: pointer; }

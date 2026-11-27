@@ -248,6 +248,7 @@ export class BattleScreen {
     const tools = this.topbar.querySelector('.bt-relics').getBoundingClientRect();
     const pause = this.topbar.querySelector('.pause-btn').getBoundingClientRect();
     this.view.hudToolbar = { left: Math.min(tools.left, pause.left)-r.left, bottom: Math.max(tools.bottom, pause.bottom)-r.top };
+    this.paintRequested = true;
     for (const [, el] of this.resEls || []) fitReserveCard(el);
     for (const slot of this.slots) if (slot.el) fitCard(slot.el);
   }
@@ -486,8 +487,11 @@ export class BattleScreen {
       this.lessons.poll -= dt;
       if (this.lessons.poll <= 0) { this.lessons.poll = 0.2; this.maybeLesson(); }
     }
-    this.view.draw();
-    this.updateHud(false);
+    if (!this.app.paused || this.paintRequested) {
+      this.paintRequested = false;
+      this.view.draw();
+      if (!this.app.paused) this.updateHud(false);
+    }
     if (c.phase === 'END' && !this.ended) {
       this.ended = true;
       const win = c.result.victory;
@@ -756,6 +760,7 @@ export class BattleScreen {
 
   // ───────────────────────── HUD ─────────────────────────
   updateHud(force) {
+    if (force) this.paintRequested = true;
     const c = this.combat;
     this.updateHand();
     this.updateReserve();

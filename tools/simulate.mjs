@@ -102,7 +102,7 @@ function executedChurnDraws(c) {
 
 export function simulateCampaign(seed, {
   starterRelic = 'beta_badge', reaction = REACT, profile = PROFILE, recipeAware = EX, tactics = TACTICS,
-  target = targetFor(seed), meta = null, audit = false, wanted = target || RELICS[starterRelic].tag,
+  target = targetFor(seed), meta = null, audit = false, observeBattle = null, wanted = target || RELICS[starterRelic].tag,
 } = {}) {
   if (meta && !canStartWith(meta, starterRelic)) throw new Error(`Locked starter ${starterRelic}`);
   const rng = new RNG(seed * 7 + 1);
@@ -137,6 +137,7 @@ export function simulateCampaign(seed, {
         const setup = run.battleSetup();
         const before = run.d.hp;
         const { out, t, c } = botBattle(setup, rng, { reaction, profile, recipeAware, tactics });
+        observeBattle?.(setup, out, c);
         if (meta) for (const [id, n] of Object.entries(out.stats.exByRecipe)) {
           for (let i = 0; i < n; i++) addRunRecipe(run, id);
         }

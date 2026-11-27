@@ -62,7 +62,7 @@ test('Interference: Churn snare, Reserve latch, Flow drain and Glitch cards all 
   const u = c.hand.find(Boolean);
   c.stash(u);
   c.latchReserve(e);
-  assert.ok(c.discard.includes(u));
+  assert.equal(c.nextCard(),u,'the ejected Reserve card is the next draw');
   c.latchReserve(e);
   assert.equal(c.stash(c.hand.find(Boolean)).ok, false, 'sealed');
   for (let i = 0; i < 110; i++) c.update(0.05);

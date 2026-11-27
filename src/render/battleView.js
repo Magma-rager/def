@@ -136,6 +136,7 @@ export class BattleView {
   }
 
   resize(w, h, dpr) {
+    if (this.w === w && this.h === h && this.dpr === dpr) return;
     this.w = w;
     this.h = h;
     this.dpr = dpr;
@@ -152,7 +153,7 @@ export class BattleView {
   partyPos(id) {
     const [px, py] = PARTY_SLOTS[id];
     const boss = this.combat?.enemies.some((e) => e.tier === 'boss');
-    const docket = this.h < 245 && boss ? Math.max(0, Math.min(213, this.w*.33) + 32 - this.w*PARTY_SLOTS.C[0]) : 0;
+    const docket = this.h < 245 && boss ? Math.max(0, Math.min(213, this.w*.33) + 42 - this.w*PARTY_SLOTS.C[0]) : 0;
     // Keep room below the feet for the name, Defense and Recovery bar.
     return [px*this.w + docket, Math.min(py*this.h, this.h-27)];
   }
@@ -1187,10 +1188,11 @@ export class BattleView {
     ctx.shadowBlur = 0;
     // label under the enemy: "TARGET", or "NEW TARGET" for a while after an automatic switch
     const label = fx && fx.auto && age < 2 ? tr('NEW TARGET') : tr('TARGET');
-    const ly = (footY !== undefined ? footY : y1) + (compact ? 7 : 10);
+    const labelHeight = compact ? 14 : 17;
+    const ly = Math.min((footY !== undefined ? footY : y1) + (compact ? 7 : 10), this.h - labelHeight - 2);
     ctx.font = `800 ${compact ? 9 : 11}px "Barlow Condensed", "Arial Narrow", sans-serif`;
     const tw = ctx.measureText(label).width + 16;
-    roundRect(ctx, cx - tw / 2, ly, tw, compact ? 14 : 17, 7);
+    roundRect(ctx, cx - tw / 2, ly, tw, labelHeight, 7);
     ctx.globalAlpha = 1;
     ctx.fillStyle = fx && fx.auto && age < 2 ? '#ffb35a' : '#ffd36a';
     ctx.fill();

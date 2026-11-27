@@ -147,7 +147,7 @@ test('starter relic effects change the matching legal actions from the same star
 
   [base, chosen] = paired('tower_plate');
   for (const c of [base, chosen]) assert.ok(c.spendMomentumGuard().ok);
-  assert.equal(chosen.guard - base.guard, 4);
+  assert.equal(chosen.guard - base.guard, 2);
   assert.equal(chosen.momentum, base.momentum);
 
   [base, chosen] = paired('breach_clamp');

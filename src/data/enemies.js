@@ -26,7 +26,8 @@ const guardAll = (name, g) => ({ kind: 'guard', name, desc: `All enemies gain ${
 
 // Pattern helper: cycle through keys by action count.
 const cycle = (...keys) => (e) => keys[e.actCount % keys.length];
-const huntDamage = (combat) => combat.guard < 6 ? 20 : 10;
+const huntDamage = (combat) => 10 + Math.max(0, 10 - 2 * Math.floor(combat.guard));
+const reflectionDamage = (combat) => Math.max(8, Math.round(0.6 * combat.lastStrongestHit()));
 
 export const ENEMIES = {
   rail_bailiff: {
@@ -57,11 +58,11 @@ export const ENEMIES = {
     name: 'Vector Winch', act: 3, tier: 'normal', hp: 76, actTime: 5.7, art: 'winch', size: 1.22,
     lore: 'A gate spool with a tether for everything but its own safety latch.',
     intents: {
-      tow: { kind: 'buff', name: 'Tow Signal', desc: 'The fastest living ally acts 30% faster for 5s. Expose the Winch for 3s.',
+      tow: { kind: 'buff', name: 'Tow Signal', desc: 'The fastest living ally acts 25% faster for 4s. Expose the Winch for 4s.',
         exec: (e, c) => {
           const ally = c.aliveEnemies().filter((x) => x !== e).sort((a, b) => a.actTime - b.actTime)[0];
-          if (ally) c.hasteEnemy(ally, 1.3, 5);
-          c.applyStatus(e, 'exposed', 3);
+          if (ally) c.hasteEnemy(ally, 1.25, 4);
+          c.applyStatus(e, 'exposed', 4);
         } },
       hook: atk('Return Hook', 13),
     },
@@ -130,7 +131,7 @@ export const ENEMIES = {
     name: 'Latch Wisp', act: 2, tier: 'normal', hp: 40, actTime: 5.6, art: 'wisp', size: 0.9, flying: true,
     lore: 'Steals what you saved for later. Very relatable.',
     intents: {
-      latch: { kind: 'latch', name: 'Latch', desc: 'Pull a card out of Reserve (or seal Reserve for 5s if empty).', exec: (e, c) => c.latchReserve(e) },
+      latch: { kind: 'latch', name: 'Latch', desc: 'Move one Reserve card to the top of the draw pile. If empty, seal Reserve for 5s.', exec: (e, c) => c.latchReserve(e) },
       siphon: { kind: 'atk', name: 'Siphon', dmg: 6, desc: 'Strike for 6 and heal 6.', exec: (e, c, it) => { c.hitParty(e, it.target, c.edmg(e, 6)); c.healEnemy(e, 6); } },
     },
     ai: cycle('latch', 'siphon'),
@@ -157,7 +158,7 @@ export const ENEMIES = {
     lore: 'Reads your habits. Hunts the weakest link.',
     intents: {
       strike: {
-        kind: 'atk', name: 'Hunt', dmg: 10, desc: 'Strike the least-defended hero for 10, +10 if your Guard is below 6.',
+        kind: 'atk', name: 'Hunt', dmg: 10, desc: 'Strike the least-defended hero for 10, plus up to 10 more. Each point of Guard cuts that bonus by 2.',
         forecast: huntDamage, exec: (e, c, it) => c.hitParty(e, it.target, c.edmg(e, huntDamage(c))),
       },
       exploit: {
@@ -308,7 +309,8 @@ export const ENEMIES = {
     name: 'Mirror Array', act: 2, tier: 'boss', locks: true, hp: 380, actTime: 5.8, art: 'mirror', size: 2.0,
     lore: 'It plays exactly like you. It plays slightly worse. It is annoyed about that.',
     intents: {
-      reflect: { kind: 'atk', name: 'Reflection', dmg: 8, desc: 'Fires back 60% of your last combo’s strongest card (min 8).', exec: (e, c, it) => c.hitParty(e, it.target, c.edmg(e, Math.max(8, Math.round(0.6 * c.lastStrongestHit())))) },
+      reflect: { kind: 'atk', name: 'Reflection', dmg: 8, desc: 'Fires back 60% of your last combo’s strongest card (min 8).',
+        forecast: reflectionDamage, exec: (e, c, it) => c.hitParty(e, it.target, c.edmg(e, reflectionDamage(c))) },
       mguard: { kind: 'guard', name: 'Mirror Guard', desc: 'Gain Guard equal to your Guard (max 30) + 6.', exec: (e, c) => c.enemyGuard(e, Math.min(30, Math.floor(c.guard)) + 6) },
       mlock: { kind: 'lock', name: 'Mirror Lock', desc: 'Lock up to 2 hand cards that match the suit of your last combo’s first card.', exec: (e, c) => { const v = c.lastOpenerSuit(); c.lockCards(e, 2, v ? (uid) => c.effVariant(uid) === v : null); } },
       shatter: aoe('Shatter Glare', 7),
@@ -338,14 +340,14 @@ export const ENEMIES = {
       audit: { kind: 'special', name: 'Audit Protocol', dmg: 8, desc: 'Checks your last two combos for repetition: issue a Citation. Strikes for 8.', exec: (e, c, it) => { c.auditPatterns(e); c.hitParty(e, it.target, c.edmg(e, 8)); } },
       barrier: guardSelf('Signal Barrier', 24),
       adapt: { kind: 'special', name: 'Counter-Strategy', desc: 'Targets your dominant strategy (see Adaptation).', exec: (e, c, it) => c.coreCounter(e, it) },
-      collapse: aoe('Signal Collapse', 13),
+      collapse: aoe('Signal Collapse', 11),
       beam: atk('Carrier Beam', 15),
     },
     phases: [
       { at: 0.66, name: 'AUDIT PROTOCOL', text: 'Phase 2: the Core starts auditing your patterns.', actTime: 5.2 },
       { at: 0.33, name: 'ADAPTIVE PROTOCOL', text: 'Phase 3: the Core rewrites itself around your strategy.', actTime: 4.8 },
     ],
-    ai: (e) => (e.phase === 1 ? cycle('clock', 'beam', 'tempo', 'beam')(e) : e.phase === 2 ? cycle('audit', 'beam', 'barrier', 'clock')(e) : cycle('adapt', 'collapse', 'beam', 'adapt', 'tempo')(e)),
+    ai: (e) => (e.phase === 1 ? cycle('clock', 'beam', 'tempo', 'beam')(e) : e.phase === 2 ? cycle('audit', 'beam', 'barrier', 'clock')(e) : cycle('adapt', 'collapse', 'tempo', 'adapt', 'beam')(e)),
   },
 };
 

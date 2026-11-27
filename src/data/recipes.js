@@ -194,7 +194,7 @@ export const RECIPES = [
     name: 'Switchyard',
     how: 'Play a basic attack drawn by Churn, then an arte from Reserve in the same hero’s segment.',
     effect: 'A strike for 25% of the combo’s damage (at least 7) and 5 Guard.',
-    hint: 'Draw the approach under pressure. Save the finisher ahead of time.',
+    hint: 'Store an arte. Churn into a basic attack, then play the basic and the saved arte with one hero.',
     purpose: 'Joins two forms of hand preparation in one segment.',
     seq: ['CHURN', 'NEW', 'RES', 'A'],
     match: (x) => arte(x) && x.e.fromReserve && seg(x).some((e) => e.category === 'basic' && e.fromChurn),

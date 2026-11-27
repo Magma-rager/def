@@ -24,7 +24,7 @@ export function liveScene(canvas, { act = 1, party = false, enemy = null, icon =
   if (actors && partyPose === 'victory') for (const a of Object.values(actors)) a.play('victory');
   const frame = (now) => {
     if (stopped) return;
-    const dt = Math.min(0.05, (now - last) / 1000);
+    const dt = Math.max(0, Math.min(0.05, (now - last) / 1000));
     last = now;
     t += dt;
     const reduced = document.documentElement.classList.contains('reduced-motion');

@@ -1,6 +1,6 @@
 # SIGNAL//BREAK
 
-A single-player, real-time, party-based roguelite deckbuilding JRPG for landscape iPad and desktop browsers.
+A single-player, real-time, party-based roguelite deckbuilding JRPG. The 0.2.12 pre-beta is played in landscape. See the [beta packet](docs/PLAYTEST.md) and [verification status](docs/PHASE12.md).
 
 Granraku, a cynical trash-game hunter, enters a malfunctioning experimental card RPG and discovers that its "deprecated" **Relay** combat system is brilliant. Three heroes share one deck and one six-card hand. Combos of neutral basic attacks climbing into a hero's artes resolve in real time while enemies keep acting on their ATB bars.
 
@@ -8,14 +8,14 @@ Granraku, a cynical trash-game hunter, enters a malfunctioning experimental card
 
 - **Built game:** `dist/index.html` is self-contained (one HTML file with inline JS/CSS). Serve the `dist/` folder over HTTP to enable the offline service worker (`npm run serve` serves the repo root; `node tools/serve.mjs dist 8124` serves the build).
 - **Development:** `npm run serve`, then open `http://localhost:8123/index.html`. This runs the ES-module sources directly; there is no build step for development.
-- **Build:** `npm install && npm run build` writes `dist/index.html` (full PWA document), `dist/artifact.html` (page fragment for embedded hosting), `dist/sw.js`, the manifest and the icons (`node tools/render-icon.mjs` renders the PNG icons from `public/app-icon.svg`).
+- **Build:** `npm ci && npm run build` writes `dist/index.html` (full PWA document), `dist/artifact.html` (page fragment for embedded hosting), `dist/sw.js`, the manifest and the icons. The [development mirror](https://signalbreak-game.website.yandexcloud.net/) serves the stamped beta candidate.
 - **Tests:** `npm test` runs the engine, run-layer, systems and archetype tests (Node built-in test runner).
 
 ### iPhone / iPad web app (no App Store)
 
-The game installs from Safari as a web app and then plays offline:
+The package includes the metadata for Safari Home Screen installation. Physical installation and relaunch are device acceptance checks.
 
-1. Open **https://magma-rager.github.io/def/** in Safari.
+1. Open the [development mirror](https://signalbreak-game.website.yandexcloud.net/) in Safari and check the build stamp under the title menu.
 2. Share → **Add to Home Screen** (on iOS 26, keep **Open as Web App** on) → Add.
 3. Open it once from the home screen while online and wait for **Available offline** under the title menu (a few seconds).
 4. From then on it starts without a connection. New builds download in the background when online and are used from the next launch.
@@ -33,15 +33,13 @@ The home-screen app keeps its own saves, separate from Safari's. On a phone held
 
   Another S3-compatible provider works the same way with the variables `MIRROR_ENDPOINT` and `MIRROR_REGION`.
 
-### iPad / iPhone App Store build (no Mac)
+### Swift Playgrounds device testing
 
-`npm run build:ios` writes `dist/ios/SignalBreak.swiftpm.zip`: a Swift Playgrounds app project that runs the game offline in a full-screen web view (fonts and saves included).
+`npm run build:ios` writes `dist/ios/SignalBreak.swiftpm.zip`. The iOS 16+ project embeds the game and fonts in a landscape WKWebView with its own storage. The archive is a Swift Playgrounds project. Apple compilation, signing, installation and store acceptance are independent stages.
 
-1. Create the app record in App Store Connect (web) with a bundle ID, e.g. `com.yourname.signalbreak`.
-2. Copy the zip to the iPad (AirDrop, iCloud Drive or Files), unzip it, and open `SignalBreak.swiftpm` in Swift Playgrounds.
-3. Tap Run to test on the iPad.
-4. In App Settings set your Team and the same Bundle ID; the custom icon and Games category are preset.
-5. Tap Upload to App Store Connect, then finish the listing and submit for review on the App Store Connect website.
+1. Copy the ZIP to Files on an iPad, extract it and open `SignalBreak.swiftpm` in Swift Playgrounds.
+2. Tap Run to compile and test on the iPad. Check offline startup, rotation, touch, audio and save after a full relaunch.
+3. A subsequent distribution build requires the project owner’s app identity, team and signing. The template uses `com.example.signalbreak` and bundle build number `1`.
 
 `tools/asc-upload.mjs` uploads an existing `.ipa` from any OS through Apple's Build Upload API (`npm run upload:ios -- --ipa App.ipa --app-id … --version … --build … --key AuthKey.p8 --key-id … --issuer …`, `--dry-run` to preview).
 
@@ -54,7 +52,7 @@ The home-screen app keeps its own saves, separate from Safari's. On a phone held
 | Stash to Reserve | Swipe up | `Alt` + `1`–`6` |
 | Play from Reserve | Tap the Reserve card | `7` / `8` |
 | Card details | Hold | — |
-| Cash Out | CASH OUT button | `Space` |
+| Finish / Cash Out | FINISH or CASH OUT button | `Space` |
 | Spend Momentum | +FLOW / +GUARD | `F` / `G` |
 | Target an enemy | Tap the enemy | `T` cycles |
 | Pause (freezes all combat time) | ❚❚ | `Esc` / `P` |
@@ -79,7 +77,7 @@ The home-screen app keeps its own saves, separate from Safari's. On a phone held
 - **Churn:** charges (3, refilling over time) replace a hand card. Churning costs 0.3s of Flow mid-combo, or advances enemy ATB by 5% before a combo starts. The most recently prepared replacement marks its card edge. Play that marked attack in your next chain for 1 Momentum. The mark clears on use, storage, discard or chain end.
 - **Targets:** attacks hit the enemy in gold brackets (TARGET) at the moment they execute; tap an enemy or the ⌖ chip above the hand to switch. When the target falls, the next enemy is picked and labeled NEW TARGET, including for attacks still waiting in the queue. A red ring under a hero, with ▼ and the damage by their name, marks who an enemy is about to hit.
 - **Party HP, Defense, Cover:** the three heroes share one HP pool (130 at the start of a run; it carries over between battles). The battle is lost when it reaches 0; no hero is ever knocked out. Each hero has a Defense percentage applied to hits aimed at them before the shared Guard: Hessa 30%, Pin 15%, Corvin 0% (minimum 1 damage per hit). An attack on every hero applies each hero's Defense to their share and Guard once to the total. When Hessa resolves one of her Guard cards (their text ends with "Cover."), she covers the party for 4s: single-target hits aimed at Corvin or Pin land on her and use her Defense. The red-ring number already includes Defense and moves to Hessa under Cover.
-- **Reserve:** 2 slots. Stashed cards can be played whenever they are legal, under the same rules and costs as hand cards; the stashed card's hand slot refills at once.
+- **Reserve:** 2 slots. Stashed cards can be played whenever they are legal, with the same costs as hand cards. Stashing refills the hand slot at once. An enemy latch moves a stored card to the top of the draw pile or briefly seals empty Reserve.
 - **Enemy interference:** Locks (3s, with visible source and countdown), Scrambles, jammed slots, Churn snares, Reserve latches, Flow drain, Glitch cards and Citations. All of them are timed and expire on combat time; pausing freezes them.
 
 ## Content
@@ -128,7 +126,9 @@ The version follows the development roadmap. The title screen and Patch Notes sh
 - `0.N.P`: P counts published builds with changes since that gate.
 - `1.0.0`: the eventual release after the revised roadmap and final beta.
 
-Current: **0.2.11**. Phase 11 adds new hand-management abilities, three enemy designs and their formations, new EX recipes, and narrower reward and Churn changes. See the [Phase 11 report](docs/PHASE11.md), [Phase 10 presentation report](docs/PHASE10.md) and [Phase 9 progression report](docs/PHASE9.md). The version comes from `src/version.js`, and tests enforce that the package and iOS project match. The title shows the source build stamp. The human beta follows completion of the roadmap through Phase 12.
+**0.2.12** is the pre-beta candidate. The title shows the source build stamp. The [Phase 12 report](docs/PHASE12.md) records corrective balancing, safety changes, platform evidence and the rollback procedure. See the [draft release notes](docs/RELEASE_NOTES.md), [beta protocol](docs/PLAYTEST.md), [Phase 11 content report](docs/PHASE11.md), [Phase 10 presentation report](docs/PHASE10.md) and [Phase 9 progression report](docs/PHASE9.md).
+
+Profiles remain local to their browser and origin. Historical schema migration is covered by the test suite. Continue restores the last checkpoint and restarts an unfinished battle. Cached PWA updates verify the matching game page before replacing the previous cache. An unreadable record or a newer checkpoint from another tab is protected from overwrite.
 
 ## Verification tools
 

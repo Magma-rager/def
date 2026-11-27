@@ -1,4 +1,40 @@
 // Specialist play follows the same hand, Reserve slots and next-card preview as the interface.
+export function reserveExperiment(c, P) {
+  if (c.executing || c.queue.length) return null;
+  const saved = c.reserve.find(uid => ['pocket_gauge','hidden_ace','latchshield','signal_case'].includes(c.def(uid).id) && c.check(uid).ok);
+  if (saved && (c.def(saved).category !== 'support' || (P.open && c.hp <= c.maxHp-4))) return {type:'play',uid:saved};
+  if (P.open || c.reserve.length || c.aliveEnemies().some(e=>e.atb>.72 && e.intent.dmg>0)) return null;
+  const uid = c.hand.find(u=>u && ['pocket_gauge','hidden_ace','latchshield','signal_case'].includes(c.def(u).id) && c.canStash(u));
+  return uid ? {type:'stash',uid} : null;
+}
+
+export function switchyardExperiment(c, P) {
+  if (!c.hasChurnMark || c.executing || c.queue.length || c.churnJamUntil > c.t) return null;
+  const def = uid=>c.def(uid);
+  const hand = c.hand.filter(Boolean);
+  const kept = c.reserve.find(uid=>def(uid).category==='arte' &&
+    (P.open ? c.check(uid).ok : c.heroReady(def(uid).owner)));
+  const own = kept && def(kept).owner;
+  if (P.open && kept && c.combo.cards.some(e=>e.seg===c.combo.segments.length-1 && e.category==='basic' && e.fromChurn)) {
+    return {type:'play',uid:kept};
+  }
+  if (P.open) return null;
+  if (kept) {
+    if (c.starter()!==own) return {type:'select',hero:own};
+    const marked = hand.find(uid=>def(uid).category==='basic' && c.hasChurnMark(uid) && c.check(uid).ok);
+    if (marked) return {type:'play',uid:marked};
+    const top=c.nextCard();
+    const discard=hand.find(uid=>def(uid).category==='arte' && def(uid).owner!==own && !c.isLocked(uid));
+    if (discard && top && def(top).category==='basic' && c.churn.charges>0 &&
+        c.effRank(top)<c.effRank(kept) && c.available()+def(top).gain>=def(kept).cost) return {type:'churn',uid:discard};
+  } else if (!c.reserve.length && c.churn.charges>0) {
+    const uid=hand.find(u=>def(u).category==='arte' && def(u).cost<=c.available()+1 &&
+      c.heroReady(def(u).owner) && c.canStash(u));
+    if (uid) return {type:'stash',uid};
+  }
+  return null;
+}
+
 export function handTactic(c, build, P, busy) {
   if (busy) return null;
   const hand = c.hand.filter(Boolean);

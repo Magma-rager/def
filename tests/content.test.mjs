@@ -104,11 +104,11 @@ test('relics — Momentum: Pressure Gauge, Overflow Valve, Twin Dials, Flywheel,
   assert.equal(cross(['twin_dials']) - cross([]), 1);
   // Flywheel / Tower Plate
   assert.equal(mk(['scrapline'], [], { relics: ['flywheel'] }).momentumCostFlow(), 2);
-  assert.equal(mk(['scrapline'], [], { relics: ['tower_plate'] }).guardSpendAmount(), 12);
+  assert.equal(mk(['scrapline'], [], { relics: ['tower_plate'] }).guardSpendAmount(), 10);
   c = mk(['scrapline'], [], { relics: ['tower_plate'], momentum: 5 });
   const g0 = c.guard;
   assert.ok(c.spendMomentumGuard().ok);
-  assert.equal(c.guard - g0, 12);
+  assert.equal(c.guard - g0, 10);
 });
 
 test('relics — Flow: Stopwatch Gear, Brass Metronome, Long Fuse', () => {
@@ -345,7 +345,7 @@ test('mutations — all twelve do what they say', () => {
   c.hitParty(e, 'C', 10);
   assert.equal(eh - e.hp, 5);
   const qe = (mutations) => { const x = mk(['scrapline', 'rivet_jab', 'piston_strike'], [], { mutations }); x.selectHero('V'); play(x, 'scrapline', 'rivet_jab', 'piston_strike'); const p = x.payoutAmount(1).amount; const m = x.momentum; x.finishOrCashOut(); settle(x); return { p, m: x.momentum - m }; };
-  assert.ok(qe(['quick_exit']).p > qe([]).p * 1.25, 'Quick Exit +40% payout');
+  assert.equal(qe(['quick_exit']).p - qe([]).p,5,'Quick Exit adds 30% of the 16-point three-card payout');
   assert.equal(qe(['quick_exit']).m - qe([]).m, 2, 'Quick Cash +2 Momentum');
   c = mk(['scrapline', 'rivet_jab'], [], { mutations: ['signal_thief'], enemies: ['wire_jammer'] });
   const sm = c.momentum;

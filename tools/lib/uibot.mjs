@@ -3,14 +3,27 @@
 // card (and on the hero for a Braced support), a tap on a hero button (start hero, or a Relay during
 // a chain), FINISH / CASH OUT, a tap on a waiting queue chip to cancel it, a swipe for Churn and
 // Reserve — never by calling the engine. Used by milestone.mjs, encounter.mjs, uiplay.mjs and
-// accept5.mjs.
+// accept5.mjs. Packaged offline campaigns inject the separate test policy once at navigation.
+import { build as bundle } from 'esbuild';
+import { fileURLToPath } from 'node:url';
+
+let packagedPolicy;
+export async function installUiPolicy(page) {
+  packagedPolicy ??= bundle({
+    stdin: { contents: `export { decide } from './bot.mjs';
+      export { starterOptions } from '../../src/engine/progression.js';`,
+      resolveDir: fileURLToPath(new URL('.',import.meta.url)) },
+    format:'iife', bundle:true, globalName:'__sbTestPolicy', write:false,
+  }).then((result)=>`${result.outputFiles[0].text}\nglobalThis.__sbTestPolicy = __sbTestPolicy;`);
+  await page.addInitScript({content:await packagedPolicy});
+}
 
 export async function uiDecision(p, profile = 'regular', build = null) {
   return p.evaluate(async ({ profile, build }) => {
     const bs = window.__sb && window.__sb.battle;
     const c = bs && bs.combat;
     if (!c || c.phase === 'END' || bs.ended) return null;
-    const { decide } = await import('/tools/lib/bot.mjs');
+    const { decide } = window.__sbTestPolicy || await import('/tools/lib/bot.mjs');
     const a = decide(c, { profile, build });
     if (a.uid) {
       a.zone = c.hand.includes(a.uid) ? 'hand' : c.reserve.includes(a.uid) ? 'reserve' : null;

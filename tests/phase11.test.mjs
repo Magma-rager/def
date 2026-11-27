@@ -146,8 +146,9 @@ test('new enemies use ally guard, repair and acceleration as forecast', () => {
   const tow = fixture(cards, [], { act:3, enemies: ['vector_winch','predator_needle','interference_mite'] });
   tow.enemyAct(tow.enemies[0]);
   const fast = tow.enemies.slice(1).sort((a,b) => a.actTime-b.actTime)[0];
-  assert.equal(fast.hasteMult, 1.3);
-  assert.equal(tow.enemies[0].st.exposed, 3);
+  assert.equal(fast.hasteMult, 1.25);
+  assert.equal(fast.hasteUntil-tow.t,4);
+  assert.equal(tow.enemies[0].st.exposed, 4);
   assert.equal(tow.enemies[0].intent.key, 'hook');
 });
 
@@ -171,12 +172,12 @@ test('the Core counters Churn and Reserve without removing a full hand plan', ()
 });
 
 test('Hunt forecasts its actual high damage and updates when the party uses Guard', () => {
-  for (const guard of [0, 7]) {
+  for (const [guard, raw] of [[0,20],[3,14],[7,10]]) {
     const c = fixture(['scrapline','piston_strike','mend_circuit'], [], { act:3, enemies:['predator_needle'] });
     const enemy = c.enemies[0];
     assert.equal(enemy.intent.dmg,c.edmg(enemy,20));
     c.guard = guard;
-    const expected = c.edmg(enemy,guard < 6 ? 20 : 10);
+    const expected = c.edmg(enemy,raw);
     assert.equal(enemy.intent.dmg,expected);
     const hp = c.hp;
     c.enemyAct(enemy);

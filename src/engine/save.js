@@ -11,32 +11,65 @@ const memoryStorage = {
 };
 
 export function createSave(storage) {
+  const seen = {};
   function getStorage() {
     if (storage) return storage;
     // Node tools can use memory. A browser that rejects storage must report the failure.
     if (typeof window === 'undefined' && typeof localStorage === 'undefined') return memoryStorage;
     return globalThis.localStorage;
   }
-  function read(type) {
+  function inspect(type) {
     try {
       const raw = getStorage().getItem(KEYS[type]);
-      return raw ? JSON.parse(raw) : null;
-    } catch { return null; }
+      if (raw == null) return { ok: true, value: null, raw: null };
+      const value = JSON.parse(raw);
+      return { ok: !!value && typeof value === 'object' && !Array.isArray(value), value, raw };
+    } catch { return { ok: false }; }
   }
+  const read = (type) => { const record = inspect(type); return record.ok ? record.value : null; };
+  function load(type) {
+    const record = inspect(type);
+    if (record.ok) seen[type] = record.raw;
+    return record.ok ? record.value : null;
+  }
+  const changed = (type, record) => seen[type] !== undefined && seen[type] !== record.raw;
   function write(type, value) {
     try {
-      getStorage().setItem(KEYS[type], JSON.stringify(value));
+      const raw = JSON.stringify(value);
+      getStorage().setItem(KEYS[type], raw);
+      seen[type] = raw;
       return true;
     } catch { return false; }
   }
   function clearRun() {
     try {
       getStorage().removeItem(KEYS.run);
+      seen.run = null;
+      return true;
+    } catch { return false; }
+  }
+  function erase() {
+    try {
+      const store = getStorage();
+      for (const [type,key] of Object.entries(KEYS)) {
+        store.removeItem(key);
+        seen[type] = null;
+      }
       return true;
     } catch { return false; }
   }
   function checkpoint(run, meta) {
+    const profile = inspect('meta');
+    const save = inspect('run');
+    if (!profile.ok || !save.ok) return { ok: false };
+    if (changed('meta',profile) || changed('run',save)) return { ok: false, changed: true };
     const id = assignRunId(meta, run);
+    const storedId = count(save.value?.progress?.id);
+    const progress = profile.value?.progress;
+    if (id <= count(progress?.settled) || (storedId && storedId !== id) ||
+        (count(progress?.active?.id) && count(progress.active.id) !== id) ||
+        count(save.value?.floors) > run.d.floors || count(save.value?.battleCount) > run.d.battleCount ||
+        (save.value?.pending?.finalize && !run.d.pending?.finalize)) return { ok: false };
     if (id <= meta.progress.settled || (meta.progress.active && meta.progress.active.id !== id)) return { ok: false };
     if (!write('run', run.serialize())) return { ok: false };
     const next = JSON.parse(JSON.stringify(meta));
@@ -45,10 +78,13 @@ export function createSave(storage) {
     return { ok: true, meta: next, earned };
   }
   function finish(run, result, meta) {
-    const stored = read('meta');
+    const profile = inspect('meta');
+    const save = inspect('run');
+    if (!profile.ok || !save.ok) return { ok: false };
+    const stored = profile.value;
     if (count(stored?.progress?.settled) > meta.progress.settled) meta = normalizeMeta(stored);
     const id = assignRunId(meta, run);
-    const active = read('run');
+    const active = save.value;
     if (active?.progress?.id && active.progress.id !== id) {
       // A delayed duplicate must never clear or overwrite a newer active save.
       return id <= meta.progress.settled ? { ok: true, meta, summary: meta.runs.find((r) => r.runId === id) } : { ok: false };
@@ -56,6 +92,10 @@ export function createSave(storage) {
     if (id <= meta.progress.settled) {
       return { ok: !active || clearRun(), meta, summary: meta.runs.find((r) => r.runId === id) };
     }
+    if (changed('meta',profile) || (changed('run',save) && !active?.pending?.finalize)) return { ok: false, changed: true };
+    if ((count(stored?.progress?.active?.id) && count(stored.progress.active.id) !== id) ||
+        count(active?.floors) > run.d.floors || count(active?.battleCount) > run.d.battleCount) return { ok: false };
+    if (active?.pending?.finalize) run.d.pending = active.pending;
     if (!run.d.pending?.finalize) run.d.pending = { type: 'gameover', victory: result === 'victory', finalize: { result, date: Date.now() } };
     if (!write('run', run.serialize())) return { ok: false };
     const next = JSON.parse(JSON.stringify(meta));
@@ -65,14 +105,31 @@ export function createSave(storage) {
     return { ok: clearRun(), meta: next, summary };
   }
   return {
-    loadRun: () => read('run'),
-    saveRun: (d) => write('run', d),
+    loadRun: () => load('run'),
+    saveRun: (d) => inspect('run').ok && write('run', d),
     clearRun,
+    erase,
     hasRun: () => !!read('run'),
-    loadMeta: () => normalizeMeta(read('meta')),
-    saveMeta: (m) => write('meta', m),
-    loadSettings: () => ({ ...defaultSettings(), ...object(read('settings')) }),
-    saveSettings: (s) => write('settings', s),
+    healthy: () => Object.keys(KEYS).every((key) => inspect(key).ok),
+    loadMeta: () => normalizeMeta(load('meta')),
+    saveMeta: (m) => {
+      const stored = inspect('meta');
+      return stored.ok && !changed('meta',stored) && count(stored.value?.progress?.settled) <= m.progress.settled &&
+        (!stored.value?.progress?.active || stored.value.progress.active.id === m.progress.active?.id) && write('meta', m);
+    },
+    loadSettings: () => {
+      const defaults = defaultSettings();
+      const settings = { ...defaults, ...object(read('settings')) };
+      for (const key of ['master','music','sfx']) {
+        settings[key] = Number.isFinite(settings[key]) ? Math.max(0,Math.min(1,settings[key])) : defaults[key];
+      }
+      for (const [key,value] of Object.entries(defaults)) {
+        if (typeof value === 'boolean' && typeof settings[key] !== 'boolean') settings[key] = value;
+      }
+      if (!['en','ru'].includes(settings.lang)) settings.lang = null;
+      return settings;
+    },
+    saveSettings: (s) => inspect('settings').ok && write('settings', s),
     checkpoint,
     finish,
   };
@@ -81,7 +138,7 @@ export function createSave(storage) {
 export const Save = createSave();
 
 export function defaultSettings() {
-  return { master: 0.8, music: 0.55, sfx: 0.8, muted: false, reducedMotion: false, shake: true, hints: true, relaxed: false, lang: null };
+  return { master: 0.8, music: 0.55, sfx: 0.8, muted: false, reducedMotion: false, shake: true, hints: true, relaxed: false, tactical: false, lang: null };
 }
 
 export function defaultMeta() {

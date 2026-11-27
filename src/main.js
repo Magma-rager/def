@@ -63,6 +63,7 @@ class App {
     this.syncMotion();
     const unlock = () => this.audio.unlock();
     window.addEventListener('pointerdown', unlock, { capture: true });
+    window.addEventListener('click', unlock, { capture: true });
     window.addEventListener('keydown', unlock, { capture: true });
     window.addEventListener('resize', () => this.onResize());
     document.addEventListener('visibilitychange', () => { if (document.hidden && this.battle && !this.paused) this.pause(); });
@@ -72,7 +73,7 @@ class App {
   }
 
   loop(now) {
-    const dt = Math.min(0.1, (now - this.last) / 1000);
+    const dt = Math.max(0, Math.min(0.1, (now - this.last) / 1000));
     this.last = now;
     if (this.battle) this.battle.frame(dt);
     requestAnimationFrame((t) => this.loop(t));
@@ -81,7 +82,10 @@ class App {
   syncMotion() {
     const reduced = !!this.settings.reducedMotion || this.systemMotion.matches;
     document.documentElement.classList.toggle('reduced-motion', reduced);
-    if (this.battle) this.battle.view.reducedMotion = reduced;
+    if (this.battle) {
+      this.battle.view.reducedMotion = reduced;
+      this.battle.paintRequested = true;
+    }
   }
 
   onResize() {
@@ -129,17 +133,20 @@ class App {
 
   // ───────────────────────── persistence ─────────────────────────
   hasSave() { return Save.hasRun(); }
-  storageNotice(ok) {
+  storageHealthy() { return Save.healthy(); }
+  storageNotice(ok, changed = false) {
     if (!ok && !this.storageWarning) {
-      this.toast(t('Progress could not be saved. Check available storage and retry.'), 'progress-toast');
+      this.toast(changed ? t('This save changed in another tab. Reload the last checkpoint.') :
+        t('Progress could not be saved. Check available storage and retry.'), 'progress-toast');
     }
     this.storageWarning = !ok;
+    this.storageChanged = changed;
     return ok;
   }
   save() {
     if (!this.run) return true;
     const saved = Save.checkpoint(this.run, this.meta);
-    if (!this.storageNotice(saved.ok)) return false;
+    if (!this.storageNotice(saved.ok, saved.changed)) return false;
     this.meta = saved.meta;
     for (const id of saved.earned) this.progressNotice.add(id);
     if (!this.battle) this.announceProgress();
@@ -161,7 +168,7 @@ class App {
     }
     return this.save() ? fresh : new Set();
   }
-  saveSettings() { Save.saveSettings(this.settings); this.audio.applySettings(this.settings); }
+  saveSettings() { this.storageNotice(Save.saveSettings(this.settings)); this.audio.applySettings(this.settings); }
 
   // Switches the interface language, stores the choice, and redraws what is on screen. Run, combat
   // and save state are not touched: they hold no display text.
@@ -255,7 +262,7 @@ class App {
     if (!this.save()) {
       // Retry the same run if the checkpoint itself failed. If the checkpoint is already on
       // disk, Continue also recovers it after a reload.
-      this.show(S.saveRetryScreen, () => { if (this.save()) this.route(); });
+      this.show(S.saveRetryScreen, () => { if (this.save()) this.route(); }, this.storageChanged);
       return false;
     }
     this.route();
@@ -375,9 +382,9 @@ class App {
     for (const id of saved.summary?.progress?.achievements || []) {
       if (!Object.hasOwn(before, id)) this.progressNotice.add(id);
     }
-    if (!this.storageNotice(saved.ok)) {
+    if (!this.storageNotice(saved.ok, saved.changed)) {
       this.run = run;
-      this.show(S.saveRetryScreen, () => this.endRun(run.d.pending?.finalize?.result || result));
+      this.show(S.saveRetryScreen, () => this.endRun(run.d.pending?.finalize?.result || result), saved.changed);
       return null;
     }
     this.run = null;
@@ -591,9 +598,7 @@ class App {
           this.toast(t('Tutorial hints reset.'));
         }, 'small'),
         btn(t('Erase all data'), () => this.confirm(t('Erase everything?'), t('Deletes the current run, Museum records and settings on this device.'), t('Erase'), () => {
-          Save.clearRun();
-          try { localStorage.clear(); } catch (e) { /* storage unavailable */ }
-          location.reload();
+          if (this.storageNotice(Save.erase())) location.reload();
         }), 'small danger')),
       h('div', { class: 'row-btns end' }, btn(t('Done'), () => close(), 'primary'))), { dismiss: true, onClose: () => { this.settingsOpen = false; } });
   }

@@ -267,7 +267,7 @@ export class Combat {
     return RULES.FLOW_SPEND + (this.mutations.has('long_breath') ? 0.5 : 0);
   }
   guardSpendAmount() {
-    return this.relics.has('tower_plate') ? 12 : RULES.GUARD_SPEND;
+    return this.relics.has('tower_plate') ? 10 : RULES.GUARD_SPEND;
   }
   adaptOn(id) {
     return this.adapt && !this.adapt.broken && this.adapt.id === id && this.enemies.some((e) => e.alive && e.tier === 'boss');
@@ -1653,7 +1653,7 @@ export class Combat {
     for (const e of c.cards) if (this.cards.get(e.uid).graft === 'ledger') ledger += 3;
     const top = len ? Math.max(...c.cards.map((e) => e.rank)) : 0; // the chain's highest rank (segments restart at 0)
     let amt = 4 + 3 * len + top + (c.cashPerCard || 0) * len + ledger;
-    let pct = 1 + (c.cashPct || 0) + (this.relics.has('riveted_ledger') ? 0.3 : 0) + (this.mutations.has('quick_exit') ? 0.4 : 0);
+    let pct = 1 + (c.cashPct || 0) + (this.relics.has('riveted_ledger') ? 0.3 : 0) + (this.mutations.has('quick_exit') ? 0.3 : 0);
     const quick = this.flowLeft() >= RULES.QUICK_CASH_LEFT;
     if (quick) pct += 0.25;
     if (this.adaptOn('payout_audit')) pct *= 0.6;
@@ -2246,7 +2246,7 @@ export class Combat {
   latchReserve(e) {
     if (this.reserve.length) {
       const u = this.reserve.pop();
-      this.discard.push(u);
+      this.draw.unshift(u);
       this.emit({ type: 'latch', uid: u, source: e ? e.id : null });
     } else {
       this.reserveLatchUntil = Math.max(this.reserveLatchUntil, this.t + 5);

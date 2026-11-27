@@ -65,6 +65,7 @@ export function titleScreen(app, root) {
       h('div', { class: 'title-foot' }, t('Runs {runs} · Wins {wins} · Best combo {n} {n|card|cards}', { runs: m.totalRuns, wins: m.wins, n: m.bestCombo })),
       h('div', { class: 'title-build' }, !BUILD ? t('Development build') : BUILD.commit ? t('Build {date} · {commit}', BUILD) : t('Build {date}', BUILD)),
       h('div', { class: 'title-offline' }, offlineLabel(app.offline)),
+      !app.storageHealthy() ? h('p', { class: 'title-storage', role: 'alert' }, t('Saved data could not be read. Existing records are protected.')) : null,
       h('button', { class: 'title-link', type: 'button', onclick: () => app.show(creditsScreen, () => app.toTitle()) }, t('Credits'))));
   clear(root).append(el);
   const sc = liveScene(canvas, { act: 1, party: true, enemy: null, dim: 0.25, left: true });
@@ -98,11 +99,12 @@ export function newRunDialog(app, replace = false) {
       btn(t('Begin'), () => { if (app.startRun(chosen, replace)) close(); }, 'primary'))), { dismiss: true });
 }
 
-export function saveRetryScreen(app, root, retry) {
+export function saveRetryScreen(app, root, retry, changed = false) {
   clear(root).append(h('div', { class: 'screen save-retry' }, h('div', { class: 'panel' },
     h('h2', {}, t('Save interrupted')),
-    h('p', {}, t('Progress could not be saved. Check available storage and retry.')),
-    btn(t('Retry save'), retry, 'primary'))));
+    h('p', {}, changed ? t('This save changed in another tab. Reload the last checkpoint.') :
+      t('Progress could not be saved. Check available storage and retry.')),
+    changed ? btn(t('Reload last checkpoint'), () => location.reload(), 'primary') : btn(t('Retry save'), retry, 'primary'))));
 }
 
 // ───────────────────────── STORY DIALOGUE ─────────────────────────

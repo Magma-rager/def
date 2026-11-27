@@ -268,7 +268,7 @@ export const LESSONS = [
   },
   {
     key: 'latch', title: 'RESERVE LATCHED',
-    body: 'A Latch Wisp grabbed your Reserve: it steals a stored card, or seals the Reserve for a few seconds.',
+    body: 'A Latch Wisp grabbed your Reserve: the stored card becomes your next draw. If the Reserve is empty, it seals it for a few seconds.',
     when: (c) => (c.reserveLatchUntil > c.t ? { ui: 'reserve' } : null),
   },
 ];

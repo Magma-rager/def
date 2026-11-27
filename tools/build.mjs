@@ -11,7 +11,8 @@ import { createHash } from 'node:crypto';
 const git = (cmd) => { try { return execSync(`git ${cmd}`, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch (e) { return ''; } };
 const commit = git('rev-parse --short HEAD');
 const dirty = commit && git('status --porcelain -- src') ? '+' : '';
-const BUILD = { date: new Date().toISOString().slice(0, 10), commit: commit ? commit + dirty : '' };
+const epoch = Number(process.env.SOURCE_DATE_EPOCH || git('show -s --format=%ct HEAD')) || Date.now() / 1000;
+const BUILD = { date: new Date(epoch * 1000).toISOString().slice(0, 10), commit: commit ? commit + dirty : '' };
 
 // Fonts are embedded as base64 so every build (file, PWA, iOS app) renders identically offline.
 // Faces that share one variable-font file are merged into a single weight-range face.
@@ -94,17 +95,43 @@ for (const f of WEB) fs.copyFileSync(`public/${f}`, `dist/${f}`);
 const hash = createHash('sha256').update(full);
 for (const f of WEB) hash.update(fs.readFileSync(`dist/${f}`));
 const version = hash.digest('hex').slice(0, 12);
+const pageHash = createHash('sha256').update(full).digest('hex');
 fs.writeFileSync('dist/sw.js', `// Offline cache for SIGNAL//BREAK. Installed on the first online launch; afterwards the game
 // starts from the cache, with or without a connection. A new build installs in the background
 // and is used from the next launch.
-const CACHE = 'signalbreak-${version}';
+const BUILD = '${version}';
+const PAGE_HASH = '${pageHash}';
+const PREFIX = 'signalbreak:' + self.registration.scope + ':';
+const CACHE = PREFIX + BUILD;
 const CORE = ${JSON.stringify(['./index.html', ...WEB.map((f) => './' + f)])};
 self.addEventListener('install', (e) => {
-  // bypass the HTTP cache so a new build never stores a stale copy of the page
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
+  e.waitUntil((async () => {
+    const responses = await Promise.all(CORE.map((u) => fetch(u, { cache: 'reload' })));
+    if (responses.some((r) => !r.ok)) throw Error('Incomplete offline build');
+    const digest = await crypto.subtle.digest('SHA-256', await responses[0].clone().arrayBuffer());
+    const actual = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+    if (actual !== PAGE_HASH) throw Error('Offline page does not match the worker build');
+    const cache = await caches.open(CACHE);
+    try {
+      await Promise.all(CORE.map((u, i) => cache.put(u, responses[i])));
+    } catch (error) {
+      await caches.delete(CACHE);
+      throw error;
+    }
+    await self.skipWaiting();
+  })());
 });
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k.startsWith('signalbreak-') && k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(async (key) => {
+      if (key === CACHE) return;
+      if (key.startsWith(PREFIX) || (key.startsWith('signalbreak-') && await caches.match('./index.html', { cacheName: key }))) {
+        await caches.delete(key);
+      }
+    }));
+    await self.clients.claim();
+  })());
 });
 self.addEventListener('fetch', (e) => {
   const req = e.request;

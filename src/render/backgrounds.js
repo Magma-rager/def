@@ -30,6 +30,7 @@ export class Background {
   build(w, h, dpr) {
     this.w = w;
     this.h = h;
+    this.dpr = dpr;
     const c = document.createElement('canvas');
     c.width = Math.ceil(w * dpr);
     c.height = Math.ceil(h * dpr);
@@ -266,7 +267,7 @@ export class Background {
   }
 
   draw(ctx, t, w, h, dpr) {
-    if (!this.cache || this.w !== w || this.h !== h) this.build(w, h, dpr);
+    if (!this.cache || this.w !== w || this.h !== h || this.dpr !== dpr) this.build(w, h, dpr);
     ctx.drawImage(this.cache, 0, 0, w, h);
     const hz = this.horizon();
     const T = this.theme;

@@ -27,7 +27,7 @@
 // Everything after that is a tap; the checks read what the engine and the page recorded.
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
-import { uiDecision, uiPerform } from './lib/uibot.mjs';
+import { installUiPolicy, uiDecision, uiPerform } from './lib/uibot.mjs';
 import { RU } from '../src/i18n/ru.js';
 import { LESSON_KEYS } from '../src/ui/lessons.js';
 import { Run } from '../src/engine/run.js';
@@ -248,10 +248,22 @@ async function botBattle(ms = 240000, build = null) {
 if (MODE === 'campaign') {
   const MIN = +(process.env.SB_MINUTES || 45);
   const focus = process.env.SB_CAMPAIGN_FOCUS || null;
+  const offline = process.env.SB_CAMPAIGN_OFFLINE === '1';
+  await installUiPolicy(p);
+  const network = [];
+  p.on('response', (response) => { if (offline && !response.fromServiceWorker() && network.armed) network.push(response.url()); });
   if (focus) log(`Prefer normal reward offers tagged ${focus} and use the corresponding visible-hand tactics.`);
   if (campaignProfile) log(`Returning-profile fixture: ${process.env.SB_CAMPAIGN_PROFILE}. All subsequent choices use the interface.`);
   await p.goto(URL);
   await p.waitForFunction(() => window.__sb);
+  if (offline) {
+    await p.waitForFunction(() => window.__sb.offline === 'ready' && navigator.serviceWorker.controller);
+    await ctx.setOffline(true);
+    network.armed = true;
+    await p.reload();
+    await p.waitForFunction(() => window.__sb);
+    check('offline-start', 'The packaged title starts from its offline cache', await p.evaluate(() => !navigator.onLine));
+  }
   const previous = await p.evaluate(() => window.__sb.meta.totalRuns);
   await clickText('New Run'); await wait(300);
   const starter = process.env.SB_CAMPAIGN_STARTER || 'beta_badge';
@@ -315,13 +327,13 @@ if (MODE === 'campaign') {
       await tapSel(`.map-node[data-node="${id}"]`); await wait(150); await clickText('Travel'); await wait(300); continue;
     }
     if (sc === 'reward') {
-      const option = await p.evaluate(async (tag) => {
-        const { CARDS } = await import('/src/data/cards.js');
+      const tagged = focus ? Object.values(CARDS).filter((card) => card.tags.includes(focus)).map((card) => card.id) : [];
+      const option = await p.evaluate((ids) => {
         const options = window.__sb.run.d.pending.cards || [];
-        const matching = tag ? options.findIndex((s) => CARDS[s.id].tags.includes(tag)) : -1;
+        const matching = options.findIndex((s) => ids.includes(s.id));
         const index = Math.max(0, matching);
         return { index, id: options[index]?.id };
-      }, focus);
+      }, tagged);
       if (await tapSel(`.reward-cards .card:nth-child(${option.index + 1})`) && await clickText('Take card')) {
         if (option.id && await p.evaluate((index) => window.__sb.run.d.pending.cardPicked === index, option.index)) seen.acquisitions.add(option.id);
       }
@@ -362,7 +374,7 @@ if (MODE === 'campaign') {
   const fin = await p.evaluate(() => ({ last: (window.__sb.meta.runs || [])[0] || null, meta: window.__sb.meta }));
   const last = fin.meta.totalRuns === previous + 1 && fin.last?.seed === initial.seed ? fin.last : null;
   const report = () => ({ seen: { acts: [...seen.acts], bosses: seen.bosses, screens: [...seen.screens], enemies: [...seen.enemies], acquisitions: [...seen.acquisitions] },
-    progress, recoveries, seed: initial.seed, starter, reloadedActs: [...reloadedActs],
+    progress, recoveries, seed: initial.seed, starter, offline, reloadedActs: [...reloadedActs],
     disposition: last?.result === 'victory' ? (recoveries.length ? 'completed_after_nudge' : 'completed_without_nudge') :
       (last?.result === 'defeat' ? 'defeat' : 'unresolved_timeout'), errors });
   check(53, 'A three-Act run is finished through the interface (victory recorded)', seen.acts.has(3) && last && last.result === 'victory' && last.act === 3 && last.bosses.length === 3, `acts ${[...seen.acts].join(',')}, bosses ${seen.bosses.join(', ')}, battles ${battles}, recorded ${last ? `${last.result}, act ${last.act}, bosses ${last.bosses.join('/')}` : 'nothing'}`);
@@ -390,8 +402,8 @@ if (MODE === 'campaign') {
   const jr = await p.evaluate(() => document.querySelectorAll('.jr-card.found').length);
   check(59, 'Card/relic discoveries and the EX Combo Journal are recorded', jr >= 1 && Object.keys(fin.meta.combos || {}).length >= 1, `${jr} recipes found`);
   await clickText('Close'); await wait(200);
-  const availableStart = async () => p.evaluate(async () => {
-    const { starterOptions } = await import('/src/engine/progression.js');
+  const availableStart = async () => p.evaluate(() => {
+    const { starterOptions } = window.__sbTestPolicy;
     return starterOptions(window.__sb.meta).filter((o) => o.available).map((o) => o.id);
   });
   const before = await p.evaluate(() => ({ runs: window.__sb.meta.totalRuns }));
@@ -410,6 +422,7 @@ if (MODE === 'campaign') {
   check(61, 'Persistent unlocks carry over', JSON.stringify(priorOptions) === JSON.stringify(await availableStart()), priorOptions.join(','));
   const again = await p.evaluate(() => (window.__sb.meta.runs || [])[0]);
   check(62, 'The previous run was recorded correctly (still the latest record after the new run began)', after.runs >= before.runs && again && last && again.seed === last.seed && again.score === last.score, `runs recorded ${fin.meta.totalRuns}; latest ${again && again.result} score ${again && again.score}`);
+  if (offline) check('offline-end', 'The entire campaign and subsequent start remained offline', network.length === 0 && await p.evaluate(() => !navigator.onLine), network.join(', '));
   check('—', 'No page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
   await b.close();
   finish(`G-campaign-${LANG}-${W}`, report());
