@@ -28,6 +28,8 @@ export function achievementTile(a) {
   return h('article', { class: 'achievement-tile', 'data-achievement': a.id, 'data-earned': String(a.earned) },
     h('div', { class: 'achievement-heading' }, h('b', {}, achievementText(a, 0)), h('span', { class: a.earned ? 'good' : 'dim' }, label)),
     h('span', { class: 'dim small' }, achievementCategories()[a.category]),
+    !a.earned && a.target > 1 ? h('progress', { class: 'achievement-meter', max: a.target, value: a.value,
+      'aria-label': achievementText(a, 0) }) : null,
     h('p', {}, achievementText(a, 1)),
     a.reward ? h('p', { class: 'gold' }, t('Starting relic: {relic}', { relic: relicName(a.reward) })) : null);
 }

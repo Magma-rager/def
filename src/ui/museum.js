@@ -23,7 +23,7 @@ export function museumModal(app) {
   const render = () => {
     clear(tabRow);
     for (const tab of tabs) {
-      const b = h('button', { class: `tab ${tab === cur ? 'on' : ''}`, type: 'button' }, tabLabel[tab]);
+      const b = h('button', { class: `tab ${tab === cur ? 'on' : ''}`, 'aria-pressed': String(tab === cur), type: 'button' }, tabLabel[tab]);
       b.dataset.tab = tab;
       b.addEventListener('click', () => { cur = tab; app.museumTab = tab; app.audio.sfx('click'); render(); });
       tabRow.append(b);

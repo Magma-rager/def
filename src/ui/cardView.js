@@ -1,6 +1,8 @@
 // Card DOM rendering (hand cards, reward cards, deck grids, reserve minis).
 import { CARDS, cardValue, isOffensive } from '../data/cards.js';
-import { t, num, cardName, cardTemplate, categoryName, strengthName, ownerName, ownerInitial, graftName, graftText, rarityName, tagName } from '../i18n/index.js';
+import { t, num, cardName, cardTemplate, lang, categoryName, strengthName, ownerName, ownerInitial, graftName, graftText, rarityName, tagName } from '../i18n/index.js';
+import { CARD_BRIEFS } from '../i18n/cardBriefs.js';
+import { cardCue, CARD_CUES } from '../render/choreography.js';
 import { ICON_PATHS } from '../render/icons.js';
 import { LOOKS, POSES, drawCharacter } from '../render/rig.js';
 import { h, esc } from './dom.js';
@@ -8,8 +10,9 @@ import { h, esc } from './dom.js';
 // Hero vignettes for card art: each owner rendered in the pose of the card's action, cached as data URLs.
 const VIGNETTE_POSE = { melee: 'strike', shoot: 'fire', cast: 'castRelease', guard: 'guard', buff: 'flourish' };
 const vignettes = {};
-function vignette(owner, anim) {
-  const key = owner + anim;
+function vignette(owner, anim, id) {
+  const cue = CARD_CUES[id];
+  const key = owner + (cue?.clip || anim);
   if (vignettes[key] !== undefined) return vignettes[key];
   vignettes[key] = '';
   try {
@@ -18,7 +21,10 @@ function vignette(owner, anim) {
     cv.width = 200;
     cv.height = 150;
     const ctx = cv.getContext('2d');
-    const pose = POSES[owner][VIGNETTE_POSE[anim] || 'idle'];
+    const poseKeys = { cleave:'chop', ram:'drive', breakline:'vault', anchor:'gather', riposte:'guard', vault:'vault',
+      lens:'channel', orbit:'lattice', meter:'calibrate', array:'vent', mend:'tend',
+      salvo:'recoil', fan:'splay', sidestep:'hipFire', braceShot:'kneel', flip:'salute' };
+    const pose = POSES[owner][poseKeys[cue?.clip] || VIGNETTE_POSE[anim] || 'idle'];
     ctx.translate(owner === 'S' ? 62 : 70, 152);
     const k = owner === 'S' ? 1.42 : 1.3;
     ctx.scale(k, k);
@@ -36,8 +42,9 @@ export const CAT_GLYPH = { basic: '◆', arte: '★', support: '✚', junk: '✕
 // Hessa's Guard cards also start Cover (engine/combat.js): the card says so.
 export const coversParty = (def) => def.owner === 'V' && (def.tags || []).includes('guard');
 
-export function cardText(def, up) {
-  const text = cardTemplate(def.id).replace(/\{(\w+)\}/g, (_, k) => {
+export function cardText(def, up, compact = false) {
+  const template = (compact && CARD_BRIEFS[def.id]?.[lang() === 'ru' ? 1 : 0]) || cardTemplate(def.id);
+  const text = template.replace(/\{(\w+)\}/g, (_, k) => {
     const v = cardValue(def, up, k);
     const base = cardValue(def, false, k);
     return up && v !== base ? `<b class="upv">${num(v)}</b>` : `<b>${num(v)}</b>`;
@@ -79,17 +86,19 @@ export function cardEl(inst, opts = {}) {
   if (inst.rankMod && off) mods.push(`<span class="mod">${t('{n}R', { n: `${inst.rankMod > 0 ? '+' : ''}${inst.rankMod}` })}</span>`);
   if (inst.recut && off) mods.push(`<span class="mod">${t('RECUT')}</span>`);
   const catWord = def.category === 'basic' ? strengthName(def.rank) : def.tech ? t('Technique') : categoryName(def.category);
+  const art = def.owner ? vignette(def.owner, def.anim, def.id) : '';
+  const signal = cardCue({ id: def.id, who: def.owner, category: def.category, rank: def.rank, anim: def.anim });
   el.innerHTML = `
-    <div class="card-frame">
+    <div class="card-frame" style="--signal:${signal.color}">
       <div class="card-top">
         <span class="rank">${off ? rank : def.category === 'support' ? '✚' : '–'}</span>
         ${off ? `<span class="var">${variant}</span>` : ''}
         <span class="role-tag" title="${esc(categoryName(def.category))}"><i>${CAT_GLYPH[def.category]}</i><span class="rt-word">${esc(catWord)}</span>${def.category === 'basic' ? `<span class="rt-cost gain">+${def.gain}</span>` : def.cost > 0 ? `<span class="rt-cost">${def.cost}</span>` : ''}</span>
       </div>
-      <div class="card-art"${def.owner && vignette(def.owner, def.anim) ? ` style="--vig:url(${vignette(def.owner, def.anim)})"` : ''}>${artSvg(def)}<span class="owner-chip${owner === 'N' ? ' any' : ''}">${chip}</span>${costBadge(def)}${def.rarity === 'rare' ? '<span class="rare-gem"></span>' : ''}</div>
+      <div class="card-art"${art ? ` style="--vig:url(${art})"` : ''}>${artSvg(def)}<span class="owner-chip${owner === 'N' ? ' any' : ''}">${chip}</span>${costBadge(def)}${def.rarity === 'rare' ? '<span class="rare-gem"></span>' : ''}</div>
       <div class="card-name"><span class="name-owner">${owner === 'N' ? '◇' : owner === 'X' ? '!' : ownerInitial(owner)}</span>${esc(cardName(def.id))}${inst.up ? '<sup>+</sup>' : ''}</div>
-      <div class="card-text">${cardText(def, inst.up)}</div>
-      <div class="card-foot">${inst.graft ? `<span class="graft">${esc(graftName(inst.graft))}</span>` : ''}${mods.join('')}<span class="reason"></span></div>
+      <div class="card-text"><span class="ct-long">${cardText(def, inst.up)}</span><span class="ct-brief">${cardText(def, inst.up, true)}</span></div>
+      <div class="card-foot">${inst.graft ? `<span class="graft" title="${esc(graftName(inst.graft))}"><span class="graft-name">${esc(graftName(inst.graft))}</span></span>` : ''}${mods.join('')}<span class="reason"></span></div>
     </div>
     <div class="card-lock"><svg viewBox="0 0 36 36"><circle class="lock-ring" cx="18" cy="18" r="15"/></svg><span class="lock-icon">⛓</span><span class="lock-time"></span><span class="lock-src"></span></div>
     <div class="card-scramble"></div>`;
@@ -143,6 +152,13 @@ export function fitText(node, min = 0.72, alsoFits = null) {
 export function fitCard(el) {
   const frame = el.querySelector('.card-frame');
   const name = el.querySelector('.card-name');
+  if (el.closest('.battle .hand') && document.documentElement.classList.contains('compact')) {
+    name.style.removeProperty('--fit');
+    el.querySelector('.card-text').style.removeProperty('--fit');
+    name.classList.remove('two-line');
+    el.classList.add('chip-out', 'cost-out');
+    return;
+  }
   const fitAll = () => {
     name.classList.remove('two-line');
     if (!fitText(name, 0.8)) { name.classList.add('two-line'); fitText(name, 0.68); }

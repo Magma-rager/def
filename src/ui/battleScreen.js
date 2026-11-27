@@ -4,11 +4,10 @@ import { Combat, RULES } from '../engine/combat.js';
 import { CARDS, isOffensive } from '../data/cards.js';
 import { DEV_REMARKS } from '../data/story.js';
 import { TRAITS } from '../data/traits.js';
-import { t, msg, num, secs, block, cardName, enemyName, intentName, intentDesc, recipeName, traitName, traitText, adaptName, adaptDesc, adaptBreak, relicName, remark, ownerName, ownerInitial, strengthName } from '../i18n/index.js';
+import { t, msg, num, secs, block, cardName, enemyName, intentName, intentDesc, recipeName, recipeField, traitName, traitText, adaptName, adaptDesc, adaptBreak, relicName, remark, ownerName, ownerInitial, strengthName } from '../i18n/index.js';
 import { BattleView } from '../render/battleView.js';
-import { drawPortrait } from '../render/rig.js';
 import { h, clear, btn } from './dom.js';
-import { cardEl, cardTooltip, fitText, CAT_GLYPH } from './cardView.js';
+import { cardEl, cardTooltip, fitCard, fitText, CAT_GLYPH } from './cardView.js';
 import { LESSONS, LESSON_PACE, pickLesson } from './lessons.js';
 import { knownDiscoveries, RECIPE_MAP } from '../data/recipes.js';
 import { seqChips } from './museum.js';
@@ -44,6 +43,13 @@ function fitReserveCard(el) {
   el.classList.add('dense');
   fitText(rn, 0.7, over);
 }
+function shortReason(chk, fallback) {
+  if (chk.reason === 'needbasic') return t('Basic first');
+  if (chk.reason === 'momentum') return t('{n}M needed', { n: chk.text.p.n });
+  if (chk.reason === 'junk') return t('Churn ↓');
+  return fallback;
+}
+
 export class BattleScreen {
   constructor(app, setup, onEnd) {
     this.app = app;
@@ -75,9 +81,9 @@ export class BattleScreen {
     this.topbar = h('div', { class: 'battle-top' });
     this.adaptEl = h('div', { class: 'adapt-panel', hidden: true });
     this.bannerEl = h('div', { class: 'banner-layer' });
-    this.cutinEl = h('div', { class: 'cutin-layer' });
+    this.exEl = h('div', { class: 'ex-rail', role: 'region', 'aria-label': t('EX Combos') });
     this.tutEl = h('div', { class: 'tut-layer', hidden: true });
-    this.field.append(this.topbar, this.adaptEl, this.bannerEl, this.cutinEl);
+    this.field.append(this.topbar, this.adaptEl, this.bannerEl);
     // deck area
     this.chipsEl = h('div', { class: 'combo-chips' });
     this.nextEl = h('div', { class: 'combo-next' });
@@ -134,7 +140,7 @@ export class BattleScreen {
       h('div', { class: 'ctl-row two' }, this.flowBtn, this.guardBtn),
       h('div', { class: 'ctl-row two' }, this.guardEl, this.churnEl),
       this.cashBtn);
-    this.deck = h('div', { class: 'deck' }, strip, h('div', { class: 'row' }, this.reserveEl, this.handEl, this.controls));
+    this.deck = h('div', { class: 'deck' }, this.exEl, strip, h('div', { class: 'row' }, this.reserveEl, this.handEl, this.controls));
     this.root.append(this.field, this.deck, this.tutEl);
     clear(root).append(this.root);
     this.applyLabels();
@@ -142,10 +148,9 @@ export class BattleScreen {
     this.view = new BattleView(this.canvas, {
       sfx: (n, o) => this.app.audio.sfx(n, o),
       banner: (t, s, tone) => this.banner(t, s, tone),
-      cutin: (info) => this.cutin(info),
-      telegraph: () => this.app.audio.sfx('telegraph'),
+      telegraph: (enemy) => this.app.audio.sfx('telegraph', { kind: enemy.intent?.kind }),
     });
-    this.view.reducedMotion = this.app.settings.reducedMotion;
+    this.view.reducedMotion = document.documentElement.classList.contains('reduced-motion');
     this.view.shakeEnabled = this.app.settings.shake;
     this.view.setCombat(c, this.setup.act, this.setup.kind === 'boss' ? 1 : 0);
     // tap an enemy: make it the target; hold it: read what it will do (the battle pauses)
@@ -172,22 +177,27 @@ export class BattleScreen {
     this.layout();
     this.consumeEvents(c.drainEvents());
     const isBoss = this.setup.kind === 'boss';
-    this.app.audio.music(isBoss ? 'boss' : `battle${this.setup.act}`);
+    this.app.audio.music(isBoss ? `boss:${c.enemies.find((e) => e.tier === 'boss')?.id || ''}` : `battle${this.setup.act}`);
     if (this.setup.trait) this.banner(traitName(this.setup.trait).toUpperCase(), traitText(this.setup.trait), 'info');
-    if (c.adapt) this.banner(t('ADAPTATION'), `${adaptName(c.adapt)}: ${adaptDesc(c.adapt)}`, 'bad');
     this.maybeLesson();
   }
 
   // Fixed labels; called on mount and after a language switch.
   applyLabels() {
     this.reserveEl.querySelector('.zone-label').textContent = t('RESERVE');
+    this.exEl.setAttribute('aria-label', t('EX Combos'));
     this.nextCell.querySelector('.nc-label').textContent = t('NEXT CARD');
     for (const [id, b] of Object.entries(this.heroBtns)) {
       b.querySelector('.hb-i').textContent = ownerInitial(id);
       b.querySelector('.hb-n').textContent = ownerName(id);
     }
     this.pickCancel.title = t('Cancel');
-    for (const s of this.slots) s.box.querySelector('.slot-jam span').textContent = t('STATIC');
+    for (const s of this.slots) {
+      s.box.querySelector('.slot-jam span').textContent = t('STATIC');
+      const hint = s.box.querySelector('.swipe-hint');
+      hint.dataset.churn = '↓ ' + t('CHURN');
+      hint.dataset.reserve = '↑ ' + t('RESERVE');
+    }
     this.cashBtn.querySelector('.ctl-main').textContent = t('CASH OUT');
     this.flowBtn.querySelector('.ctl-main').textContent = t('+FLOW');
     this.guardBtn.querySelector('.ctl-main').textContent = t('+GUARD');
@@ -196,6 +206,7 @@ export class BattleScreen {
   // Re-renders every text in the battle UI in the current language. Combat state is untouched.
   relocalize() {
     this.applyLabels();
+    this.renderEx();
     this.renderTop();
     for (const k of ['_ft', '_fbs', '_gbs', '_gh', '_ch', '_cs', '_cm', 'chipSig', 'momSig', 'resSig', 'adaptHtml', 'tgtSig', 'heroSig', 'nextSig', 'hintSig']) this[k] = undefined;
     for (const b of Object.values(this.heroBtns)) b._sig = undefined;
@@ -214,6 +225,7 @@ export class BattleScreen {
     if (r.width * r.height * dpr * dpr > 2.2e6) dpr = Math.max(1, Math.min(dpr, 1.5));
     this.view.resize(Math.max(1, Math.floor(r.width)), Math.max(1, Math.floor(r.height)), dpr);
     for (const [, el] of this.resEls || []) fitReserveCard(el);
+    for (const slot of this.slots) if (slot.el) fitCard(slot.el);
   }
 
   destroy() {
@@ -317,7 +329,7 @@ export class BattleScreen {
     } else if (e.key === ' ' || e.key === 'Enter') { this.doCashOut(); e.preventDefault(); }
     else if (e.key === 'f' || e.key === 'F') this.doSpend('flow');
     else if (e.key === 'g' || e.key === 'G') this.doSpend('guard');
-    else if (e.key === 'Tab') {
+    else if (e.key.toLowerCase() === 't' || (e.key === 'Tab' && !e.shiftKey && (document.activeElement === document.body || document.activeElement === this.canvas))) {
       this.cycleTarget();
       e.preventDefault();
     }
@@ -385,7 +397,7 @@ export class BattleScreen {
       return;
     }
     const r = this.combat.selectHero(id);
-    this.app.audio.sfx(r.ok ? (r.cmd ? 'relay' : 'click') : 'reject');
+    this.app.audio.sfx(r.ok ? 'click' : 'reject');
     this.afterAction();
   }
 
@@ -425,7 +437,7 @@ export class BattleScreen {
   doSpend(kind) {
     if (this.app.paused || this.ended) return;
     const r = kind === 'flow' ? this.combat.spendMomentumFlow() : this.combat.spendMomentumGuard();
-    this.app.audio.sfx(r.ok ? 'momentum' : 'reject');
+    this.app.audio.sfx(r.ok ? (kind === 'flow' ? 'flow-extension' : 'guardUp') : 'reject');
     if (!r.ok && r.text) this.flashNote(msg(r.text));
     this.afterAction();
   }
@@ -440,9 +452,9 @@ export class BattleScreen {
   frame(dt) {
     const c = this.combat;
     if (!this.app.paused) {
+      this.view.update(dt);
       c.update(dt);
       this.consumeEvents(c.drainEvents());
-      this.view.update(dt);
       this.remarkCooldown = Math.max(0, this.remarkCooldown - dt);
       this.lessons.poll -= dt;
       if (this.lessons.poll <= 0) { this.lessons.poll = 0.2; this.maybeLesson(); }
@@ -485,7 +497,7 @@ export class BattleScreen {
           if (this.app.run?.discoverEnemy(id)) discoveredEnemy = true;
           break;
         }
-        case 'phase': this.app.audio.music('boss'); break;
+        case 'phase': this.app.audio.bossPhase(ev.idx + 1); break;
         default: break;
       }
     }
@@ -517,6 +529,13 @@ export class BattleScreen {
       const isNew = fresh.has(ev.id);
       this.exLog.push({ id: ev.id, fresh: isNew, applied: ev.applied, group: ev.group, order: ev.order, len: ev.len, heroes: ev.heroes, sum: { ...ev.sum }, t: this.combat.t });
     }
+    this.lastEx = { list, fresh, settlesAt: performance.now() + (fresh.size ? 2600 : 1700) };
+    this.renderEx();
+  }
+
+  renderEx() {
+    if (!this.lastEx) return;
+    const { list, fresh, settlesAt } = this.lastEx;
     const sum = {};
     for (const ev of list) for (const [k, v] of Object.entries(ev.sum)) sum[k] = typeof v === 'boolean' ? sum[k] || v : (sum[k] || 0) + v;
     const parts = [];
@@ -538,12 +557,20 @@ export class BattleScreen {
     const b = h('div', { class: 'banner tone-ex', 'data-ex': list.map((ev) => ev.id).join(',') }, text, why,
       parts.length ? h('div', { class: 'banner-sub' }, parts.join(' · ')) : null,
       fresh.size ? h('div', { class: 'banner-sub banner-new' }, t('NEW EX COMBO DISCOVERED')) : null);
-    this.bannerEl.append(b);
-    while (this.bannerEl.children.length > 2) this.bannerEl.firstChild.remove();
-    const hold = fresh.size ? 2600 : 1700;
-    setTimeout(() => b.classList.add('out'), hold);
-    setTimeout(() => b.remove(), hold + 700);
-    this.app.audio.sfx(fresh.size ? 'exNew' : 'ex');
+    const inspect = btn(t('EX details'), () => {
+      const detail = h('div', { class: 'panel ex-detail' },
+        h('h2', {}, t('EX Combos')),
+        ...list.map((ev) => h('section', {}, h('h3', {}, recipeName(ev.id)),
+          seqChips(RECIPE_MAP[ev.id]), h('p', {}, recipeField(ev.id, 'how')),
+          h('p', {}, recipeField(ev.id, 'effect')))),
+        parts.length ? h('p', { class: 'gold' }, parts.join(' · ')) : null);
+      const close = this.app.modal(detail, { dismiss: true });
+      detail.append(btn(t('Close'), () => close(), 'primary'));
+    }, 'small ex-inspect');
+    this.exEl.replaceChildren(b, inspect);
+    const rest = settlesAt - performance.now();
+    if (rest <= 0) b.classList.add('out');
+    else setTimeout(() => b.classList.add('out'), rest);
   }
 
   remark(key, once) {
@@ -569,34 +596,13 @@ export class BattleScreen {
     setTimeout(() => b.remove(), 3000);
   }
 
-  cutin(info) {
-    if (this.app.settings.reducedMotion) return;
-    const band = h('div', { class: 'cutin' });
-    for (const id of info.owners) {
-      const cv = h('canvas', { width: 160, height: 160, class: 'cutin-portrait' });
-      const ctx = cv.getContext('2d');
-      ctx.fillStyle = OWNER_COL[id];
-      ctx.globalAlpha = 0.25;
-      ctx.fillRect(0, 0, 160, 160);
-      ctx.globalAlpha = 1;
-      drawPortrait(ctx, id, 160, 160, 0.5, 'victory');
-      band.append(cv);
-    }
-    band.append(h('div', { class: 'cutin-text' }, info.len >= 7 ? t('GRAND RELAY') : t('RELAY FINISHER')));
-    this.cutinEl.append(band);
-    setTimeout(() => band.remove(), 1100);
-  }
-
-  // ───────────────────────── lessons ─────────────────────────
-  // The first relevant lesson not seen yet (src/ui/lessons.js), at most LESSON_PACE.perBattle per
-  // battle and LESSON_PACE.gap seconds of battle time apart. It pauses the battle while open.
   maybeLesson() {
     const c = this.combat;
     if (!this.app.settings.hints || this.lessonOpen || this.ended || this.app.paused || this.pick || c.phase === 'END') return;
     const L = this.lessons;
     if (L.shown >= (this.setup.tutorial ? LESSON_PACE.perBattle.tutorial : LESSON_PACE.perBattle.normal)) return;
     if (c.t - L.lastAt < LESSON_PACE.gap) return;
-    const r = pickLesson(c, { seen: this.app.meta.tut, flags: L.flags, kind: this.setup.kind, tutorial: !!this.setup.tutorial, tactical: !!c.tactical, exKnown: knownDiscoveries(this.app.meta.combos).length, exBanner: !!this.bannerEl.querySelector('.banner.tone-ex:not(.out)') });
+    const r = pickLesson(c, { seen: this.app.meta.tut, flags: L.flags, kind: this.setup.kind, tutorial: !!this.setup.tutorial, tactical: !!c.tactical, exKnown: knownDiscoveries(this.app.meta.combos).length, exBanner: !!this.exEl.querySelector('.banner.tone-ex:not(.out)') });
     if (r) this.showLesson(r.lesson, r.anchor);
   }
   // also used by tools (i18n-layout) to show a given lesson
@@ -822,18 +828,23 @@ export class BattleScreen {
     }
     // momentum
     const max = c.momentumMax();
-    const momSig = `${c.momentum}/${max}`;
+    const momSig = `${c.momentum}/${max}/${c.reserved}`;
     if (force || momSig !== this.momSig) {
       this.momSig = momSig;
       clear(this.momEl);
       const pips = h('div', { class: 'pips' });
       for (let i = 0; i < max; i++) pips.append(h('i', { class: i < c.momentum ? 'on' : '' }));
-      this.momEl.append(h('span', { class: 'mom-label' }, t('MOMENTUM')), h('b', { class: 'mom-num' }, String(c.momentum)), pips);
+      const available = c.available();
+      const label = c.reserved ? t('{n} Momentum available, {r} queued', { n: available, r: c.reserved }) : t('{n} Momentum available', { n: available });
+      this.momEl.title = label;
+      this.momEl.setAttribute('aria-label', label);
+      this.momEl.append(h('span', { class: 'mom-label' }, t('MOMENTUM')),
+        h('b', { class: 'mom-num' }, c.reserved ? `${available}/${c.momentum}` : String(c.momentum)), pips);
     }
     const fc = c.momentumCostFlow();
-    this.flowBtn.disabled = !(c.phase === 'ACTIVE' && c.momentum >= fc && c.combo && c.combo.deadline < c.flowCap() - 0.01);
+    this.flowBtn.disabled = !(c.phase === 'ACTIVE' && c.available() >= fc && c.combo && c.combo.deadline < c.flowCap() - 0.01);
     set('_fbs', (v) => (this.flowBtn.querySelector('.ctl-sub').textContent = v), t('{n}M · +{s}', { n: fc, s: secs(c.flowSpendAmount()) }));
-    this.guardBtn.disabled = !(c.momentum >= RULES.MOMENTUM_COST && c.phase !== 'END');
+    this.guardBtn.disabled = !(c.available() >= RULES.MOMENTUM_COST && c.phase !== 'END');
     set('_gbs', (v) => (this.guardBtn.querySelector('.ctl-sub').textContent = v), t('{n}M · +{g}', { n: RULES.MOMENTUM_COST, g: c.guardSpendAmount() }));
     // guard & churn
     const g = Math.floor(c.guard);
@@ -1062,7 +1073,10 @@ export class BattleScreen {
           el.classList.remove('v-A', 'v-B', 'v-EX');
           el.classList.add(`v-${v}`);
         }
-        s.reasonEl.textContent = !chk.ok && !locked && SHOWN_REASONS.includes(chk.reason) && c.phase !== 'RECOVER' ? why : '';
+        const showReason = !chk.ok && !locked && SHOWN_REASONS.includes(chk.reason) && c.phase !== 'RECOVER';
+        s.reasonEl.title = showReason ? why : '';
+        if (showReason) s.reasonEl.replaceChildren(h('span', { class: 'reason-long' }, why), h('span', { class: 'reason-brief' }, shortReason(chk, why)));
+        else s.reasonEl.replaceChildren();
         if (locked) s.lockSrc.textContent = c.locks[uid].source ? enemyName(c.locks[uid].source) : t('Interference');
       }
       if (locked) {

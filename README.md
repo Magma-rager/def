@@ -122,15 +122,17 @@ English and Russian. Switch on the title screen (top-left) or in Settings → La
 
 ## Version
 
-The version follows the development roadmap, and the title screen shows it ("Patched to version 0.2.2. Probably.").
+The version follows the development roadmap. The title screen and Patch Notes show the current build.
 
 - `0.N.x`: N is the highest roadmap phase whose exit gate has passed, with the evidence recorded in `docs/AUDIT.md`.
 - `0.N.P`: P counts published builds with changes since that gate.
 - `1.0.0`: the eventual release after the revised roadmap and final beta.
 
-Current: **0.2.9**. Phase 9 adds permanent discoveries, achievements, starting relic loadouts and recoverable local saves. See [the Phase 9 report](docs/PHASE9.md) for verification and [the development audit](docs/AUDIT.md) for previous phases. The version comes from `src/version.js`, and tests enforce that the package and iOS project match. The title menu shows the build date and source commit. The next human beta follows completion of the revised roadmap through Phase 12.
+Current: **0.2.10**. Phase 10 updates combat choreography and sound, separates EX results from the battlefield, and reflows the hand for larger readable text. See [the Phase 10 report](docs/PHASE10.md) for visual and gameplay evidence, [the Phase 9 report](docs/PHASE9.md) for permanent progression and [the development audit](docs/AUDIT.md) for earlier work. The version comes from `src/version.js`, and tests enforce that the package and iOS project match. The title menu shows the build date and source commit. The next human beta follows completion of the revised roadmap through Phase 12.
 
 ## Verification tools
+
+Phase 10 captures and checks use `node tools/presentation.mjs gallery|layout|motion|roster|audio|access OUTPUT` against the local development server with Playwright and Chromium.
 
 - `node tools/simulate.mjs [runs] [reactionSeconds] [profile] [--ex]` runs complete runs through all three Acts with a heuristic bot. It checks zone integrity and save round-trips at every step, and reports win rates, battle durations, HP loss and EX Combo activations by recipe, encounter and build. `--ex` plays the recipe-aware policy; `SB_EX=off` measures without recipes.
 - `node tools/simulate.mjs … --build=each|<tag> [--tactics]` (Phase 8) plays build-focused campaigns: each run targets an archetype and acquires only through the ordinary offers; reports cards of the target held, its own mechanic per battle against the all-build average, pace, EX and own recipes, deck progression and boss adaptations. `SB_DECKS=<file>` writes each deck as it reaches a boss (for recipelab and buildlab), `SB_SEED0` shifts the seeds, `SB_PROFILE_DUMP=1` prints the boss evidence.

@@ -787,3 +787,7 @@ These roadmap references have no counterpart in this repository:
 ## Revised roadmap, Phase 9 permanent progression (0.2.9)
 
 The Museum records acquisitions and specific played mechanics across runs. Ten single-relic loadouts use existing relic effects, 27 achievements use campaign, combat, collection or build evidence, and run finalization recovers from an interrupted write. The detailed [Phase 9 report](PHASE9.md) records the Phase 8 lifecycle audit, migration, measured unlock pacing, balance experiments, browser and engine checks, and distribution outcomes.
+
+## Revised roadmap, Phase 10 presentation (0.2.10)
+
+The combat view follows scheduler-confirmed contact, retaining the original combat rules. New hero poses, enemy and boss motion, recipe-specific effects, synthesized cue families and Act lighting details extend the Canvas presentation. The compact hand gives priority to readable bilingual effect text and groups EX results in a separate rail. The [Phase 10 report](PHASE10.md) records the visual comparison, audio measurements, ordinary campaigns, regressions and distribution evidence.

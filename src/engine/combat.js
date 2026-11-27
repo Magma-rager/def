@@ -219,6 +219,7 @@ export class Combat {
   // ───────────────────────── helpers ─────────────────────────
   emit(ev) {
     ev.t = this.t;
+    if (this.presentationCue) ev.cue = this.presentationCue;
     this.events.push(ev);
   }
   drainEvents() {
@@ -931,15 +932,22 @@ export class Combat {
       if (cmd.type === 'card' && c && c.segCards > 0) seq = seqCheck(c.rank, c.variant, cmd.rank, cmd.variant, this.crossIsStep());
       this.emit({
         type: 'act', who: cmd.hero, anim, card: d.name, id: d.id, category: d.category, rank: cmd.rank, variant: cmd.variant, cmd: cmd.id,
-        kind: seq.kind, step: !!seq.step, cross: !!seq.cross, relay: !!(c && cmd.type === 'card' && c.segCards === 0 && c.relays), big: d.category === 'arte', all: false, fromReserve: cmd.zone === 'reserve',
+        kind: seq.kind, step: !!seq.step, cross: !!seq.cross, relay: !!(c && cmd.type === 'card' && c.segCards === 0 && c.relays), big: d.category === 'arte', fromReserve: cmd.zone === 'reserve', at, dur,
       });
-    } else if (cmd.type === 'relay') this.emit({ type: 'relayStart', from: cmd.from, to: cmd.to, cmd: cmd.id });
+    } else if (cmd.type === 'relay') this.emit({ type: 'relayStart', from: cmd.from, to: cmd.to, cmd: cmd.id, at, dur });
   }
   resolveCmd(cmd) {
-    if (cmd.type === 'card') this.resolveCard(cmd);
-    else if (cmd.type === 'support') this.resolveSupport(cmd);
-    else if (cmd.type === 'relay') this.resolveRelay(cmd);
-    else if (cmd.type === 'finish') this.resolveFinish(cmd);
+    const previous = this.presentationCue;
+    this.presentationCue = { command: cmd.id, card: cmd.uid ? this.def(cmd.uid)?.id : null };
+    this.emit({ type: 'execResolve', id: cmd.id, cmdType: cmd.type, hero: cmd.hero, target: cmd.type === 'card' ? this.currentTarget()?.uid : null });
+    try {
+      if (cmd.type === 'card') this.resolveCard(cmd);
+      else if (cmd.type === 'support') this.resolveSupport(cmd);
+      else if (cmd.type === 'relay') this.resolveRelay(cmd);
+      else if (cmd.type === 'finish') this.resolveFinish(cmd);
+    } finally {
+      this.presentationCue = previous;
+    }
   }
   // Execution complete: a support performer starts Recovery; the first card of a chain, each Relay
   // and the incoming hero's first card open a short hold of the decision window; a requested ending happens now; otherwise a
@@ -1742,7 +1750,12 @@ export class Combat {
       c.ex.add(r.id);
       const sum = { dmg: 0, guard: 0, heal: 0, momentum: 0, flow: 0, churn: 0, unlocked: 0, exposed: 0, counter: 0, cover: 0, echo: false };
       const applied = this.phase !== 'END';
-      if (applied) r.fx(this.exApi(c, base, sum, e));
+      if (applied) {
+        const previous = this.presentationCue;
+        this.presentationCue = { ...previous, recipe: r.id };
+        try { r.fx(this.exApi(c, base, sum, e)); }
+        finally { this.presentationCue = previous; }
+      }
       const st = this.stats;
       st.exActivations++;
       st.exByRecipe[r.id] = (st.exByRecipe[r.id] || 0) + 1;

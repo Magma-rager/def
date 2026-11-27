@@ -602,6 +602,45 @@ export const POSES = {
   for (const id of Object.keys(POSES)) for (const [k, v] of Object.entries(sub[id])) if (!POSES[id][k]) POSES[id][k] = POSES[id][v];
 })();
 
+// Measured silhouettes for the new action families. The values describe joint poses relative
+// to the existing rig, preserving the character's proportions and equipment.
+Object.assign(POSES.V, {
+  plant: P({ lean: -0.28, armF: [2.78,.18], armB: [1.60,.25], shieldFront: 1, shield: 1.36, weapon: -2.64, legF: [.68,.70], legB: [-.65,.51] }),
+  drive: P({ lean: .56, head: .12, armF: [1.05,.71], armB: [1.54,.05], shieldFront: 1, shield: 1.48, weapon: 1.55, legF: [1.02,.79], legB: [-.85,.44], glow: 1 }),
+  gather: P({ lean: .17, head: .27, armF: [1.32,.84], armB: [1.83,.36], shieldFront: 1, shield: 2.13, weapon: -1.8, legF: [.71,.91], legB: [-.55,.69] }),
+  vault: P({ lean: -.24, head: .33, armF: [2.72,.18], armB: [1.38,.28], shieldFront: 1, shield: 1.52, weapon: 2.89, legF: [.88,1.01], legB: [-.78,1.07], lift: 20, glow: .72 }),
+  chop: P({ lean: .61, head: .28, armF: [1.39,.02], armB: [.71,.35], shield: 1.1, weapon: 1.28, legF: [.79,1.08], legB: [-.61,.98], glow: 1.2 }),
+  brake: P({ lean: .31, head: .38, armF: [1.1,.38], weapon: 1.30, armB: [1.24,.68], shieldFront: 1, shield: 1.35, legF: [.76,1.02], legB: [-.43,.72] }),
+  kneel: P({ lean: .36, head: .42, armF: [.29,.64], weapon: .55, armB: [1.04,.77], shieldFront: 1, shield: 1.7, legF: [1.14,1.03], legB: [-.37,1.52] }),
+  send: P({ lean: -.10, head: -.18, armF: [.28,.61], weapon: .42, armB: [-.98,1.07], shield: -.98, legF: [.28,.24], legB: [-.42,.28] }),
+  receive: P({ lean: .21, head: .23, armF: [1.21,.49], weapon: 1.52, armB: [1.12,.3], shieldFront: 1, shield: 1.56, legF: [.54,.57], legB: [-.32,.3] }),
+  salute: P({ lean: .07, head: .08, armF: [1.48,.43], weapon: 2.35, armB: [1.22,.58], shieldFront: 1, shield: 1.3, legF: [.45,.37], legB: [-.32,.30] }),
+});
+Object.assign(POSES.C, {
+  focus: P({ lean: -.17, head: .23, armF: [2.62,.09], weapon: 2.4, armB: [1.47,.75], legF: [.28,.38], legB: [-.29,.22], glow: .45 }),
+  channel: P({ lean: .31, head: .11, armF: [1.37,.10], weapon: 1.52, armB: [-.63,1.56], legF: [.49,.51], legB: [-.57,.26], glow: 1.1 }),
+  lattice: P({ lean: -.02, head: -.18, armF: [2.88,.09], weapon: 2.78, armB: [2.27,.20], legF: [.42,.36], legB: [-.47,.25], lift: 11, glow: 1.1 }),
+  vent: P({ lean: .45, head: -.21, armF: [1.20,.09], weapon: 1.96, armB: [2.44,.30], legF: [.52,.71], legB: [-.62,.41], glow: 1.2 }),
+  calibrate: P({ lean: .11, head: .38, armF: [.9,.85], weapon: 2.78, armB: [1.6,.42], legF: [.25,.32], legB: [-.24,.23], glow: .52 }),
+  tend: P({ lean: -.10, head: -.8, armF: [.39,.51], weapon: 2.83, armB: [-1.12,1.22], legF: [.32,.37], legB: [-.26,.32], glow: 1 }),
+  kneel: P({ lean: .46, head: .32, armF: [.83,.75], weapon: 2.86, armB: [.16,1.0], legF: [.89,1.2], legB: [-.32,1.55] }),
+  send: P({ lean: -.24, head: -.25, armF: [2.52,.23], weapon: 2.9, armB: [-1.38,.87], legF: [.30,.38], legB: [-.39,.28], glow: .6 }),
+  receive: P({ lean: .30, head: -.16, armF: [.78,.88], weapon: 2.75, armB: [2.22,.24], legF: [.38,.55], legB: [-.40,.34], glow: .8 }),
+  salute: P({ lean: -.10, head: .16, armF: [.73,.81], weapon: 3.30, armB: [.5,.86], legF: [.24,.24], legB: [-.23,.22], glow: .65 }),
+});
+Object.assign(POSES.S, {
+  snapAim: P({ lean: .24, head: .07, armF: [1.51,.07], weapon: 1.65, armB: [1.61,.46], legF: [.60,.55], legB: [-.43,.52] }),
+  recoil: P({ lean: -.27, head: -.12, armF: [1.82,.02], weapon: 2.05, armB: [1.21,.39], legF: [.44,.61], legB: [-.52,.65], x: -6, glow: 1 }),
+  hipFire: P({ lean: .19, head: .24, armF: [1.21,.23], weapon: 1.51, armB: [2.35,.13], legF: [.92,.87], legB: [-.61,.85], x: 6, glow: .9 }),
+  load: P({ lean: .22, head: .38, armF: [.92,.85], weapon: 2.42, armB: [1.8,.37], legF: [.61,.55], legB: [-.42,.29] }),
+  slide: P({ lean: -.33, head: .28, armF: [1.27,.82], weapon: 1.6, armB: [-.31,.38], legF: [1.10,.87], legB: [-.71,.43], x: -12, lift: 2 }),
+  splay: P({ lean: .41, head: .1, armF: [1.60,.04], weapon: 1.68, armB: [-1.41,.15], legF: [.75,1.08], legB: [-.78,.84], lift: 12, glow: 1.12 }),
+  kneel: P({ lean: .23, head: .34, armF: [1.16,.71], weapon: 1.91, armB: [1.12,.6], legF: [1.04,1.04], legB: [-.61,1.56], x: -4 }),
+  send: P({ lean: -.19, head: -.30, armF: [.43,.49], weapon: 2.38, armB: [-1.64,.22], legF: [.57,.45], legB: [-.42,.36], lift: 3 }),
+  receive: P({ lean: .16, head: -.24, armF: [1.15,.46], weapon: 2.02, armB: [2.30,.36], legF: [.48,.36], legB: [-.38,.28], lift: 6 }),
+  salute: P({ lean: .13, head: -.2, armF: [2.91,.11], weapon: 3.21, armB: [-1.12,.69], legF: [.39,.34], legB: [-.34,.26], lift: 5 }),
+});
+
 // Clips: keys are [time, poseName]; root is [time, fraction of the way to the target] for dashes.
 export const CLIPS = {
   idle: { loop: true, dur: 1, keys: [[0, 'idle']] },
@@ -618,6 +657,43 @@ export const CLIPS = {
   victory: { dur: 0.5, hold: true, keys: [[0, 'idle'], [0.3, 'victory'], [0.5, 'victory']] },
   revive: { dur: 0.5, keys: [[0, 'ko'], [0.5, 'idle']] },
 };
+
+// Impact is a keyframe in each clip. The runtime maps it to the scheduler's resolve point.
+const clip = (wind, release, follow, { dur = .58, impact = .28, root } = {}) => ({
+  dur, impact, root, keys: [[0, 'idle'], [impact * .55, wind], [impact, release],
+    [impact + (dur - impact) * .42, follow], [dur, 'idle']],
+});
+Object.assign(CLIPS, {
+  jab: clip('plant', 'drive', 'brake', { root: [[0,0],[.10,0],[.28,.70],[.43,.43],[.58,0]] }),
+  cleave: clip('windup', 'chop', 'brake', { root: [[0,0],[.10,0],[.28,1],[.43,.82],[.58,0]] }),
+  ram: clip('plant', 'drive', 'gather', { root: [[0,0],[.13,0],[.28,1],[.42,.91],[.58,0]] }),
+  anchor: clip('gather', 'guard', 'gather'),
+  vault: clip('gather', 'vault', 'chop'),
+  breakline: clip('vault', 'chop', 'brake', { root: [[0,0],[.13,.04],[.28,1],[.43,.86],[.58,0]] }),
+  riposte: clip('guard', 'chop', 'gather', { dur: .34, impact: .11, root: [[0,0],[.11,.38],[.22,.28],[.34,0]] }),
+  lens: clip('focus', 'channel', 'castHold'),
+  orbit: clip('calibrate', 'lattice', 'vent'),
+  meter: clip('calibrate', 'channel', 'calibrate'),
+  array: clip('lattice', 'vent', 'castHold'),
+  mend: clip('tend', 'lattice', 'calibrate'),
+  snap: clip('snapAim', 'fire', 'load'),
+  salvo: clip('load', 'recoil', 'snapAim'),
+  fan: clip('slide', 'splay', 'hipFire'),
+  sidestep: clip('slide', 'hipFire', 'snapAim'),
+  braceShot: clip('kneel', 'recoil', 'load'),
+  flip: clip('load', 'salute', 'hipFire'),
+  handoff: clip('receive', 'send', 'send', { dur: .37, impact: .24 }),
+  catch: clip('send', 'receive', 'salute', { dur: .29, impact: .07 }),
+  finish: clip('receive', 'salute', 'salute', { dur: .46, impact: .15 }),
+  victory: { dur: .72, hold: true, keys: [[0,'idle'],[.19,'salute'],[.43,'victory'],[.72,'victory']] },
+  ko: { dur: .62, hold: true, keys: [[0,'stagger'],[.24,'kneel'],[.62,'ko']] },
+});
+export function clipClock(elapsed, realImpact, realDuration, c) {
+  if (realImpact == null) return elapsed;
+  const hit = c.impact ?? c.dur * .5;
+  if (elapsed <= realImpact) return realImpact > 0 ? hit * elapsed / realImpact : hit;
+  return hit + (c.dur - hit) * (elapsed - realImpact) / Math.max(.001, realDuration - realImpact);
+}
 
 export function drawCharacter(ctx, look, pose, t) {
   const S = skeleton(pose, look.torsoScale || 1);
@@ -655,6 +731,7 @@ export class Actor {
     this.poses = POSES[id];
     this.clip = 'idle';
     this.ct = 0;
+    this.age = 0;
     this.from = null;
     this.blendT = 0;
     this.rootFrac = 0;
@@ -669,7 +746,10 @@ export class Actor {
     this.from = this.lastPose;
     this.blendT = 0.07;
     this.clip = name;
-    this.ct = 0;
+    this.age = opts.age || 0;
+    this.realImpact = opts.impact;
+    this.realDuration = opts.duration;
+    this.ct = clipClock(this.age, this.realImpact, this.realDuration, CLIPS[name]);
     if (opts.targetDx !== undefined) this.targetDx = opts.targetDx;
     if (name === 'ko') this.down = true;
     if (name === 'revive') this.down = false;
@@ -681,25 +761,40 @@ export class Actor {
     return !c.loop && !c.hold && this.ct < c.dur;
   }
   update(dt) {
-    this.ct += dt;
+    this.age += dt;
+    this.ct = clipClock(this.age, this.realImpact, this.realDuration, CLIPS[this.clip]);
     this.flash = Math.max(0, this.flash - dt * 4);
     const c = CLIPS[this.clip];
     if (!c.loop && !c.hold && this.ct >= c.dur) {
       this.clip = 'idle';
-      this.ct = 0;
+      this.realImpact = undefined;
+      this.ct = this.age = 0;
     }
     let want = 0;
     if (c.root) want = sampleRoot(c.root, Math.min(this.ct, c.dur));
-    this.rootFrac += (want - this.rootFrac) * Math.min(1, dt * 22);
+    this.rootFrac = c.root ? want : this.rootFrac * Math.max(0, 1 - dt * 28);
     if (this.blendT > 0) this.blendT = Math.max(0, this.blendT - dt);
   }
-  pose(time) {
+  alignImpact() {
+    if (this.realImpact == null) return;
+    this.age = Math.max(this.age, this.realImpact);
+    const c = CLIPS[this.clip];
+    this.ct = clipClock(this.age, this.realImpact, this.realDuration, c);
+    if (c.root) this.rootFrac = sampleRoot(c.root, this.ct);
+    this.blendT = 0;
+  }
+  pose(time, recovering = false, reduced = false) {
     const c = CLIPS[this.clip];
     const t = c.loop ? 0 : Math.min(this.ct, c.dur);
     let p = samplePose(this.poses, c.keys, t);
-    if (this.clip === 'idle' || (c.hold && this.clip === 'victory')) {
-      const b = Math.sin(time * 2.3 + this.id.charCodeAt(0));
-      p = { ...p, lean: p.lean + b * 0.018, head: p.head + b * 0.025, armF: [p.armF[0] + b * 0.035, p.armF[1]], armB: [p.armB[0] - b * 0.03, p.armB[1]], y: p.y - (b + 1) * 0.4 };
+    if (this.clip === 'idle' && recovering) {
+      p = this.id === 'V' ? this.poses.gather : this.id === 'C' ? this.poses.calibrate : this.poses.load;
+    }
+    if (!reduced && this.clip === 'idle') {
+      const tempo = { V: 1.6, C: 2.1, S: 3.1 }[this.id];
+      const b = Math.sin(time * tempo + this.id.charCodeAt(0));
+      p = { ...p, lean: p.lean + b * .026, head: p.head + b * .034, armF: [p.armF[0] + b * .044, p.armF[1]],
+        armB: [p.armB[0] - b * .039, p.armB[1]], y: p.y - (b + 1) * (this.id === 'S' ? .74 : .48) };
     }
     if (this.from && this.blendT > 0) p = lerpPose(p, this.from, this.blendT / 0.07);
     this.lastPose = p;

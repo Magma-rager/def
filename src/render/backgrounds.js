@@ -85,9 +85,44 @@ export class Background {
     // light pool where the fight happens
     ctx.fillStyle = rad(ctx, w * 0.5, h * 0.8, 10, w * 0.6, [T.light, 'rgba(0,0,0,0)']);
     ctx.fillRect(0, hz, w, h - hz);
+    this.stageInlay(ctx, w, h, hz);
     // vignette
     ctx.fillStyle = rad(ctx, w / 2, h * 0.55, Math.min(w, h) * 0.3, Math.max(w, h) * 0.8, ['rgba(0,0,0,0)', 'rgba(8,4,8,0.65)']);
     ctx.fillRect(0, 0, w, h);
+  }
+
+  stageInlay(ctx, w, h, hz) {
+    const y = hz + (h-hz)*.62;
+    ctx.save();
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = this.act === 1 ? '#b9784566' : this.act === 2 ? '#85adb56e' : '#cd7e9270';
+    const path = (p) => {
+      ctx.beginPath(); ctx.moveTo(p[0],p[1]);
+      for (let i=2;i<p.length;i+=2) ctx.lineTo(p[i],p[i+1]);
+      ctx.stroke();
+    };
+    if (this.act === 1) {
+      for (const side of [-1,1]) {
+        const x=w*(.5+side*.26);
+        path([w*(.5+side*.12),hz, x,y, x+side*w*.16,y, x+side*w*.21,h]);
+        for (let i=0;i<5;i++) {
+          const a=x+side*w*.023*i;
+          path([a,y-3,a+side*w*.017,y+4]);
+        }
+      }
+    } else if (this.act === 2) {
+      for (const side of [-1,1]) for (let i=0;i<3;i++) {
+        const x=w*(.5+side*(.19+i*.05));
+        path([x-side*w*.08,hz, x,y-5+i*5, x+side*w*.07,y-5+i*5, x+side*w*.09,h]);
+        ctx.strokeRect(x-3,y-8+i*5,6,6);
+      }
+    } else {
+      path([w*.39,hz,w*.46,y-6,w*.53,y-6,w*.48,y+9,w*.56,y+13,w*.61,h]);
+      path([w*.42,hz,w*.49,y-8,w*.57,y-8,w*.51,y+6,w*.60,y+10,w*.66,h]);
+      ctx.globalAlpha=.6;
+      for(let i=0;i<4;i++) path([w*(.34+i*.038),y+4+i*6,w*(.42+i*.026),y+5+i*6]);
+    }
+    ctx.restore();
   }
 
   staticScrapworks(ctx, w, h, hz, rng) {

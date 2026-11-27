@@ -654,3 +654,9 @@ Every archetype has at least one recipe. With the starter deck alone the recipe 
 The Museum profile records acquisitions, actual combat accomplishments, achievements, loadout eligibility and completed-run records. A new profile can win with the default loadout. New Run selects one relic from the available roster using the same eligibility rules as the Museum. Unlocks grant a choice of starting relic and retain ordinary acquisition. A deliberate starter can lightly bias an opening reward slot before an acquired direction forms. The existing timing assists, reward tiers, boss pool and campaign stats remain in force.
 
 Cards and relics are discovered on legitimate acquisition, enemies on encounter or summon and EX recipes on execution. Encounter-based proof is committed with the battle outcome. The finished-run counter for Pressure Gauge uses victories and defeats; earlier eligibility is retained. A v7 run checkpoints durable evidence before applying it to the v3 Museum profile. A stable identity and progress cursor prevent repeat credit after a retry, reload or duplicate callback. See [the Phase 9 report](PHASE9.md) for migration, catalogue, validation and results.
+
+## 31. Presentation timing (Phase 10)
+
+The combat view reads the command's existing hit and end offsets at execution start. Anticipation and follow-through are fitted to those offsets. Damage numbers, defender reactions, contact graphics and contact audio consume resolved events with their actual recipient IDs. A recipe carries its stable ID on the events it resolves. The EX result rail can summarize several discoveries together independently of the boss adaptation panel.
+
+Playback of these cues has no authority over the scheduler, enemy ATB, decision time or run records. Reduced Motion uses steady framing, local impact shapes and the same text and status indicators. The [Phase 10 report](PHASE10.md) covers display measurements and verification.

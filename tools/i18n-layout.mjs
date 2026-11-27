@@ -382,13 +382,13 @@ for (const [W, H] of VIEWPORTS) {
   for (const ids of exSets) {
     await ev((list) => {
       const bs = window.__sb.battle;
-      bs.bannerEl.innerHTML = '';
+      bs.exEl.replaceChildren();
       window.__sb.meta.combos = {};
       bs.onExCombo(list.map((id, k) => ({ id, group: 9999, order: k, of: list.length, applied: list.length < 2 || k < 1, len: 7, heroes: 3, hero: 'S', sum: { dmg: 24, guard: 8, heal: 4, momentum: 2, flow: 1.5, churn: 1, unlocked: 1, exposed: 5, counter: 6, cover: 2, echo: true } })));
     }, ids);
     await check(`banner-ex-${ids.join('+')}`, ids.length > 1 || ids[0] === 'interference_reversal');
   }
-  await ev(() => { window.__sb.battle.bannerEl.innerHTML = ''; });
+  await ev(() => { window.__sb.battle.exEl.replaceChildren(); });
   await ev(() => window.__sb.pause()); await check('pause', true); await closeModals();
   await ev(async () => {
     const I = await import('/src/i18n/index.js');

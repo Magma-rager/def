@@ -111,10 +111,10 @@ export function storyDialog(app, lines, onDone) {
   const portrait = h('canvas', { class: 'dlg-portrait', width: 220, height: 220 });
   const name = h('div', { class: 'dlg-name' });
   const text = h('div', { class: 'dlg-text' });
-  const next = h('div', { class: 'dlg-next' }, '▶');
+  const next = h('span', { class: 'dlg-next', 'aria-hidden': 'true' }, '▶');
   const skip = h('button', { class: 'btn small dlg-skip', type: 'button' }, t('Skip'));
-  const box = h('div', { class: 'dlg-box' }, h('div', { class: 'dlg-pframe' }, portrait), h('div', { class: 'dlg-body' }, name, text, next));
-  const layer = h('div', { class: 'dialog-layer' }, h('div', { class: 'dlg-wrap' }, skip, box));
+  const box = h('div', { class: 'dlg-box', role: 'button', tabindex: 0 }, h('div', { class: 'dlg-pframe' }, portrait), h('div', { class: 'dlg-body' }, name, text, next));
+  const layer = h('div', { class: 'dialog-layer', role: 'dialog' }, h('div', { class: 'dlg-wrap' }, skip, box));
   app.layers.dialog.append(layer);
   let typing = null;
   let full = '';
@@ -134,7 +134,7 @@ export function storyDialog(app, lines, onDone) {
     ctx.beginPath();
     ctx.rect(0, 0, 220, 220);
     ctx.clip();
-    drawPortrait(ctx, ln.who, 220, 220, (performance.now() - t0) / 1000);
+    drawPortrait(ctx, ln.who, 220, 220, document.documentElement.classList.contains('reduced-motion') ? 0 : (performance.now() - t0) / 1000);
     ctx.restore();
     raf = requestAnimationFrame(drawP);
   };
@@ -144,12 +144,15 @@ export function storyDialog(app, lines, onDone) {
     const title = speakerTitle(ln.who);
     name.innerHTML = `<b style="color:${sp.color}">${esc(speakerName(ln.who))}</b>${title ? `<span>${esc(title)}</span>` : ''}`;
     box.className = `dlg-box who-${ln.who}`;
+    box.style.setProperty('--dialog-ink', sp.color);
+    box.setAttribute('aria-label', speakerName(ln.who) + '. ' + ln.text);
     full = ln.text;
     let n = 0;
     clearInterval(typing);
+    if (document.documentElement.classList.contains('reduced-motion')) { typing = null; text.textContent = full; return; }
     text.textContent = '';
     typing = setInterval(() => {
-      n += 2;
+      n += 3;
       text.textContent = full.slice(0, n);
       if (n >= full.length) { clearInterval(typing); typing = null; }
     }, 16);
@@ -168,7 +171,7 @@ export function storyDialog(app, lines, onDone) {
     if (i >= lines.length) finish();
     else show();
   };
-  const key = (e) => { if (e.key === ' ' || e.key === 'Enter') { advance(); e.preventDefault(); } if (e.key === 'Escape') finish(); };
+  const key = (e) => { if ((e.key === ' ' || e.key === 'Enter') && e.target !== skip) { advance(); e.preventDefault(); } if (e.key === 'Escape') finish(); };
   box.addEventListener('click', advance);
   skip.addEventListener('click', (e) => { e.stopPropagation(); finish(); });
   window.addEventListener('keydown', key);

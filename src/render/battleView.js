@@ -3,6 +3,8 @@
 import { Actor, LOOKS, drawCharacter, weaponTip } from './rig.js';
 import { ENEMY_ART, ART_BOUNDS } from './enemyArt.js';
 import { Background } from './backgrounds.js';
+import { cardCue, ENEMY_CUES, EX_CUES, FOE_ACTION } from './choreography.js';
+import { drawSignal, drawEnemySignal, enemyPose } from './signals.js';
 import { drawIcon } from './icons.js';
 import { glow, circle, roundRect, ellipse, lin, hexToRgba, poly } from './draw.js';
 import { ENEMIES, ENEMY_KIND_ICONS } from '../data/enemies.js';
@@ -22,6 +24,7 @@ class EnemyActor {
   constructor(e, slot) {
     this.uid = e.uid;
     this.art = e.art;
+    this.id = e.id;
     this.def = ENEMIES[e.id];
     this.slot = slot;
     this.atkT = -1;
@@ -84,12 +87,15 @@ export class BattleView {
     this.lastActor = null;
     this.relayTrail = null;
     this.victoryPlayed = false;
+    this.commandCues = new Map();
+    this.maxParticles = 100;
   }
 
   setCombat(combat, act, variant = 0) {
     this.combat = combat;
     this.bg = new Background(act, variant);
     this.enemyActors.clear();
+    this.commandCues.clear();
     this.fx = [];
     this.particles = [];
     this.numbers = [];
@@ -145,7 +151,9 @@ export class BattleView {
 
   partyPos(id) {
     const [px, py] = PARTY_SLOTS[id];
-    return [px * this.w, py * this.h];
+    const boss = this.combat?.enemies.some((e) => e.tier === 'boss');
+    const docket = this.h < 245 && boss ? Math.max(0, Math.min(213, this.w*.33) + 32 - this.w*PARTY_SLOTS.C[0]) : 0;
+    return [px*this.w + docket, py*this.h];
   }
 
   enemyPos(a) {
@@ -210,34 +218,20 @@ export class BattleView {
 
   // ───────────────────────── events → presentation ─────────────────────────
   consume(events) {
-    let impactAt = { V: 0, C: 0, S: 0 };
-    let lastWho = null;
-    let hitCount = {};
-    let enemyImpact = 0;
     for (const ev of events) {
       switch (ev.type) {
-        case 'act': this.onAct(ev, impactAt); lastWho = ev.who; hitCount = {}; break;
-        case 'echo': this.onEcho(ev, impactAt); lastWho = ev.who; hitCount = {}; break;
-        case 'hit': {
-          const who = ev.by || null;
-          const base = who && impactAt[who] ? impactAt[who] : this.time;
-          const n = (hitCount[ev.uid] = (hitCount[ev.uid] || 0) + 1) - 1;
-          const delay = Math.max(0, base - this.time) + (ev.hit || 0) * 0.07 + (ev.all ? 0 : n * 0.05);
-          this.schedule(delay, () => this.onHit(ev));
+        case 'act': this.onAct(ev); break;
+        case 'execResolve': this.onResolve(ev); break;
+        case 'execEnd':
+          this.commandCues.delete(ev.id);
+          if (this.aiming?.id === ev.id) this.aiming = null;
           break;
-        }
-        case 'enemyAct': enemyImpact = this.onEnemyAct(ev); break;
-        case 'partyHit': this.schedule(ev.reflect ? 0.05 : enemyImpact || 0.2, () => this.onPartyHit(ev)); break;
-        case 'enemyAoe': {
-          const a = this.enemyActors.get(ev.src);
-          if (a) this.schedule(0.18, () => this.waveFrom(a));
-          break;
-        }
-        case 'enemyDie': {
-          const delay = lastWho && impactAt[lastWho] ? Math.max(0, impactAt[lastWho] - this.time) + 0.12 : 0.1;
-          this.schedule(delay, () => this.onEnemyDie(ev));
-          break;
-        }
+        case 'echo': this.onEcho(ev); break;
+        case 'hit': this.onHit(ev); break;
+        case 'enemyAct': this.onEnemyAct(ev); break;
+        case 'partyHit': this.onPartyHit(ev); break;
+        case 'enemyDie': this.onEnemyDie(ev); break;
+        case 'exCombo': this.onRecipe(ev); break;
         case 'guard': this.onGuard(ev); break;
         case 'heal': this.onHeal(ev); break;
         case 'status': this.onStatus(ev); break;
@@ -249,15 +243,15 @@ export class BattleView {
         case 'cashout': this.onCashout(ev); break;
         case 'phase': this.onPhase(ev); break;
         case 'summon': this.assignSlots(); this.onSummon(ev); break;
-        case 'victory': this.schedule(0.7, () => this.onVictory()); break;
-        case 'defeat': this.schedule(0.3, () => { for (const id of ['V', 'C', 'S']) this.actors[id].play('ko'); this.sfx('ko'); }); this.schedule(0.6, () => { this.dim = 1; }); break;
+        case 'victory': this.aiming = null; this.commandCues.clear(); this.schedule(.35, () => this.onVictory()); break;
+        case 'defeat': this.aiming = null; this.commandCues.clear(); this.schedule(0.3, () => { for (const id of ['V', 'C', 'S']) this.actors[id].play('ko'); this.sfx('ko'); }); this.schedule(0.6, () => { this.dim = 1; }); break;
         case 'cover': this.floatAt('V', tr('COVER'), '#9ec4d8', 13); break;
-        case 'covered': this.schedule(enemyImpact || 0.2, () => this.floatAt('V', tr('COVER'), '#9ec4d8', 13)); break;
+        case 'covered': this.floatAt('V', tr('COVER'), '#9ec4d8', 13); break;
         case 'momentum': if (ev.delta > 0 && ev.why === 'Perfect') this.sfx('momentum'); break;
         case 'counter': this.floatAt('V', tr('COUNTER {n}', { n: ev.amount }), '#e6c779', 11); break;
         case 'partyStatus':
           if (ev.kind === 'braced') { this.floatAt(ev.who, tr('BRACED +20%'), '#ffd36a', 13); this.sparkleOn(ev.who, '#ffd36a'); }
-          else this.schedule(enemyImpact || 0.2, () => this.floatAt(ev.who, tr('WEAK'), '#9ec4d8', 13));
+          else this.floatAt(ev.who, tr('WEAK'), '#9ec4d8', 13);
           break;
         case 'heroSelect': this.sparkleOn(ev.who, '#ffd36a'); break;
         case 'enemyGuard': { const a = this.enemyActors.get(ev.uid); if (a) this.enemyNumber(a, `+${ev.amount}`, '#9ec4d8', 12, 'shield'); this.sfx('enemyGuard'); break; }
@@ -266,7 +260,7 @@ export class BattleView {
         case 'drain': this.flashScreen = 0.25; this.flashColor = '#7a4ab0'; this.sfx('drain'); break;
         // target chosen by the player, or moved because the selected enemy died
         case 'target': this.targetFx = { uid: ev.uid, t0: this.time, auto: false }; break;
-        case 'retarget': this.schedule(0.35, () => { this.targetFx = { uid: ev.uid, t0: this.time, auto: true }; this.sfx('click'); }); break;
+        case 'retarget': this.targetFx = { uid: ev.uid, t0: this.time, auto: true }; break;
         case 'atbPush': this.atbPushAt = this.time; break;
         default: break;
       }
@@ -284,60 +278,67 @@ export class BattleView {
     return [x + b[0] * sc * 0.6, y + b[1] * sc * 0.45];
   }
 
-  onAct(ev, impactAt) {
-    const who = ev.who;
-    const actor = this.actors[who];
-    if (!actor) return;
-    const tgtUid = ev.target || this.combat.target;
-    const [tx, ty] = this.targetX(tgtUid);
-    const [hx] = this.partyPos(who);
-    const k = this.unit() * LOOKS[who].scale;
-    let impact = 0;
-    const anim = ev.anim;
-    if (anim === 'melee' || anim === 'counter') {
-      const dx = tx - hx - 34 * k;
-      impact = actor.play(anim === 'counter' ? 'counter' : 'melee', { targetDx: dx });
-      this.schedule(impact, () => { this.slash(tx, ty, ev.big); this.sfx(ev.big ? 'heavyHit' : 'slash'); });
-      this.sfx('whoosh');
-    } else if (anim === 'shoot') {
-      impact = actor.play('shoot');
-      const travel = 0.11;
-      this.schedule(impact, () => { this.projectile(who, tx, ty, 'bolt', travel, ev.big); this.sfx('shoot'); });
-      impact += travel;
-    } else if (anim === 'cast') {
-      impact = actor.play('cast');
-      const travel = 0.16;
-      this.schedule(0.06, () => this.magicCircle(who));
-      this.schedule(impact, () => { this.projectile(who, tx, ty, 'orb', travel, ev.big); this.sfx('cast'); });
-      impact += travel;
-      this.sfx('charge');
-    } else if (anim === 'guard') {
-      impact = actor.play('guard');
-      this.sfx('guardUp');
-    } else {
-      impact = actor.play('buff');
-      this.schedule(0.1, () => this.sparkleOn(who, '#e6c779'));
-      this.sfx('buff');
-    }
-    impactAt[who] = this.time + impact;
-    this.lastActor = who;
-    if (ev.card && ev.role !== 'counter' && ev.role !== 'momentum') this.actBanner(who, ev);
-    if (ev.big) this.zoom = Math.max(this.zoom, 0.04);
+  signal(cue, x, y, more = {}) {
+    this.fx.push({ kind: 'signal', shape: cue.shape, color: cue.color, x, y, t: 0, dur: this.reducedMotion ? .28 : .38, ...more });
   }
 
-  onEcho(ev, impactAt) {
-    const who = ev.who;
-    const [hx, hy] = this.partyPos(who);
-    const [tx, ty] = this.targetX(this.combat.target);
-    const delay = 0.12;
-    this.fx.push({ kind: 'ghost', who, t: 0, dur: 0.6, x: hx + 12, y: hy - 4, anim: ev.anim });
-    this.schedule(delay + 0.1, () => {
-      if (ev.anim === 'melee') this.slash(tx, ty, false, '#c9a8ff');
-      else if (ev.anim === 'shoot' || ev.anim === 'cast') this.projectile(who, tx, ty, ev.anim === 'cast' ? 'orb' : 'bolt', 0.1, false, '#c9a8ff');
-      this.sfx('echo');
-    });
-    impactAt[who] = this.time + delay + 0.2;
-    this.floatAt(who, tr('ECHO {n}%', { n: Math.round(ev.mult * 100) }), '#c9a8ff', 11);
+  weaponOrigin(id) {
+    const actor = this.actors[id];
+    const [x, y] = this.partyPos(id);
+    const k = this.unit() * LOOKS[id].scale;
+    const pose = actor.pose(this.time, false, this.reducedMotion);
+    const tip = weaponTip(LOOKS[id], pose);
+    return [x + (this.reducedMotion ? 0 : actor.rootFrac * actor.targetDx) + tip[0] * k, y + tip[1] * k];
+  }
+
+  onAct(ev) {
+    const actor = this.actors[ev.who];
+    if (!actor) return;
+    const cue = cardCue(ev);
+    if (ev.cmd != null) {
+      this.commandCues.set(ev.cmd, ev);
+      this.aiming = { id: ev.cmd, hero: ev.who };
+    }
+    const age = ev.t == null ? 0 : Math.max(0, this.combat.t - ev.t);
+    actor.play(cue.clip, { age, impact: ev.at, duration: ev.dur, targetDx: this.targetX(this.combat.target)[0] - this.partyPos(ev.who)[0] - 30 * this.unit() });
+    this.lastActor = ev.who;
+    if (ev.cmd == null) {
+      const [x,y] = this.partyPos(ev.who);
+      this.signal(cue, x, y - 29 * this.unit());
+      this.sfx('cue', { cue, voice: ev.who });
+    } else if (ev.big) this.sfx('windup', { cue, voice: ev.who });
+  }
+
+  onResolve(ev) {
+    const event = this.commandCues.get(ev.id);
+    if (!event) return; // finish commands act through their resolved payout/ending events
+    const actor = this.actors[event.who];
+    actor.targetDx = this.targetX(ev.target || this.combat.target)[0] - this.partyPos(event.who)[0] - 30 * this.unit();
+    actor.alignImpact();
+    if (this.aiming?.id === ev.id) this.aiming = null;
+    const cue = cardCue(event);
+    this.sfx('cue', { cue, voice: event.who, strong: event.big });
+    if (event.card) this.actBanner(event.who, event);
+    if (event.category === 'support' || ['anchor','mend','meter','flip','orbit'].includes(cue.clip)) {
+      const [x, y] = this.weaponOrigin(event.who);
+      this.signal(cue, x, y, { size: event.big ? .91 : .73, strong: event.big });
+    }
+  }
+
+  onEcho(ev) {
+    const [x, y] = this.partyPos(ev.who);
+    if (!this.reducedMotion) this.fx.push({ kind: 'ghost', who: ev.who, t: 0, dur: .31, x: x + 8, y, anim: ev.anim });
+    this.floatAt(ev.who, tr('ECHO {n}%', { n: Math.round(ev.mult * 100) }), '#dbadff', 12);
+    this.sfx('echo');
+  }
+
+  onRecipe(ev) {
+    if (!ev.applied) return;
+    const cue = EX_CUES[ev.id];
+    if (!cue) return;
+    const [x, y] = this.partyPos(ev.hero);
+    this.signal(cue, x + ev.order * 15, y - this.unit() * (42 + ev.order * 5), { size: .86, strong: true });
+    this.sfx('recipe', { cue, order: ev.order, voice: ev.hero });
   }
 
   actBanner(who, ev) {
@@ -351,7 +352,7 @@ export class BattleView {
     if (!a) return;
     const [x, y, sc, b] = this.enemyPos(a);
     a.hurt = Math.min(1, a.hurt + (ev.big ? 1 : 0.6));
-    a.flash = 1;
+    a.flash = this.reducedMotion ? 0 : .52;
     const cx = x + (b[0] + b[2]) * 0.5 * sc, cy = y + b[1] * sc * 0.5;
     const tag = ev.tag;
     let color = '#fff4dc', size = 15;
@@ -365,13 +366,19 @@ export class BattleView {
     const text = ev.amount > 0 ? String(ev.amount) : ev.blocked > 0 ? '0' : tr('MISS');
     this.enemyNumber(a, text, color, size);
     if (ev.blocked > 0) this.enemyNumber(a, `▣${ev.blocked}`, '#9ec4d8', 11);
-    const n = ev.big ? 16 : 7;
-    for (let i = 0; i < n; i++) this.particles.push({ x: cx, y: cy, vx: (Math.random() - 0.3) * 260, vy: (Math.random() - 0.7) * 260, life: 0, max: 0.35 + Math.random() * 0.3, size: 2 + Math.random() * 2, color: ev.echo ? '#c9a8ff' : tag === 'scorch' ? '#ff8a3a' : '#ffd890', grav: 500, kind: 'spark' });
-    this.fx.push({ kind: 'ring', x: cx, y: cy, r0: 4, r1: ev.big ? 60 : 28, t: 0, dur: ev.big ? 0.35 : 0.22, color: ev.big ? '#ffd36a' : '#fff0c8' });
-    if (ev.big) { this.shake = Math.max(this.shake, 9); this.flashScreen = Math.max(this.flashScreen, 0.18); this.flashColor = '#fff2d0'; }
-    else this.shake = Math.max(this.shake, 3);
-    if (ev.pierce && ev.big) this.fx.push({ kind: 'pierce', x: cx, y: cy, t: 0, dur: 0.3 });
-    if (tag !== 'scorch') this.sfx(ev.big ? 'impactBig' : 'impact', { amount: ev.amount });
+    const event = this.commandCues.get(ev.cue?.command);
+    const cue = EX_CUES[ev.cue?.recipe] || (ev.echo ? { shape: 'echo', color: '#dbadff' }
+      : event && ev.by === event.who ? cardCue(event)
+      : { shape: tag === 'cashout' ? 'ledger' : tag === 'scorch' ? 'cinders' : tag === 'counter' ? 'cleave' : 'stair', color });
+    const source = ev.by && this.actors[ev.by] && tag !== 'scorch' ? this.weaponOrigin(ev.by) : null;
+    this.signal(cue, cx, cy, {
+      ...(source ? { sx: source[0], sy: source[1] } : {}), strong: ev.big || !!ev.cue?.recipe,
+      ...(ev.echo ? { size: .81 } : {}),
+    });
+    if (!this.reducedMotion && ev.big) this.shake = Math.max(this.shake, 3.5);
+    if (tag !== 'scorch' && (ev.hit || 0) === 0 && !ev.cue?.recipe) {
+      this.sfx(ev.blocked && !ev.amount ? 'block' : 'contact', { amount: ev.amount, strong: ev.big, voice: ev.by, cue });
+    }
   }
 
   enemyNumber(a, text, color, size, icon) {
@@ -388,36 +395,37 @@ export class BattleView {
 
   onEnemyAct(ev) {
     const a = this.enemyActors.get(ev.uid);
-    if (!a) return 0.2;
+    if (!a) return;
+    const cue = ENEMY_CUES[ev.id || a.def.id] || ENEMY_CUES.rush_hound;
     a.attack(ev.kind);
-    const melee = ev.kind === 'atk';
-    this.sfx(melee ? 'enemyAttack' : 'enemyCast', { kind: ev.kind });
     const [x, y, sc, b] = this.enemyPos(a);
-    this.numbers.push({ x: x + (b[0] + b[2]) * 0.5 * sc, y: y + b[1] * sc - 26, text: ev.id ? intentName(ev.id, ev.key) : ev.name, color: '#ffb3a0', t: 0, dur: 1.1, size: 12, vy: -10, label: true });
-    if (['lock', 'scramble', 'jam', 'snare', 'latch', 'glitch'].includes(ev.kind)) {
-      this.fx.push({ kind: 'beam', x1: x + b[0] * sc, y1: y + b[1] * sc * 0.5, x2: this.w * 0.35, y2: this.h * 1.02, t: 0, dur: 0.45, color: ev.kind === 'scramble' ? '#7fd6c2' : '#b48cf0' });
-      this.sfx('interfere', { kind: ev.kind });
-    }
-    if (ev.kind === 'guard' || ev.kind === 'heal' || ev.kind === 'buff') this.fx.push({ kind: 'ring', x: x, y: y + b[1] * sc * 0.5, r0: 10, r1: 80 * sc / this.unit() * 0.5, t: 0, dur: 0.5, color: ev.kind === 'heal' ? '#8ed49a' : '#9ec4d8' });
-    if (ev.target && melee) {
-      const [px, py] = this.partyPos(ev.target);
-      this.schedule(0.16, () => this.slash(px + 10, py - 50 * this.unit(), false, '#ff8a6a'));
-    }
-    return 0.22;
+    const kind = ev.kind;
+    const strike = ['atk','aoe'].includes(kind);
+    const shape = (a.def.tier === 'boss' && strike) ? cue.shape : FOE_ACTION[kind] || cue.shape;
+    this.signal({ ...cue, shape }, x, y + b[1] * sc * .45, { size: a.def.tier === 'boss' ? 1.13 : .72, strong: a.def.tier === 'boss' });
+    this.sfx('foe-cue', { cue, kind, strong: a.def.tier === 'boss' });
+    // The enemy's intention name remains visible in its HUD. Only partyHit draws a victim.
   }
 
   onPartyHit(ev) {
     const actor = this.actors[ev.who];
     const [hx, hy] = this.partyPos(ev.who);
     const k = this.unit();
+    const from = this.enemyActors.get(ev.src);
+    if (from) {
+      const cue = ENEMY_CUES[from.id] || ENEMY_CUES.rush_hound;
+      const [sx,sy] = this.targetX(ev.src);
+      this.signal({ ...cue, shape: ev.blocked && !ev.amount ? 'plates' : from.atkKind === 'aoe' ? 'fan' : cue.shape },
+        hx, hy-46*k, { sx, sy, size: ev.all ? .66 : .81 });
+    }
     if (ev.amount > 0) {
-      actor.flash = 1;
+      actor.flash = this.reducedMotion ? 0 : .62;
       this.partyFlash = 1;
-      if (!actor.down) actor.play(ev.amount >= 12 ? 'stagger' : 'hurt');
+      if (!actor.down && !actor.busy() && !this.reducedMotion) actor.play(ev.amount >= 12 ? 'stagger' : 'hurt');
       this.numbers.push({ x: hx + (Math.random() - 0.5) * 20, y: hy - 70 * k, text: String(ev.amount), color: '#ff6a5a', t: 0, dur: 0.9, size: ev.amount >= 12 ? 20 : 16, vy: -36 });
       this.shake = Math.max(this.shake, ev.amount >= 12 ? 8 : 4);
       this.sfx('partyHurt', { who: ev.who, amount: ev.amount });
-      for (let i = 0; i < 6; i++) this.particles.push({ x: hx, y: hy - 55 * k, vx: (Math.random() - 0.7) * 200, vy: (Math.random() - 0.8) * 200, life: 0, max: 0.4, size: 2.5, color: '#ff8a6a', grav: 500, kind: 'spark' });
+      for (let i = 0; i < (this.reducedMotion ? 0 : 4); i++) this.particles.push({ x: hx, y: hy - 55 * k, vx: (Math.random() - 0.7) * 200, vy: (Math.random() - 0.8) * 200, life: 0, max: 0.4, size: 2.5, color: '#ff8a6a', grav: 500, kind: 'spark' });
     }
     if (ev.blocked > 0) {
       if (ev.amount === 0 && !actor.down && !actor.busy()) actor.play('block');
@@ -433,13 +441,12 @@ export class BattleView {
     a.dieT = 0;
     const [x, y, sc, b] = this.enemyPos(a);
     const cx = x + (b[0] + b[2]) * 0.5 * sc, cy = y + b[1] * sc * 0.5;
-    for (let i = 0; i < (ev.boss ? 60 : 24); i++) {
+    const cue = ENEMY_CUES[a.id] || ENEMY_CUES.rush_hound;
+    for (let i = 0; i < (this.reducedMotion ? 0 : ev.boss ? 35 : 10); i++) {
       this.particles.push({ x: cx + (Math.random() - 0.5) * 30, y: cy + (Math.random() - 0.5) * 30, vx: (Math.random() - 0.5) * 420, vy: -Math.random() * 380, life: 0, max: 0.8 + Math.random() * 0.6, size: 3 + Math.random() * 4, color: ['#c9a24a', '#9a3f2a', '#6c6872', '#ffd890'][i % 4], grav: 700, kind: i % 3 === 0 ? 'gear' : 'shard', rot: Math.random() * 6, vr: (Math.random() - 0.5) * 12 });
     }
-    this.fx.push({ kind: 'ring', x: cx, y: cy, r0: 10, r1: ev.boss ? 260 : 110, t: 0, dur: ev.boss ? 0.8 : 0.45, color: '#ffd890' });
-    this.shake = Math.max(this.shake, ev.boss ? 18 : 7);
-    if (ev.boss) { this.flashScreen = 0.6; this.flashColor = '#fff2d0'; }
-    this.sfx(ev.boss ? 'bossDie' : 'enemyDie');
+    this.signal(cue, cx, cy, { size: ev.boss ? 1.74 : .94, dur: ev.boss ? .86 : .35, strong: ev.boss });
+    this.sfx(ev.boss ? 'foe-down' : 'enemyDie', { cue });
   }
 
   onGuard(ev) {
@@ -471,16 +478,18 @@ export class BattleView {
   // incoming hero takes it (relay, when the command resolves) with the Relay count and bonus.
   onRelayStart(ev) {
     const actor = this.actors[ev.from];
-    if (actor) actor.play('buff');
+    if (actor) actor.play('handoff', { impact: ev.at, duration: ev.dur });
     const [x1, y1] = this.partyPos(ev.from);
     const [x2, y2] = this.partyPos(ev.to);
     const k = this.unit();
-    this.fx.push({ kind: 'relay', x1, y1: y1 - 60 * k, x2, y2: y2 - 60 * k, t: 0, dur: 0.45, color: OWNER_COLORS[ev.to] });
+    if (!this.reducedMotion) this.fx.push({ kind: 'relay', x1, y1: y1 - 60 * k, x2, y2: y2 - 60 * k, t: 0, dur: ev.at || .25, color: OWNER_COLORS[ev.to] });
     this.sfx('whoosh');
   }
+
   onRelay(ev) {
     const from = ev.from || this.lastActor;
     if (!from || from === ev.to) return;
+    this.actors[ev.to].play('catch');
     this.sparkleOn(ev.to, OWNER_COLORS[ev.to]);
     this.floatAt(ev.to, tr('RELAY {n} · +{b}%', { n: ev.n || 1, b: ev.bonus || 0 }), OWNER_COLORS[ev.to], 14);
     this.zoom = Math.max(this.zoom, 0.03);
@@ -491,11 +500,13 @@ export class BattleView {
     if (ev.kind === 'perfect') {
       this.sfx(ev.finisher ? 'finisher' : 'perfect');
       if (ev.finisher) {
-        this.zoom = 0.09;
-        this.flashScreen = 0.4;
-        this.flashColor = '#ffe9b0';
-        if (this.hooks.cutin) this.hooks.cutin({ owners: ev.owners, len: ev.len, damage: ev.damage });
-      } else this.zoom = Math.max(this.zoom, 0.035);
+        const members = ev.owners?.length ? ev.owners : [ev.hero];
+        for (const id of members) {
+          if (!this.actors[id].busy()) this.actors[id].play('finish');
+          const [x,y] = this.partyPos(id);
+          this.signal({ shape: 'stair', color: OWNER_COLORS[id] }, x, y - 36*this.unit(), { size: .81 });
+        }
+      }
       if (this.hooks.banner) this.hooks.banner(ev.finisher ? tr('FINISHER') : tr('PERFECT'), tr('{n} {n|card|cards} · {d} dmg', { n: ev.len, d: ev.damage }), 'good');
     } else if (ev.kind === 'forced') {
       this.sfx('dropped');
@@ -505,17 +516,16 @@ export class BattleView {
 
   onCashout(ev) {
     const [tx, ty] = this.targetX(this.combat.target);
-    for (let i = 0; i < 18; i++) this.particles.push({ x: tx, y: ty, vx: (Math.random() - 0.5) * 300, vy: -Math.random() * 360, life: 0, max: 0.9, size: 4, color: '#ffd36a', grav: 700, kind: 'coin', rot: Math.random() * 6, vr: 8 });
+    for (let i = 0; i < (this.reducedMotion ? 0 : 10); i++) this.particles.push({ x: tx, y: ty, vx: (Math.random() - 0.5) * 300, vy: -Math.random() * 360, life: 0, max: 0.9, size: 4, color: '#ffd36a', grav: 700, kind: 'coin', rot: Math.random() * 6, vr: 8 });
     this.sfx('cashout', { quick: ev.quick });
     if (this.hooks.banner && ev.scale >= 1) this.hooks.banner(ev.quick ? tr('QUICK CASH OUT') : tr('CASH OUT'), tr('Payout {n}', { n: ev.amount }), 'gold');
   }
 
   onPhase(ev) {
-    this.flashScreen = 0.7;
-    this.flashColor = '#ff6a4a';
-    this.shake = 16;
-    this.zoom = 0.06;
-    this.sfx('phase');
+    const cue = ENEMY_CUES[ev.id] || ENEMY_CUES.signalbreak_core;
+    const [x, y] = this.targetX(ev.uid);
+    this.signal(cue, x, y, { size: 1.9, dur: .74, strong: true });
+    this.sfx('foe-phase', { cue, strong: true, phase: ev.idx || 0 });
     if (this.hooks.banner) this.hooks.banner(ev.id ? phaseName(ev.id, ev.idx) : ev.name, ev.id ? phaseText(ev.id, ev.idx) : ev.text, 'bad');
   }
 
@@ -534,34 +544,10 @@ export class BattleView {
   }
 
   // ───────────────────────── effect spawners ─────────────────────────
-  slash(x, y, big, color) {
-    this.fx.push({ kind: 'slash', x, y, r: big ? 70 : 42, ang: -0.6 + Math.random() * 0.3, t: 0, dur: big ? 0.28 : 0.2, color: color || (big ? '#ffd36a' : '#fff4dc'), big });
-  }
-
-  projectile(who, tx, ty, kind, dur, big, color) {
-    const actor = this.actors[who];
-    const [hx, hy] = this.partyPos(who);
-    const k = this.unit() * LOOKS[who].scale;
-    const tip = weaponTip(LOOKS[who], actor.lastPose);
-    const sx = hx + actor.rootFrac * actor.targetDx + tip[0] * k, sy = hy + tip[1] * k;
-    this.fx.push({ kind: kind === 'orb' ? 'orb' : 'bolt', x1: sx, y1: sy, x2: tx, y2: ty, t: 0, dur, color: color || (kind === 'orb' ? '#f0b25a' : '#ffe6a0'), big });
-    for (let i = 0; i < 5; i++) this.particles.push({ x: sx, y: sy, vx: 120 + Math.random() * 120, vy: (Math.random() - 0.5) * 120, life: 0, max: 0.2, size: 2, color: '#fff0c0', grav: 0, kind: 'spark' });
-  }
-
-  magicCircle(who) {
-    const [hx, hy] = this.partyPos(who);
-    this.fx.push({ kind: 'circle', x: hx, y: hy, t: 0, dur: 0.6, color: '#f0b25a' });
-  }
-
   sparkleOn(who, color) {
     const [hx, hy] = this.partyPos(who);
     const k = this.unit();
-    for (let i = 0; i < 12; i++) this.particles.push({ x: hx + (Math.random() - 0.5) * 40 * k, y: hy - Math.random() * 90 * k, vx: 0, vy: -40 - Math.random() * 40, life: 0, max: 0.8, size: 2.5, color, grav: -20, kind: 'spark' });
-  }
-
-  waveFrom(a) {
-    const [x, y, sc, b] = this.enemyPos(a);
-    this.fx.push({ kind: 'wave', x: x + b[0] * sc, y: y - 20, t: 0, dur: 0.5, color: '#ff8a6a' });
+    for (let i = 0; i < (this.reducedMotion ? 0 : 7); i++) this.particles.push({ x: hx + (Math.random() - 0.5) * 40 * k, y: hy - Math.random() * 90 * k, vx: 0, vy: -40 - Math.random() * 40, life: 0, max: 0.8, size: 2.5, color, grav: -20, kind: 'spark' });
   }
 
   // ───────────────────────── frame ─────────────────────────
@@ -576,6 +562,10 @@ export class BattleView {
       }
     }
     for (const a of Object.values(this.actors)) a.update(dt);
+    if (this.aiming && !this.reducedMotion) {
+      const { hero } = this.aiming;
+      this.actors[hero].targetDx = this.targetX(this.combat.target)[0] - this.partyPos(hero)[0] - 30 * this.unit();
+    }
     if (this.combat) {
       for (const e of this.combat.enemies) {
         if (!this.enemyActors.has(e.uid) && e.alive) this.assignSlots();
@@ -599,7 +589,7 @@ export class BattleView {
       p.y += p.vy * dt;
       if (p.rot !== undefined) p.rot += (p.vr || 0) * dt;
     }
-    this.particles = this.particles.filter((p) => p.life < p.max);
+    this.particles = this.reducedMotion ? [] : this.particles.filter((p) => p.life < p.max).slice(-this.maxParticles);
     for (const n of this.numbers) n.t += dt;
     this.numbers = this.numbers.filter((n) => n.t < n.dur);
     this.shake = Math.max(0, this.shake - dt * 40);
@@ -613,14 +603,14 @@ export class BattleView {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
     if (!this.combat) return;
-    const t = this.time;
+    const t = this.reducedMotion ? 0 : this.time;
     ctx.save();
     const sh = this.reducedMotion || !this.shakeEnabled ? 0 : this.shake;
     const z = this.reducedMotion ? 0 : this.zoom;
     ctx.translate(w / 2 + (Math.random() - 0.5) * sh, h * 0.7 + (Math.random() - 0.5) * sh);
     ctx.scale(1 + z, 1 + z);
     ctx.translate(-w / 2, -h * 0.7);
-    this.bg.draw(ctx, t, w, h, dpr);
+    this.bg.draw(ctx, this.reducedMotion ? 0 : t, w, h, dpr);
 
     // depth-sorted drawables
     const list = [];
@@ -635,14 +625,14 @@ export class BattleView {
     this.drawGuardDome(ctx, t, false);
     this.drawFx(ctx, t);
     this.drawParticles(ctx);
-    this.bg.drawForeground(ctx, t, w, h);
+    this.bg.drawForeground(ctx, this.reducedMotion ? 0 : t, w, h);
     ctx.restore();
 
     this.drawEnemyHud(ctx, t);
     this.incoming = this.drawIncoming(ctx, t);
     this.drawPartyHud(ctx, t);
     this.drawNumbers(ctx);
-    if (this.flashScreen > 0) {
+    if (!this.reducedMotion && this.flashScreen > 0) {
       ctx.fillStyle = hexToRgba(this.flashColor, this.flashScreen * 0.6);
       ctx.fillRect(0, 0, w, h);
     }
@@ -657,8 +647,9 @@ export class BattleView {
     const [hx, hy] = this.partyPos(id);
     const look = LOOKS[id];
     const k = this.unit() * look.scale;
-    const pose = actor.pose(t);
-    const x = hx + actor.rootFrac * actor.targetDx;
+    const drawT = this.reducedMotion ? 0 : t;
+    const pose = actor.pose(drawT, this.combat.heroState(id) === 'RECOVERING', this.reducedMotion);
+    const x = hx + (this.reducedMotion ? 0 : actor.rootFrac * actor.targetDx);
     // shadow
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ellipse(ctx, x, hy + 2, 22 * k, 5 * k);
@@ -666,7 +657,7 @@ export class BattleView {
     // active-actor highlight during combos
     const c = this.combat;
     if (c && c.combo && c.combo.owner === id) {
-      glow(ctx, x, hy - 40 * k, 70 * k, OWNER_COLORS[id], 0.35 + 0.1 * Math.sin(t * 8));
+      glow(ctx, x, hy - 40 * k, 70 * k, OWNER_COLORS[id], 0.30 + 0.08 * Math.sin(drawT * 8));
       ctx.strokeStyle = hexToRgba(OWNER_COLORS[id], 0.8);
       ctx.lineWidth = 2;
       ellipse(ctx, x, hy + 2, 26 * k, 7 * k);
@@ -678,12 +669,12 @@ export class BattleView {
     const down = actor.down;
     if (down) ctx.globalAlpha = 0.75;
     if (down && 'filter' in ctx) ctx.filter = 'grayscale(0.85) brightness(0.7)';
-    drawCharacter(ctx, look, pose, t);
+    drawCharacter(ctx, look, pose, drawT);
     if (down && 'filter' in ctx) ctx.filter = 'none';
-    if (actor.flash > 0) {
+    if (!this.reducedMotion && actor.flash > 0) {
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = actor.flash * 0.55;
-      drawCharacter(ctx, look, pose, t);
+      drawCharacter(ctx, look, pose, drawT);
     }
     ctx.restore();
     // ghost echoes
@@ -705,13 +696,13 @@ export class BattleView {
     const e = this.combat.enemies.find((x) => x.uid === a.uid);
     if (!e) return;
     if (a.dieT > 1.0) return;
-    const [x, y, sc] = this.enemyPos(a);
+    const [x, y, sc, b] = this.enemyPos(a);
     const atk = a.atkCurve();
     const melee = a.atkKind === 'atk';
-    const lunge = melee ? -atk * this.w * 0.12 : -atk * this.w * 0.015;
-    const shake = a.hurt > 0 ? Math.sin(t * 70) * a.hurt * 4 : 0;
-    const kb = a.hurt * 8;
-    const flyBob = a.def.flying ? Math.sin(t * 2 + a.slot) * 6 : 0;
+    const lunge = this.reducedMotion ? 0 : melee ? -atk * this.w * 0.035 : -atk * this.w * 0.008;
+    const shake = a.hurt > 0 && !this.reducedMotion ? Math.sin(t * 36) * a.hurt * 2 : 0;
+    const kb = this.reducedMotion ? 0 : a.hurt * 6;
+    const flyBob = a.def.flying && !this.reducedMotion ? Math.sin(t * 2 + a.slot) * 6 : 0;
     const wind = e.alive ? clamp((e.atb - 0.8) / 0.2, 0, 1) : 0;
     const blackout = this.combat.trait === 'BLACKOUT' && e.atb < 0.75;
     void blackout;
@@ -723,24 +714,34 @@ export class BattleView {
     // telegraph aura
     if (wind > 0) glow(ctx, x + lunge, y - 40 * sc, 70 * sc, '#ff5a3a', wind * 0.45);
     ctx.save();
-    ctx.translate(x + lunge + shake + kb, y + flyBob);
+    const cue = ENEMY_CUES[e.id] || ENEMY_CUES.rush_hound;
+    const pose = enemyPose(cue, wind, atk, t, this.reducedMotion);
+    ctx.translate(x + lunge + shake + kb + pose.x * sc, y + flyBob + pose.y * sc);
+    ctx.rotate(pose.angle);
+    ctx.scale(pose.sx, pose.sy);
     let alpha = a.spawnT;
     if (a.dieT >= 0) {
       const p = clamp(a.dieT / 1.0, 0, 1);
       alpha *= 1 - p;
-      ctx.translate(0, p * 20 * sc);
-      ctx.rotate(p * 0.25);
+      if (!this.reducedMotion) {
+        ctx.translate(0, p * (cue.motion === 'mirror' ? -12 : 20) * sc);
+        ctx.rotate(p * (cue.motion === 'press' ? -.32 : .22));
+        if (cue.motion === 'reactor') ctx.scale(1 + p*.27, 1 - p*.35);
+      }
     }
     ctx.scale(sc, sc);
     ctx.globalAlpha = alpha;
     const art = ENEMY_ART[a.art];
-    const params = { t: t + a.slot * 1.7, wind, atk, hurt: a.hurt, phase: e.phase, parry: e.st.parry || 0 };
+    const params = { t: this.reducedMotion ? 0 : t + a.slot * 1.7, wind, atk: this.reducedMotion ? 0 : atk,
+      hurt: this.reducedMotion ? 0 : a.hurt, phase: e.phase, parry: e.st.parry || 0 };
     art(ctx, params);
-    if (a.flash > 0 || (a.dieT >= 0 && a.dieT < 0.3)) {
+    if (!this.reducedMotion && a.flash > 0) {
       ctx.globalCompositeOperation = 'lighter';
       ctx.globalAlpha = Math.max(a.flash, a.dieT >= 0 ? 1 - a.dieT / 0.3 : 0) * 0.6 * alpha;
       art(ctx, params);
     }
+    drawEnemySignal(ctx, cue, { t, wind, hit: atk, die: Math.max(0,a.dieT), phase: e.phase,
+      top: b[1], boss: e.tier === 'boss', reduced: this.reducedMotion });
     ctx.restore();
   }
 
@@ -782,6 +783,7 @@ export class BattleView {
   drawFx(ctx, t) {
     for (const f of this.fx) {
       const p = f.t / f.dur;
+      if (f.kind === 'signal') { drawSignal(ctx, f, p, this.reducedMotion); continue; }
       ctx.save();
       switch (f.kind) {
         case 'slash': {
@@ -952,7 +954,7 @@ export class BattleView {
       ctx.globalAlpha = p > 0.7 ? 1 - (p - 0.7) / 0.3 : 1;
       const size = Math.round(n.size * pop);
       ctx.font = `${n.label ? 700 : 900} ${size}px "Big Shoulders Display", "Barlow Condensed", Impact, sans-serif`;
-      const y = n.y + n.vy * n.t;
+      const y = n.y + (this.reducedMotion ? 0 : n.vy * n.t);
       ctx.lineWidth = n.label ? 3 : 4;
       ctx.strokeStyle = 'rgba(20,8,14,0.9)';
       ctx.strokeText(n.text, n.x, y);
@@ -981,7 +983,7 @@ export class BattleView {
 
   drawBars(ctx, e, bx, top, bw, compact, t) {
     const c = this.combat;
-    const fs = compact ? 10 : 12;
+    const fs = compact ? 12 : 13;
     // name
     ctx.font = `700 ${fs}px "Barlow Condensed", "Arial Narrow", sans-serif`;
     ctx.textAlign = 'left';
@@ -1200,7 +1202,7 @@ export class BattleView {
     for (const [id, th] of Object.entries(threat)) {
       const [hx, hy] = this.partyPos(id);
       const urgency = clamp((th.atb - 0.55) / 0.45, 0, 1);
-      const pulse = 0.55 + 0.45 * Math.sin(t * (6 + urgency * 10));
+      const pulse = this.reducedMotion ? .70 : .55 + .45 * Math.sin(t * (6 + urgency * 10));
       ctx.save();
       ctx.beginPath();
       ctx.ellipse(hx, hy - 2, 30 * k + 10, 7 * k + 4, 0, 0, Math.PI * 2);
@@ -1217,19 +1219,19 @@ export class BattleView {
   partyBarRect() {
     const compact = this.h < 300;
     const w = Math.round(Math.min(this.w * 0.3, compact ? 250 : 340));
-    return { x: Math.max(26, Math.round(this.w * 0.03)), y: compact ? 44 : 58, w, h: compact ? 10 : 13, compact };
+    return { x: Math.max(26, Math.round(this.w * 0.03)), y: compact ? 33 : 52, w, h: compact ? 10 : 13, compact };
   }
 
   drawPartyBar(ctx) {
     const c = this.combat;
     const { x, y, w, h, compact } = this.partyBarRect();
-    const fs = compact ? 11 : 13;
+    const fs = compact ? 12 : 14;
     const maxHp = Math.max(1, c.maxHp);
     const hp = clamp(c.hp / maxHp, 0, 1);
     const guard = Math.floor(c.guard);
     const incoming = Object.values(this.incoming || {}).reduce((a, th) => a + th.dmg, 0);
     const loss = clamp(Math.max(0, incoming - guard) / maxHp, 0, hp);
-    const flash = this.partyFlash > 0;
+    const flash = !this.reducedMotion && this.partyFlash > 0;
     const hpTxt = `${Math.max(0, Math.ceil(c.hp))}/${c.maxHp}`;
     const gTxt = guard >= 1 ? `▣${guard}` : '';
     ctx.font = `800 ${fs}px "Barlow Condensed", "Arial Narrow", sans-serif`;
@@ -1257,7 +1259,7 @@ export class BattleView {
     ctx.fillStyle = lin(ctx, 0, y, 0, y + h, hp < 0.3 ? ['#ff7a5a', '#b8362a'] : ['#8ed49a', '#4f9a5e']);
     ctx.fillRect(bx, y, bw * (hp - loss), h);
     if (loss > 0) {
-      const pulse = 0.55 + 0.45 * Math.sin(this.time * 9);
+      const pulse = this.reducedMotion ? .65 : .55 + .45 * Math.sin(this.time * 9);
       ctx.fillStyle = `rgba(255,80,58,${0.55 + 0.4 * pulse})`;
       ctx.fillRect(bx + bw * (hp - loss), y, bw * loss, h);
     }
@@ -1278,7 +1280,7 @@ export class BattleView {
     const compact = this.h < 300;
     const k = this.unit();
     this.drawPartyBar(ctx);
-    const fs = compact ? 10 : 12;
+    const fs = compact ? 12 : 13;
     for (const p of c.party) {
       const [hx, hy] = this.partyPos(p.id);
       const by = hy + (compact ? 6 : 9);

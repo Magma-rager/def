@@ -58,7 +58,9 @@ class App {
     this.rotateText = h('div', { class: 'rotate-text' });
     this.rotateHint = h('div', { class: 'rotate-hint', 'aria-live': 'polite' }, h('div', { class: 'rotate-phone' }), this.rotateText);
     root.append(this.layers.screen, this.layers.dialog, this.layers.modal, this.layers.toast, this.rotateHint);
-    document.documentElement.classList.toggle('reduced-motion', !!this.settings.reducedMotion);
+    this.systemMotion = matchMedia('(prefers-reduced-motion: reduce)');
+    this.systemMotion.addEventListener('change', () => this.syncMotion());
+    this.syncMotion();
     const unlock = () => this.audio.unlock();
     window.addEventListener('pointerdown', unlock, { capture: true });
     window.addEventListener('keydown', unlock, { capture: true });
@@ -76,21 +78,27 @@ class App {
     requestAnimationFrame((t) => this.loop(t));
   }
 
+  syncMotion() {
+    const reduced = !!this.settings.reducedMotion || this.systemMotion.matches;
+    document.documentElement.classList.toggle('reduced-motion', reduced);
+    if (this.battle) this.battle.view.reducedMotion = reduced;
+  }
+
   onResize() {
     const W = window.innerWidth, H = window.innerHeight;
     const r = document.documentElement.style;
-    const deckH = Math.round(Math.max(150, Math.min(300, H * 0.38)));
-    const ctlW = Math.round(Math.max(176, Math.min(290, W * 0.22)));
-    // The compact (phone) layout uses fixed, readable type sizes; the larger layout scales type with
-    // the card width. Use compact on short screens, and also when the cards would come out narrower
-    // than 80px (e.g. 732x510), where scaled type would drop to about 6px.
-    const cardWFor = (cmp) => Math.min((deckH - (cmp ? 26 : 34) - 14) * (cmp ? 0.86 : 0.72), (W - ctlW - (cmp ? 58 : 82) - 16 - 7 * 6) / 6);
-    const compact = H < 500 || cardWFor(false) < 80;
-    const stripH = compact ? 26 : 34;
+    const insets = getComputedStyle(this.root);
+    const horizontal = parseFloat(insets.paddingLeft) + parseFloat(insets.paddingRight);
+    const usable = W - horizontal;
+    const desktopTray = Math.round(Math.max(168, Math.min(315, H * .40)));
+    const ctlW = Math.round(Math.max(176, Math.min(290, usable * .22)));
+    const fit = (usable - ctlW - 82 - 16 - 7 * 6) / 6;
+    const compact = H <= 540 || fit < 100;
+    const deckH = compact ? Math.round(Math.min(259, Math.max(219, H * .582))) : desktopTray;
+    const stripH = compact ? 28 : 34;
     const resW0 = compact ? 58 : 82;
-    let cardH = deckH - stripH - 14;
-    let cardW = cardWFor(compact);
-    cardH = Math.min(cardH, cardW / 0.6);
+    const cardH = Math.max(40, deckH - stripH - (compact ? 30 : 32) - (compact ? 30 : 0) - 10);
+    const cardW = compact ? Math.min(142, (usable - resW0 - 16 - 7 * 4) / 6) : Math.min(cardH * .74, fit);
     r.setProperty('--deck-h', deckH + 'px');
     r.setProperty('--strip-h', stripH + 'px');
     r.setProperty('--card-w', Math.floor(cardW) + 'px');
@@ -568,10 +576,7 @@ class App {
       langRow,
       slider('master', t('Master volume')), slider('music', t('Music')), slider('sfx', t('Sound effects')),
       toggle('muted', t('Mute all audio')),
-      toggle('reducedMotion', t('Reduced motion (no zoom/shake/cut-ins)'), () => {
-        document.documentElement.classList.toggle('reduced-motion', s.reducedMotion);
-        if (this.battle) this.battle.view.reducedMotion = s.reducedMotion;
-      }),
+      toggle('reducedMotion', t('Reduced motion (steady camera, fewer flashes and effects)'), () => this.syncMotion()),
       toggle('shake', t('Screen shake'), () => { if (this.battle) this.battle.view.shakeEnabled = s.shake; }),
       toggle('hints', t('Tutorial hints')),
       toggle('relaxed', t('Assist: relaxed enemy speed (−25% enemy ATB; Flow rules unchanged)')),

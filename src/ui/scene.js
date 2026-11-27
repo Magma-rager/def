@@ -27,6 +27,8 @@ export function liveScene(canvas, { act = 1, party = false, enemy = null, icon =
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     t += dt;
+    const reduced = document.documentElement.classList.contains('reduced-motion');
+    const sceneTime = reduced ? 0 : t;
     const r = canvas.getBoundingClientRect();
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = Math.max(1, Math.floor(r.width)), h = Math.max(1, Math.floor(r.height));
@@ -35,7 +37,7 @@ export function liveScene(canvas, { act = 1, party = false, enemy = null, icon =
       canvas.height = Math.round(h * dpr);
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    bg.draw(ctx, t, w, h, dpr);
+    bg.draw(ctx, sceneTime, w, h, dpr);
     const k = Math.min(h * 0.0036, w * 0.0024);
     if (actors) {
       const slots = enemy || left ? { C: [0.14, 0.76], S: [0.24, 0.9], V: [0.34, 0.82] } : { C: [0.3, 0.76], S: [0.45, 0.9], V: [0.6, 0.82] };
@@ -50,7 +52,7 @@ export function liveScene(canvas, { act = 1, party = false, enemy = null, icon =
         ctx.save();
         ctx.translate(px * w, py * h);
         ctx.scale(k * LOOKS[id].scale, k * LOOKS[id].scale);
-        drawCharacter(ctx, LOOKS[id], a.pose(t), t);
+        drawCharacter(ctx, LOOKS[id], a.pose(sceneTime, false, reduced), sceneTime);
         ctx.restore();
       }
     }
@@ -67,12 +69,12 @@ export function liveScene(canvas, { act = 1, party = false, enemy = null, icon =
       ctx.save();
       ctx.translate(ex, ey);
       ctx.scale(sc, sc);
-      ENEMY_ART[def.art](ctx, { t, wind: 0.5 + 0.5 * Math.sin(t * 1.3) > 0.85 ? 0.6 : 0, atk: 0, hurt: 0, phase: 1 });
+      ENEMY_ART[def.art](ctx, { t: sceneTime, wind: 0.5 + 0.5 * Math.sin(sceneTime * 1.3) > 0.85 ? 0.6 : 0, atk: 0, hurt: 0, phase: 1 });
       ctx.restore();
     }
     if (icon) {
       const s = Math.min(w, h) * 0.32;
-      glow(ctx, w * 0.5, h * 0.48, s * 1.4, '#f0b25a', 0.35 + Math.sin(t * 2) * 0.1);
+      glow(ctx, w * 0.5, h * 0.48, s * 1.4, '#f0b25a', 0.35 + Math.sin(sceneTime * 2) * 0.1);
       drawIcon(ctx, EVENT_ICONS[icon] || icon, w * 0.5, h * 0.48, s, '#efe2c6');
     }
     if (dim) {
