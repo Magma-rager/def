@@ -203,3 +203,10 @@ check. Both PWA layouts passed: 20/20 for the GitHub Pages path and 19/19 for th
 path. The browser used an offline cache, no network requests, Cyrillic fonts, an existing
 run, the Museum, Journal and an unlocked alternative starter. The updated build installed
 and then opened offline.
+
+The final package was generated from `e1a0406cdd5aba4354d3a09b41ab97b876c623db`
+with HTML stamp `e1a0406`. The offline and accessibility checks above were repeated after
+the keyboard, story and EX recap corrections. At 844×390, Chromium's device emulation
+also applied 47 px left and right safe-area insets and a 21 px bottom inset. All six hand
+slots and the tested controls stayed within the safe area, and card effects remained at
+12 CSS px.
