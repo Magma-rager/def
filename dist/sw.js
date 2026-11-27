@@ -1,14 +1,39 @@
 // Offline cache for SIGNAL//BREAK. Installed on the first online launch; afterwards the game
 // starts from the cache, with or without a connection. A new build installs in the background
 // and is used from the next launch.
-const CACHE = 'signalbreak-656d25381180';
+const BUILD = '0adebab12346';
+const PAGE_HASH = 'a6e7646822faa3e9b0e2931865ca2ad6b83c126fc10f66ac5b570d713537932f';
+const PREFIX = 'signalbreak:' + self.registration.scope + ':';
+const CACHE = PREFIX + BUILD;
 const CORE = ["./index.html","./manifest.webmanifest","./icon.svg","./icon-180.png","./icon-192.png","./icon-512.png"];
 self.addEventListener('install', (e) => {
-  // bypass the HTTP cache so a new build never stores a stale copy of the page
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CORE.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
+  e.waitUntil((async () => {
+    const responses = await Promise.all(CORE.map((u) => fetch(u, { cache: 'reload' })));
+    if (responses.some((r) => !r.ok)) throw Error('Incomplete offline build');
+    const digest = await crypto.subtle.digest('SHA-256', await responses[0].clone().arrayBuffer());
+    const actual = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+    if (actual !== PAGE_HASH) throw Error('Offline page does not match the worker build');
+    const cache = await caches.open(CACHE);
+    try {
+      await Promise.all(CORE.map((u, i) => cache.put(u, responses[i])));
+    } catch (error) {
+      await caches.delete(CACHE);
+      throw error;
+    }
+    await self.skipWaiting();
+  })());
 });
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k.startsWith('signalbreak-') && k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(async (key) => {
+      if (key === CACHE) return;
+      if (key.startsWith(PREFIX) || (key.startsWith('signalbreak-') && await caches.match('./index.html', { cacheName: key }))) {
+        await caches.delete(key);
+      }
+    }));
+    await self.clients.claim();
+  })());
 });
 self.addEventListener('fetch', (e) => {
   const req = e.request;
