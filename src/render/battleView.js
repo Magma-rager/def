@@ -153,7 +153,8 @@ export class BattleView {
     const [px, py] = PARTY_SLOTS[id];
     const boss = this.combat?.enemies.some((e) => e.tier === 'boss');
     const docket = this.h < 245 && boss ? Math.max(0, Math.min(213, this.w*.33) + 32 - this.w*PARTY_SLOTS.C[0]) : 0;
-    return [px*this.w + docket, py*this.h];
+    // Keep room below the feet for the name, Defense and Recovery bar.
+    return [px*this.w + docket, Math.min(py*this.h, this.h-27)];
   }
 
   enemyPos(a) {

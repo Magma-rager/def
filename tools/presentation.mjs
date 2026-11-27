@@ -141,11 +141,12 @@ async function captureLayout() {
         const summary = document.querySelector('.ex-rail .banner-sub:not(.banner-new)');
         const summaryFits = summary.scrollWidth <= summary.clientWidth + 1;
         const aboveTray = adapt.bottom <= ex.top && health.y+health.h <= adapt.top;
+        const platesFit = ['V','C','S'].every((id) => bs.view.partyPos(id)[1] + 27 <= bs.view.h);
         const noCover = [...document.querySelectorAll('.controls button,.hand,.pause-btn')].every((n) => {
           const r=n.getBoundingClientRect();
           return r.top >= ex.bottom-.75 || r.bottom <= ex.top+.75;
         });
-        return { minimum, issues, aboveTray, noCover, summaryFits, field:document.querySelector('.field').clientHeight };
+        return { minimum, issues, aboveTray, noCover, summaryFits, platesFit, field:document.querySelector('.field').clientHeight };
       },CARD_LIST.filter((d) => d.p4 !== 'withheld').map((d) => d.id));
       console.log(lang,size,JSON.stringify({ ...record, issues:record.issues.length }));
       if (record.issues.length) console.log('clipping',JSON.stringify(record.issues));
@@ -155,7 +156,7 @@ async function captureLayout() {
     }
   }
   fs.writeFileSync(`${out}/layout.json`,JSON.stringify(result,null,2)+'\n');
-  assert.ok(result.every((r)=>r.aboveTray && r.noCover && r.summaryFits && r.minimum.text >= 12 && r.minimum.reason >= 12),'readable text and geometrically separate combat regions');
+  assert.ok(result.every((r)=>r.aboveTray && r.noCover && r.summaryFits && r.platesFit && r.minimum.text >= 12 && r.minimum.reason >= 12),'readable text and geometrically separate combat regions');
   assert.ok(result.every((r)=>!r.issues.length),'all tested card text is visible');
 }
 
