@@ -88,7 +88,9 @@ Each sample contains 30 ordinary focused campaigns per direction with the same p
 starter. The Phase 11 audit and its uptake summaries cover all acquisitions and the ten
 strategy paths. Phase 12 retains the original focused tests, including Reserve formation on
 all three seeds and mechanics exercised in combat. The aggregate does not establish equal
-strength or isolate the value of a single card.
+strength or isolate the value of a single card. The per-build export reports stage clears,
+formation, offers, pivot opportunities and actual mechanics. Offer and deck means are per
+run. Combat means are per recorded encounter. [Focused campaign metrics](phase12/focused-builds.csv)
 
 - Cash Out averaged 34.27 seconds and 25.83 Guard absorbed per fight. The Guard specialist
   absorbed 45.99 in 47.73 seconds. These are distinct tempo and defensive strategies.
@@ -98,8 +100,8 @@ strength or isolate the value of a single card.
   reducing Guard from two-card payouts lost two Cash Out wins across 90 campaigns and two
   learner wins in the third range, even though it helped the earliest learner ranges. That
   change was left out. Cash Out remains the leading policy result and a beta observation priority.
-- Interference averaged only about 0.27 battles with a documented response, with a battle HP loss
-  improvement from 13.02 to 12.57. Some tagged cards are enablers or positional tools. Versus a
+- Interference recorded a qualifying response in 267/971 battles (27.5%), with a battle HP
+  loss improvement from 13.02 to 12.57. Some tagged cards are enablers or positional tools. Versus a
   clean hand and an enemy with no disruption, the payoff is deliberately lower. Interference
   Reversal and ordinary lock-clearing cards still activate. The separate role and the weaker
   coverage against clean enemies remain without a universal damage buff.
@@ -146,6 +148,11 @@ policy uses that action in visible danger and the learner policy does not. The o
 range, 28 versus 23. On both learner ranges the leader is Ladder Rungs. No account-level
 stats, starter conditions or unlock thresholds changed. Early unlock concentration remains
 a replayability question for the beta rather than a reason to add grinds.
+The five cumulative profile simulations each played eight campaigns. After one run they
+had seven to nine of the ten choices, including a learner and a variety profile that lost.
+The learner's first victory was run four and it still had nine at the end. The ordinary
+policy acquired Pressure Gauge on run three and Spare Pockets on run four. This verifies
+early choice and the continued mechanical gates, with player motivation still unmeasured.
 
 ## Release-candidate engineering
 
@@ -192,8 +199,10 @@ battery or hardware audio measures were available.
 The eight bilingual viewport sizes were measured on the packaged build, with no detected
 collisions between the sampled card affordances, enemy plates and EX recap. All 16 combinations
 preserved at least 12 CSS pixels for essential card effects. The shortest field is 141 px.
-Rotation, touch selection, browser focus restoration and keyboard input were sampled
-separately. Linux Firefox ESR 153.5.1 and WebKitGTK 2.52.6 each opened the package at phone
+Rotation, touch selection and keyboard input were sampled separately. Chromium entered
+and exited fullscreen during a retained battle. A simulated visibility event paused combat,
+and Resume restored it. The virtual desktop did not produce a native hide event during
+tab switching. Linux Firefox ESR 153.5.1 and WebKitGTK 2.52.6 each opened the package at phone
 dimensions, accepted user input, executed a Basic and restored the same run and language.
 These were smoke tests. Firefox audio remained suspended in the headless test. WebKitGTK
 entered a running audio context, while the host had no usable PCM output. Safari, fullscreen
@@ -206,14 +215,17 @@ Sound quality and device interruption behavior belong to direct listening and ph
 
 See [crowded compact field](phase12/compact-formation.jpg),
 [Mirror Array and the EX recap](phase12/compact-mirror.jpg), and
-[offline campaign results](phase12/offline-results.jpg). The Mirror fixture and scheduler
-frame sequences are controlled presentation evidence. The campaign is ordinary progression.
+[offline campaign results](phase12/offline-results.jpg). The Mirror fixture and
+[scheduler contact frames](phase12/motion-samples.jpg) are controlled presentation evidence.
+The top row shows Bolt Volley and the bottom row Grand Relay, in scheduler order from left
+to right. The campaign is ordinary progression.
 
 The larger Russian sweep visited 1,040 rendered screens, including base and upgraded cards.
 It reproduced five small overflows at 740×360 on Dead Drop, Mirror Wire and Pressure Splice.
 Their final compact wording keeps the conditions and values. The detail views retain the
 full wording. In a dedicated packaged retest, all six versions remained at 12 px and fit
-without measured overflow. [Before and after, top then bottom](phase12/compact-copy-comparison.jpg).
+without measured overflow. Repeating the 740×360 slice checked 354 English and 354 Russian
+screens with zero reported issues. [Before and after, top then bottom](phase12/compact-copy-comparison.jpg).
 
 A second packaged performance sample found median warm readiness about 557 ms, simple and
 crowded active draw p95 of 3.1 and 5.7 ms, 0 paused draws, 7 ms button-to-paint and 1.4 ms
@@ -230,7 +242,7 @@ and pause result, with the spread of the remaining timings visible.
 | R4 targeting | 36/36 over English and Russian touch viewports. The queued attack fixture records one hit and one command still waiting before the retarget. Death, indicators and target cycling were checked separately. |
 | R5 early survivability and content | 60/60 opening and Act I completions for every measured policy and loadout. The original Phase 8 focused formation suite passed 11/11, with all ten actual build paths represented. |
 | R6 presentation and accessibility | Sixteen bilingual layout combinations, Russian full-surface sweep and fixed-card retest, reduced motion, muted state, animated combat fixtures, and the snapshot comparisons above. The engine and Canvas checks were run separately from the sweep. |
-| R7 saves, localization, offline and progression | Russian Phase 7 EX fixture 47/47, Phase 8 interface scenario 51/51, Phase 9 historical and interrupted-finalization fixtures 6/6 and 3/3, plus complete ordinary campaigns and real worker cache replacement. |
+| R7 saves, localization, offline and progression | Russian Phase 7 EX fixture 47/47, Phase 8 interface scenario 51/51, Phase 9 interface, all-loadout, historical and interrupted-finalization fixtures 23/23, 12/12, 6/6 and 3/3, plus complete ordinary campaigns and real worker cache replacement. |
 
 The eight Phase 4 failures carried through Phase 10 no longer reproduced as a group. The
 historical suite initially recorded 22/23. Its single intermittent missed snapshot was a
@@ -245,16 +257,19 @@ cancellation, all three heroes, and actual outcome, and the tutorial suite check
 as its own interaction. Phase 6's initial queue lesson expected an eligible hand at one
 particular moment. The harness now lets the player reach another eligible chain through its
 ordinary controls and asserts the actual paused lesson and executing/waiting UI. The
-returning-player and staged tutorial run passed 32/32. Targeting replaced a wall-clock sleep
+English returning-player and staged tutorial run passed 32/32. The full Russian suite passed
+47/47 through ordinary Act I play, the boss and a resumed Act II checkpoint. Targeting replaced a wall-clock sleep
 between contact and retargeting with browser-clock fixture control. Every gameplay input is
 still a touch and the exact combat queue assertion is stronger.
 
 The earlier Phase 11 → Phase 12 Pages update passed 22/22. The historical mirror path
 completed all cache and save operations but reproduced one page error stamped
 `c35c1c1`, the old build's Canvas radius exception. Candidate-only Pages and mirror packages
-passed 22/22 and 21/21 with interrupted worker publication, isolated off-origin scope
+passed 22/22 and 21/21 with interrupted worker publication, isolated same-origin sibling scope
 coverage and browser-offline restart. The rollback below uses the same game versioning,
 scope and saved profile protocol.
+The final stamp passed the Pages suite 22/22 and the exact upgrade between the two 0.2.12
+candidates passed the mirror suite 21/21.
 
 ### Ordinary gameplay and controlled coverage
 
@@ -264,8 +279,9 @@ scope and saved profile protocol.
 | 0.2.12 EN tablet, fresh Badge, seed 201643931 | 16/16. Tyrant, Mirror Array, Corruptor. Three resumes, credits, next run. |
 | 0.2.12 RU phone, historical profile with Echo Splice, seed 806842376 | 16/16. Tyrant, Mirror Array, Corruptor. Three resumes, credits, next run. |
 | 0.2.12 EN phone offline, fresh Badge, Reserve-focused policy, seed 393416783 | 18/18. Tyrant, Mirror Array, Core. Victory and Reserve-led build through ordinary card offers. Three resumes, credits, Museum, next start, zero network requests while offline. |
+| Final stamp `ba84a11`, RU phone, fresh Badge, seed 843923648 | 16/16 after 17 battles. Regent, Protocol Auditor, Core. Three resumes, 11 EX discoveries, credits, Museum and next run. [Results screenshot](phase12/final-ru-results.jpg) |
 | Earlier 0.2.12 iteration, ordinary seeds 449171355, 46982699, 396826758 | EN tablet Badge, RU phone Echo Splice and EN phone offline Badge. Together with the later candidate runs, ordinary browser victories exercised all six bosses. These runs supply Regent and Protocol Auditor coverage. |
-| Defeat and subsequent start | A separate ordinary fresh run permitted enemy damage through defeat. Results, one defeat record, reload and the new run were checked independently from victory. |
+| Defeat and subsequent start | On the final stamp, a separate fresh run permitted ordinary enemy damage through defeat. Results, one defeat record, reload and the new run were checked independently from victory. |
 
 Historical profiles supplied only the previously earned starting eligibility at session start.
 Campaigns otherwise used actual taps, standard map generation, legal transactions and
@@ -285,9 +301,11 @@ and binary Swift Playgrounds ZIP byte for byte. SHA-256 values for the same buil
 
 - `dist/index.html` `31681edbe19c5893925a2851545781d9475475e67faeb5580f7a79c424fbaef5`.
 - `dist/ios/SignalBreak.swiftpm.zip` `4b54c8ccdd7debaba0091b913b5884e89662cb1074facf7463901bfd82e86808`.
-- `git log -1 --format=%H -- dist/index.html` identifies the distribution commit on the development branch.
+- The distribution commit is `f8bc7a248f60f8b24163aef702ca0da64bb8aba7`.
 
 ```sh
+git worktree add --detach /tmp/sb-beta-source ba84a11062b9eb9673c96daecdb0c9c285294aeb
+cd /tmp/sb-beta-source
 npm ci
 npm test
 npm run build:ios
@@ -299,6 +317,11 @@ The archive holds the existing Swift wrapper, Info and icon configuration, and b
 resources. The package declares iOS 16.0, iPhone and iPad families and landscape. Install
 Playwright as a test tool and use the browser build it supports, then run the relevant
 acceptance commands in another terminal.
+
+The production dependency audit found zero advisories. The development audit reported
+one moderate advisory for esbuild's development server. The build uses its bundler and
+the project serves local tests with the separate `tools/serve.mjs` script. No esbuild server
+ships in the package. [Dependency advisory](https://github.com/advisories/GHSA-67mh-4wv8-2f99)
 
 ```sh
 SB_URL=http://localhost:8128/index.html node tools/accept8.mjs campaign en 1194 834 /tmp/sb-beta-en
@@ -327,11 +350,12 @@ workflow served the old source stamp `c35c1c1` and verify an offline relaunch wi
 profile after activation. The Phase 11 source is separately recoverable at
 `c35c1c1ea4671774f5a67276d5ade0bf2b58ee15`. No rollback was performed.
 
-The [development mirror](https://signalbreak-game.website.yandexcloud.net/) is the established
-candidate route. The GitHub Actions [Mirror web app workflow](https://github.com/Magma-rager/def/actions/workflows/mirror.yml)
-publishes the candidate there and checks HTTP 200 and the served source stamp. Direct
-independent Yandex and Pages connections from this environment are refused by the network
-proxy. Alternate hosting and App Store distribution are outside this milestone.
+The deployment runner verified HTTP 200 and served source stamp `ba84a11` after publishing the
+distribution commit. Independent Yandex and Pages requests from this environment were
+refused by the network proxy. The [Swift Playgrounds ZIP](https://raw.githubusercontent.com/Magma-rager/def/f8bc7a248f60f8b24163aef702ca0da64bb8aba7/dist/ios/SignalBreak.swiftpm.zip)
+was downloaded from the distribution commit and matched the locally validated bytes.
+[Development mirror](https://signalbreak-game.website.yandexcloud.net/) ·
+[Deployment run and served stamp](https://github.com/Magma-rager/def/actions/runs/46042528858)
 
 ## Defect register and beta readiness
 
