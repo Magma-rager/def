@@ -88,6 +88,13 @@ export function drawSignal(ctx, f, p, reduced) {
       arc(ctx,20,-Math.PI*1.2,Math.PI*.25);
       marks(ctx,8,20,-.78,c=>line(c,[0,0,4,0]));
       line(ctx,[0,-13,0,0,10,4]); break;
+    case 'interlock':
+      for (const x of [-1,1]) line(ctx,[x*22,-14,x*9,-14,x*9,-6,x*3,-6,x*3,6,x*9,6,x*9,14,x*22,14]);
+      ring(ctx,0,0,4); break;
+    case 'splice':
+      line(ctx,[-30,-10,-17,-10,-7,0,7,0,17,10,30,10]);
+      line(ctx,[-30,10,-17,10,-7,0,7,0,17,-10,30,-10]);
+      diamond(ctx,0,0,7); break;
     case 'ratchet':
       ring(ctx,0,0,11);
       marks(ctx,6,19,-.2,c=>line(c,[-4,-3,4,-3,4,4,0,4])); break;

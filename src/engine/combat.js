@@ -153,7 +153,7 @@ export class Combat {
     this.guardHoldUntil = 0;
     this.counter = 0;
     this.momentum = 0;
-    this.churn = { charges: this.churnMax(), regen: 0, freeUsed: false };
+    this.churn = { charges: this.churnMax(), regen: 0, freeUsed: false, prepared: null };
     this.citation = null; // Protocol Auditor penalty
 
     // ── enemies ──
@@ -1029,8 +1029,9 @@ export class Combat {
       segments: [{ hero, cards: 0, basics: 0, artes: 0 }],
       // EX Combos (Phase 7): the chain's executed events in order, the recipes already triggered in it,
       // and the Cash Out payout dealt (docs/COMBAT_SPEC.md §28)
-      log: [], ex: new Set(), payout: 0, quick: false,
+      log: [], preparedDraw: this.churn.prepared, churnDraws: new Set(), ex: new Set(), payout: 0, quick: false,
     };
+    this.churn.prepared = null;
     this.phase = 'ACTIVE';
     this.emit({ type: 'comboStart', deadline: this.combo.deadline, hero });
   }
@@ -1125,9 +1126,12 @@ export class Combat {
     const segFirst = c.segCards === 0;
     const relayCard = segFirst && c.relays > 0; // the incoming hero's first card after a Relay
     const seq = segFirst ? { step: false, cross: false, kind: relayCard ? 'relay' : 'open' } : seqCheck(c.rank, c.variant, rank, variant, this.crossIsStep());
+    const duringChurn = c.churnDraws.has(uid);
+    const preparedChurn = c.preparedDraw === uid;
+    this.clearChurnMark(uid);
     const entry = {
       uid, id: d.id, name: d.name, owner: hero, cardOwner: d.owner, category: d.category, rank, variant, seg: c.segments.length - 1,
-      kind: seq.kind, step: !!seq.step, cross: !!seq.cross, relay: relayCard, fromReserve, dmg: 0, spent: cmd.cost, wasLocked, index: c.cards.length,
+      kind: seq.kind, step: !!seq.step, cross: !!seq.cross, relay: relayCard, fromReserve, fromChurn: duringChurn || preparedChurn, duringChurn, dmg: 0, spent: cmd.cost, wasLocked, index: c.cards.length,
       strength: d.category === 'basic' ? d.rank : 0, disrupted: !!(wasLocked || scrambledAtPlay), coverUp: false,
     };
     c.cards.push(entry);
@@ -1179,7 +1183,18 @@ export class Combat {
     if (relayCard) mult *= 1 + c.relayBoost; // +10% per Relay so far (docs/COMBAT_SPEC.md §9)
 
     const api = this.makeApi(entry, inst, d, { mult, bonus, echoing: false, disruptedAtPlay, ctx: c });
+    if (fromReserve && inst.graft === 'pocket_seal' && !c.pocketSealUsed) {
+      c.pocketSealUsed = true;
+      api.status('exposed', 3);
+    }
+    if (fromReserve) this.slipCase();
     d.fx(api);
+    if (preparedChurn) this.gainMomentum(1, 'Churn draw');
+    if (entry.fromChurn && !c.reclaimed) {
+      c.reclaimed = true;
+      if (this.relics.has('index_spring')) { this.addGuard(5); this.gainMomentum(1, { relic: 'index_spring' }); }
+      if (this.mutations.has('reclaim_circuit')) { this.addGuard(7); this.addFlow(1.25, 'card'); }
+    }
     if (entry.disrupted && entry.dmg > 0) this.progress.responseBattles = 1;
     this.coverCheck(d);
     // Echoing graft (spec §18.2): the first card after a Relay Echoes itself at 30%
@@ -1227,6 +1242,7 @@ export class Combat {
     const fromReserve = cmd.zone === 'reserve';
     const hero = cmd.hero;
     if (cmd.slot >= 0) this.heldSlots.delete(cmd.slot);
+    this.clearChurnMark(uid);
     const ctx = this.combo || { cards: [], len: 0, damage: 0, rank: 0, variant: null, owners: [hero], suits: [], stored: [], steps: 0, crosses: 0, relays: 0 };
     const entry = { uid, id: d.id, name: d.name, owner: hero, cardOwner: d.owner, category: 'support', rank: 0, variant: null, kind: 'support', step: false, cross: false, relay: false, fromReserve, dmg: 0, spent: cmd.cost, index: -1, target: cmd.target };
     this.stats.supports++;
@@ -1251,6 +1267,7 @@ export class Combat {
     }
     const api = this.makeApi(entry, inst, d, { mult, bonus: 0, echoing: false, ctx });
     const hp0 = this.hp, guard0 = Math.floor(this.guard), cover0 = this.coverActive();
+    if (fromReserve) this.slipCase();
     d.fx(api);
     this.coverCheck(d);
     if (inst.graft === 'spark') this.gainMomentum(1, 'Spark');
@@ -1259,12 +1276,19 @@ export class Combat {
     // a support action executed while a chain runs is part of that chain's record (EX Combos): what it
     // actually did — healing, Guard, Cover — and whose combo it happened in; outside a chain it is not
     if (this.combo && this.phase === 'ACTIVE') {
-      this.combo.log.push({ k: 'support', id: d.id, hero, attacker: this.combo.hero, heal: Math.max(0, this.hp - hp0), guard: Math.max(0, Math.floor(this.guard) - guard0), cover: !cover0 && this.coverActive() || (d.owner === 'V' && (d.tags || []).includes('guard')) });
+      this.combo.log.push({ k: 'support', id: d.id, hero, attacker: this.combo.hero, fromReserve, heal: Math.max(0, this.hp - hp0), guard: Math.max(0, Math.floor(this.guard) - guard0), cover: !cover0 && this.coverActive() || (d.owner === 'V' && (d.tags || []).includes('guard')) });
     }
     if (d.temp) this.exhaust.push(uid);
     else this.discard.push(uid);
     if (this.phase === 'END') return;
     this.refill();
+  }
+
+  slipCase() {
+    const c = this.combo;
+    if (!c || c.slipCaseUsed || !this.relics.has('slip_case')) return;
+    c.slipCaseUsed = true;
+    this.addGuard(5);
   }
 
   // A Relay resolving (docs/COMBAT_SPEC.md §9): the outgoing hero's segment closes and that hero
@@ -1457,7 +1481,7 @@ export class Combat {
           const u = self.hand[i];
           if (!u || self.isLocked(u)) continue;
           if (self.categoryOf(u) === 'junk') { self.hand[i] = null; self.exhaust.push(u); self.emit({ type: 'churn', uid: u, slot: i, free: true, junk: true }); n++; continue; }
-          if (!self.check(u).ok) { self.hand[i] = null; self.discard.push(u); self.emit({ type: 'churn', uid: u, slot: i, free: true }); n++; }
+          if (!self.check(u).ok) { self.clearChurnMark(u); self.hand[i] = null; self.discard.push(u); self.emit({ type: 'churn', uid: u, slot: i, free: true }); n++; }
         }
         self.refill();
         return n;
@@ -1496,6 +1520,16 @@ export class Combat {
     return api;
   }
 
+  hasChurnMark(uid) {
+    return !!uid && (this.churn.prepared === uid || this.combo?.preparedDraw === uid || !!this.combo?.churnDraws.has(uid));
+  }
+
+  clearChurnMark(uid) {
+    if (this.churn.prepared === uid) this.churn.prepared = null;
+    if (this.combo?.preparedDraw === uid) this.combo.preparedDraw = null;
+    this.combo?.churnDraws.delete(uid);
+  }
+
   churnCard(uid) {
     const slot = this.hand.indexOf(uid);
     if (slot < 0) return { ok: false, text: 'Not in hand' };
@@ -1513,6 +1547,7 @@ export class Combat {
     this.hand[slot] = null;
     if (junk || d.temp) this.exhaust.push(uid);
     else this.discard.push(uid);
+    this.clearChurnMark(uid);
     let churnLog = null;
     if (!junk) {
       this.stats.churns++;
@@ -1538,7 +1573,13 @@ export class Combat {
     if (junk) this.progress.responseBattles = 1;
     this.emit({ type: 'churn', uid, slot, junk });
     this.refill(uid);
-    if (churnLog) churnLog.drew = this.hand[slot] || null; // the card that Churn brought in (Salvage Circuit)
+    const drew = this.hand[slot];
+    if (churnLog) {
+      churnLog.drew = drew || null;
+      if (drew && drew !== uid && this.phase === 'ACTIVE') this.combo.churnDraws.add(drew);
+    } else if (!junk && !stranded && this.phase === 'PRE' && drew && drew !== uid) {
+      this.churn.prepared = drew;
+    }
     this.checkEnd();
     return { ok: true };
   }
@@ -1698,8 +1739,7 @@ export class Combat {
       const end = c.cards.slice(-4);
       const add = (key, condition) => { if (condition) this.progress[key] = (this.progress[key] || 0) + 1; };
       add('crossChains', c.crosses >= 2 && c.steps >= 1);
-      add('churnPayoff', c.log.some((e, i) => e.k === 'churn' && e.drew &&
-        c.log.slice(i + 1).some((next) => next.k === 'card' && c.cards[next.i].uid === e.drew)));
+      add('churnPayoff', c.cards.some((e) => e.duringChurn));
       add('burst', c.cards.reduce((spent, e) => spent + e.spent, 0) >= 8);
       if (type === 'perfect') {
         const attackingHeroes = new Set(c.cards.filter((e) => e.dmg > 0).map((e) => e.owner)).size;
@@ -2259,12 +2299,12 @@ export class Combat {
       case 'ladder': if (this.combo) this.drainFlow(e, 1.5); else this.lockCards(e, 2); break;
       case 'cashout': this.payoutSealUntil = this.t + 8; this.emit({ type: 'banner', text: 'PAYOUT SEALED', sub: 'Cash Out halved for 8s', tone: 'bad' }); this.hitAll(e, this.edmg(e, 6)); break;
       case 'guard': this.hitParty(e, tgt, this.edmg(e, 14), { pierce: true }); break;
-      case 'churn': this.snareChurn(e, 5, 2); this.hitParty(e, tgt, this.edmg(e, 8)); break;
+      case 'churn': this.snareChurn(e, 3, 1); this.hitParty(e, tgt, this.edmg(e, 8)); break;
       case 'variantA': case 'variantB': this.scrambleCards(e, 3, 'suit'); this.hitParty(e, tgt, this.edmg(e, 6)); break;
       case 'relay': this.lockCards(e, 2); this.hitParty(e, tgt, this.edmg(e, 6)); break;
       case 'momentum': { const n = this.available(); this.momentum -= n; this.emit({ type: 'momentum', delta: -n, why: 'Siphoned' }); this.hitAll(e, this.edmg(e, 4 + n)); break; }
       case 'flow': if (this.combo) this.drainFlow(e, 1.5); else this.hitAll(e, this.edmg(e, 8)); break;
-      case 'reserve': this.latchReserve(e); this.latchReserve(e); break;
+      case 'reserve': this.latchReserve(e); break;
       case 'interference': this.lockCards(e, 2); this.scrambleCards(e, 2, 'both'); break;
       default: this.hitAll(e, this.edmg(e, 10));
     }

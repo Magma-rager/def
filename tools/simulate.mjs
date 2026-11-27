@@ -80,7 +80,7 @@ function pickNode(run, rng) {
 
 export function simulateCampaign(seed, {
   starterRelic = 'beta_badge', reaction = REACT, profile = PROFILE, recipeAware = EX, tactics = TACTICS,
-  target = targetFor(seed), meta = null, wanted = target || RELICS[starterRelic].tag,
+  target = targetFor(seed), meta = null, audit = false, wanted = target || RELICS[starterRelic].tag,
 } = {}) {
   if (meta && !canStartWith(meta, starterRelic)) throw new Error(`Locked starter ${starterRelic}`);
   const rng = new RNG(seed * 7 + 1);
@@ -96,6 +96,9 @@ export function simulateCampaign(seed, {
   log.firstOffersByTag = {};
   log.pivotsByTag = {};
   log.target = target;
+  const observations = audit ? { encounters: [], offers: {}, services: {}, plays: {}, acquired: {}, grafts: {} } : null;
+  const add = (o, key) => { o[key] = (o[key] || 0) + 1; };
+  if (observations) log.audit = observations;
   const fits = (id) => !!target && CARDS[id].tags.includes(target);
   let guard = 0;
   while (guard++ < 400) {
@@ -114,6 +117,17 @@ export function simulateCampaign(seed, {
         const { out, t, c } = botBattle(setup, rng, { reaction, profile, recipeAware, tactics });
         if (meta) for (const [id, n] of Object.entries(out.stats.exByRecipe)) {
           for (let i = 0; i < n; i++) addRunRecipe(run, id);
+        }
+        if (observations) {
+          const timeline = c.events.filter((e) => e.type === 'enemyAct').map((e) => e.t);
+          observations.encounters.push({ act: setup.act, kind: setup.kind, enemies: setup.enemies, win: out.victory, seconds: t,
+            hpLost: before - out.hp, damage: out.stats.damage, absorbed: out.stats.guardAbsorbed, actions: timeline.length,
+            minGap: timeline.length > 1 ? Math.min(...timeline.slice(1).map((v,i) => v-timeline[i])) : null,
+            churnPayoff: out.progress.churnPayoff || 0, reservePlays: out.stats.reservePlays, response: out.progress.responseBattles || 0,
+            perfect: out.stats.perfect, cashout: out.stats.cashouts, dropped: out.stats.forced, ex: out.stats.exActivations,
+            momentum: out.stats.momentumSpent, flow: out.stats.flowGained });
+          for (const event of c.events) if (event.type === 'execResolve' && event.cue?.card) add(observations.plays, event.cue.card);
+          for (const inst of setup.deck) if (inst.graft) add(observations.grafts, inst.graft);
         }
         if (!log.opening) log.opening = { victory: out.victory, hpLost: before - out.hp, seconds: t };
         log.battles++;
@@ -156,6 +170,7 @@ export function simulateCampaign(seed, {
       case 'reward': {
         const d0 = run.d.deck.length, r0 = run.d.relics.length;
         prog.offered += p.cards.length;
+        if (observations) for (const card of p.cards) add(observations.offers, card.id);
         const tally = (card, counts) => {
           for (const t of CARDS[card.id].tags) counts[t] = (counts[t] || 0) + 1;
         };
@@ -186,6 +201,7 @@ export function simulateCampaign(seed, {
       }
       case 'mutation': { prog.mutations++; const m = target ? p.options.find((id) => MUTATIONS[id].tag === target) : null; run.chooseMutation(m || p.options[0]); break; }
       case 'event': {
+        if (observations) add(observations.services, p.eventId);
         const ev = EVENT_MAP[p.eventId];
         const i = ev.choices.findIndex((ch, index) => run.eventChoiceReq(index) === true);
         if (i >= 0) run.eventChoose(i);
@@ -200,6 +216,7 @@ export function simulateCampaign(seed, {
       }
       case 'shop': {
         const s = p.stock;
+        if (observations) for (const item of s.cards) add(observations.offers, item.spec.id);
         const sd0 = run.d.deck.length, sr0 = run.d.relics.length, rc0 = run.d.removeCost;
         const shopDone = () => { prog.shopCards += Math.max(0, run.d.deck.length - sd0 + (run.d.removeCost > rc0 ? 1 : 0)); prog.removed += run.d.removeCost > rc0 ? 1 : 0; prog.relics += run.d.relics.length - sr0; };
         if (target) {
@@ -253,6 +270,9 @@ export function simulateCampaign(seed, {
         log.arch = run.archetypeKey();
         log.bossIds = run.d.bossesDefeated.slice();
         log.proofs = run.d.progress.proofs;
+        if (observations) observations.acquired = {
+          cards: run.d.progress.cards, relics: run.d.progress.relics, mutations: run.d.mutations,
+        };
         log.wantedCards = wanted ? (log.tagCounts[wanted] || 0) : 0;
         log.firstActVictory = run.d.bossesDefeated.some((id) => id === run.d.bosses[1]);
         if (meta) log.summary = settleRun(meta, run, log.result);

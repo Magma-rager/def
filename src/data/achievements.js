@@ -1,3 +1,5 @@
+import { RECIPE_IDS } from './recipes.js';
+
 // The profile evaluator and both progression screens share these conditions and targets.
 const achievement = (id, category, name, description, measure, target, { reward, historical = false } = {}) =>
   ({ id, category, name, description, measure, target, reward, historical });
@@ -25,7 +27,7 @@ export const ACHIEVEMENTS = [
 
   achievement('first_recipe', 'collection', 'A New Combination', 'Discover an EX Combo.', 'recipes', 1, { historical: true }),
   achievement('recipe_five', 'collection', 'Combo Researcher', 'Discover five different EX Combos.', 'recipes', 5, { historical: true }),
-  achievement('recipe_all', 'collection', 'Complete Journal', 'Discover every EX Combo.', 'recipes', 15, { historical: true }),
+  achievement('recipe_all', 'collection', 'Complete Journal', 'Discover every EX Combo.', 'recipes', RECIPE_IDS.length, { historical: true }),
   achievement('advanced_recipe', 'collection', 'Deep Signal', 'Discover an advanced EX Combo.', 'advanced', 1, { historical: true }),
   achievement('bestiary', 'collection', 'Field Notes', 'Encounter 18 different enemies.', 'enemies', 18, { historical: true }),
   achievement('relic_collection', 'collection', 'Curator of Broken Things', 'Acquire 20 different relics.', 'relics', 20, { historical: true }),

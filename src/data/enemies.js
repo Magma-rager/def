@@ -28,6 +28,44 @@ const guardAll = (name, g) => ({ kind: 'guard', name, desc: `All enemies gain ${
 const cycle = (...keys) => (e) => keys[e.actCount % keys.length];
 
 export const ENEMIES = {
+  rail_bailiff: {
+    name: 'Rail Bailiff', act: 1, tier: 'normal', hp: 48, actTime: 5.5, art: 'bailiff', size: 1.2,
+    lore: 'A portable crossing barrier with an expansive definition of public property.',
+    intents: {
+      crossbar: atk('Crossbar', 9),
+      custody: { kind: 'guard', name: 'Custody', desc: 'Give 8 Guard to the living ally with least HP, or to itself when alone.',
+        exec: (e, c) => c.enemyGuard(c.aliveEnemies().filter((x) => x !== e).sort((a, b) => a.hp - b.hp)[0] || e, 8) },
+    },
+    ai: cycle('custody', 'crossbar', 'crossbar'),
+  },
+  phase_lantern: {
+    name: 'Phase Lantern', act: 2, tier: 'normal', hp: 55, actTime: 5.5, art: 'lantern', flying: true, size: 1.18,
+    lore: 'A field repair lamp. Opening its shutters also exposes its glass core.',
+    intents: {
+      repair: { kind: 'heal', name: 'Open Shutters', desc: 'Heal the most injured living ally for 10 HP and Expose the Lantern for 4s.',
+        exec: (e, c) => {
+          const ally = c.aliveEnemies().filter((x) => x !== e && x.hp < x.maxHp).sort((a, b) => (b.maxHp - b.hp) - (a.maxHp - a.hp))[0];
+          if (ally) c.healEnemy(ally, 10);
+          c.applyStatus(e, 'exposed', 4);
+        } },
+      arc: atk('Inspection Arc', 10),
+    },
+    ai: cycle('arc', 'repair', 'arc'),
+  },
+  vector_winch: {
+    name: 'Vector Winch', act: 3, tier: 'normal', hp: 76, actTime: 5.7, art: 'winch', size: 1.22,
+    lore: 'A gate spool with a tether for everything but its own safety latch.',
+    intents: {
+      tow: { kind: 'buff', name: 'Tow Signal', desc: 'The fastest living ally acts 30% faster for 5s. Expose the Winch for 3s.',
+        exec: (e, c) => {
+          const ally = c.aliveEnemies().filter((x) => x !== e).sort((a, b) => a.actTime - b.actTime)[0];
+          if (ally) c.hasteEnemy(ally, 1.3, 5);
+          c.applyStatus(e, 'exposed', 3);
+        } },
+      hook: atk('Return Hook', 13),
+    },
+    ai: cycle('tow', 'hook', 'hook'),
+  },
   // ─────────────── ACT I — The Scrapworks ───────────────
   rush_hound: {
     name: 'Rush Hound', act: 1, tier: 'normal', hp: 24, actTime: 3.4, art: 'hound', size: 1,
@@ -325,6 +363,8 @@ export const FORMATIONS = {
     [2, ['iron_maw', 'interference_mite'], 3],
     [3, ['churn_snare', 'rush_hound', 'wire_jammer'], 4],
     [2, ['iron_maw', 'wire_jammer'], 5],
+    [3, ['rail_bailiff', 'rush_hound'], 3],
+    [2, ['rail_bailiff', 'interference_mite'], 5],
   ],
   2: [
     [3, ['suit_scrambler', 'needle_wing'], 0],
@@ -336,6 +376,8 @@ export const FORMATIONS = {
     [3, ['latch_wisp', 'suit_scrambler', 'interference_mite'], 3],
     [2, ['signal_hound', 'wire_jammer', 'needle_wing'], 4],
     [2, ['bulwark_signal', 'latch_wisp', 'signal_hound'], 5],
+    [3, ['phase_lantern', 'signal_hound'], 1],
+    [2, ['phase_lantern', 'bulwark_signal', 'needle_wing'], 4],
   ],
   3: [
     [3, ['predator_needle', 'interference_mite'], 0],
@@ -346,6 +388,8 @@ export const FORMATIONS = {
     [3, ['suit_scrambler', 'scrap_overseer', 'needle_wing'], 3],
     [2, ['signal_hound', 'predator_needle'], 4],
     [2, ['churn_snare', 'scrap_overseer', 'wire_jammer'], 5],
+    [3, ['vector_winch', 'predator_needle'], 0],
+    [2, ['vector_winch', 'bulwark_signal', 'interference_mite'], 3],
   ],
 };
 

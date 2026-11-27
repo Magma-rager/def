@@ -315,7 +315,7 @@ test('acquired cards and traded relics persist, declined offers and unknowns sta
   const run = start(5, 'spare_pockets');
   applyCheckpoint(meta, run);
   const starterCount = new Set(STARTER_DECK.map((s) => s.id)).size;
-  assert.deepEqual(collections(meta).cards, [starterCount, 81]);
+  assert.deepEqual(collections(meta).cards, [starterCount, 87]);
   assert.ok(meta.relicsFound.includes('spare_pockets'));
   const offer = rewardPool().filter((c) => !run.d.progress.cards.includes(c.id) && c.category === 'arte').slice(0, 2);
   run.d.pending = { type: 'reward', cards: offer, relics: ['twin_dials'] };
@@ -340,9 +340,9 @@ test('acquired cards and traded relics persist, declined offers and unknowns sta
   meta.combos.future_recipe = { at: 0, count: 1 };
   const c = collections(meta);
   assert.equal(c.cards[0], new Set(meta.cardsSeen.filter((id) => CARDS[id] && id !== 'glitch')).size);
-  assert.deepEqual(c.recipes, [0, 15]);
-  assert.deepEqual(c.enemies, [0, 25]);
-  assert.equal(c.relics[1], 39);
+  assert.deepEqual(c.recipes, [0, 17]);
+  assert.deepEqual(c.enemies, [0, 28]);
+  assert.equal(c.relics[1], 41);
 });
 
 test('known encounter and EX discoveries persist after restart and abandonment; fresh lifetime thresholds use known IDs', () => {

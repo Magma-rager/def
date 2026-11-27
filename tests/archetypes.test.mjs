@@ -104,15 +104,14 @@ test('Flow Extension: Overclock adds Flow within the combo cap', () => {
   assert.ok(c.combo.deadline <= c.flowCap() + 1e-9);
 });
 
-test('Churn Engine: Junk Toss scales with Churns used this battle', () => {
+test('Churn Engine: pre-chain discards leave Junk Toss at base damage', () => {
   const c = mk(['junk_toss', 'scrapline', 'scrapline', 'hotwire', 'salvage', 'rivet_jab', 'hotwire', 'scrapfall', 'rethread']);
-  c.churn.charges = 3;
   const victims = c.hand.filter((u) => u && c.def(u).id !== 'junk_toss').slice(0, 3);
-  for (const v of victims) c.churnCard(v);
+  for (const uid of victims) assert.ok(c.churnCard(uid).ok);
   assert.equal(c.stats.churns, 3);
   const h0 = hp(c);
   play(c, 'junk_toss');
-  assert.ok(h0 - hp(c) >= 4 + 6);
+  assert.equal(h0 - hp(c), 8);
 });
 
 test('Reserve Strategy: Hidden Ace triples from Reserve', () => {

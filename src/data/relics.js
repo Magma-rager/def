@@ -43,6 +43,8 @@ export const RELICS = {
   auditor_seal: { name: "Auditor's Seal", rarity: 'boss', icon: 'eye', tag: 'variant', boss: 'protocol_auditor', text: 'Citations can no longer be issued against you. Your first Perfect combo each battle grants +4 Momentum.' },
   mirror_lens: { name: 'Mirror Lens', rarity: 'boss', icon: 'prism', tag: 'relay', boss: 'mirror_array', text: 'Echoes are 25% stronger.' },
   root_key: { name: 'Root Key', rarity: 'boss', icon: 'jar', tag: 'interference', boss: 'the_corruptor', text: 'Glitch cards cannot be added to your deck. Scrambled cards deal +4 damage.' },
+  index_spring: { name: 'Index Spring', rarity: 'uncommon', icon: 'spring', tag: 'churn', text: 'The first attack you play from a Churn draw each combo gives 5 Guard and +1 Momentum.' },
+  slip_case: { name: 'Slip Case', rarity: 'common', icon: 'box', tag: 'reserve', text: 'The first card you play from Reserve each combo gives 5 Guard.' },
   overflow_valve: { name: 'Overflow Valve', rarity: 'uncommon', icon: 'gauge', tag: 'momentum', text: 'Momentum gained beyond the cap deals 3 damage per point to the target.' },
 };
 

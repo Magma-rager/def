@@ -55,15 +55,25 @@ const S = () => p.evaluate(() => {
     phase: c.phase, t: c.t, selected: c.selected, momentum: c.momentum, available: c.available(), guard: Math.floor(c.guard), cover: c.coverActive(),
     hand: c.hand.map(card), reserve: c.reserve.map(card), next: c.nextCard(),
     combo: c.combo ? { hero: c.combo.hero, rank: c.combo.rank, variant: c.combo.variant, cards: c.combo.cards.map((e) => ({ id: e.id, owner: e.owner, cat: e.category, rank: e.rank })) } : null,
-    history: c.history.map((h) => h.type), closers: c.history.map((h) => (h.closerId ? c.constructor.name && h.closerId : null)), stats: { basics: c.stats.basics, artes: c.stats.artes, supports: c.stats.supports, churns: c.stats.churns, reservePlays: c.stats.reservePlays }, churn: c.churn.charges,
+    history: c.history.map((h) => h.type), closers: c.history.map((h) => (h.closerId ? c.constructor.name && h.closerId : null)), stats: { exMomentum: c.stats.exMomentum, basics: c.stats.basics, artes: c.stats.artes, supports: c.stats.supports, churns: c.stats.churns, reservePlays: c.stats.reservePlays }, churn: c.churn.charges,
     enemiesAtb: c.enemies.filter((e) => e.alive).map((e) => e.atb), result: c.result, zones: c.verifyZones().ok,
   };
 });
+// A card input commits before it resolves. Sample the resolved state, independent of
+// frame rate, rather than reading at a fixed wall-clock delay from pointer-up.
 const tapCard = async (uid) => {
-  const at = await p.evaluate((u) => { const el = document.querySelector(`.hand .card[data-uid="${u}"], .reserve .res-card[data-uid="${u}"]`); if (!el) return null; const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }, uid);
-  if (at) await p.touchscreen.tap(at[0], at[1]);
-  await wait(250);
-  return !!at;
+  const played = await p.evaluate(() => window.__sb.battle.combat.stats.cardsPlayed);
+  await p.locator(`.hand .slot .card[data-uid="${uid}"]:not(.leaving), .reserve .res-card[data-uid="${uid}"]`).tap();
+  await p.waitForFunction((n) => {
+    const c = window.__sb.battle?.combat;
+    return c && c.stats.cardsPlayed > n && !c.executing;
+  }, played, { timeout: 5000 });
+};
+const finishArte = async (count) => {
+  const before = await S();
+  if (before.history.length === count) await p.tap('.ctl.cash:not([disabled])');
+  await p.waitForFunction((n) => window.__sb.battle.combat.history.length > n, count, { timeout: 5000 });
+  return S();
 };
 const swipe = async (uid, dy) => {
   const at = await p.evaluate((u) => { const el = document.querySelector(`.hand .card[data-uid="${u}"]`); if (!el) return null; const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; }, uid);
@@ -111,16 +121,16 @@ await shot('05-momentum');
 // 6. Hessa's arte
 const arte = [...s.hand, ...s.reserve].find((x) => x && x.cat === 'arte' && x.owner === 'V');
 check('6a. Hessa\'s arte is playable now (and only hers)', arte && arte.ok && s.hand.filter((x) => x && x.cat === 'arte' && x.owner !== 'V').every((x) => !x.ok), arte && arte.id);
-const artesBefore = s.stats.artes;
-const m6 = s.momentum, cross6 = arte.variant !== s.combo.variant ? 1 : 0;
+const artesBefore = s.stats.artes, previousEndings = s.history.length;
+const m6 = s.momentum, ex6 = s.stats.exMomentum, cross6 = arte.variant !== s.combo.variant ? 1 : 0;
 await tapCard(arte.uid);
-s = await S();
-// 7. completion (no higher arte: it ends by itself; otherwise FINISH)
-if (s.combo) { await p.tap('.ctl.cash'); await wait(200); s = await S(); }
+// 7. Execute the explicit finish when Relay remains an option.
+s = await finishArte(previousEndings);
 check('6b. the arte executed for Hessa', s.stats.artes === artesBefore + 1);
 check('7. the combo completed as a Perfect', s.history[s.history.length - 1] === 'perfect', s.history.join(','));
 // 8. rewards and breather
-check('8a. Momentum: the arte cost its price, the Perfect paid +2 (and a Cross +1 if the suits differed)', s.phase === 'RECOVER' && s.momentum === m6 - arte.cost + 2 + cross6, `${m6} − ${arte.cost} + 2${cross6 ? ' + 1' : ''} = ${s.momentum}`);
+const ex8 = s.stats.exMomentum - ex6;
+check('8a. Exact Momentum after the arte, Perfect, Cross and resolved EX effects', s.phase === 'RECOVER' && s.momentum === m6 - arte.cost + 2 + cross6 + ex8, `${m6} − ${arte.cost} + 2 + ${cross6} Cross + ${ex8} EX = ${s.momentum}`);
 const atb0 = s.enemiesAtb;
 await wait(400);
 const s8 = await S();
@@ -158,6 +168,7 @@ await shot('11-reserve');
 
 // 13. Corvin or Pin starts a combo (with the Reserve card when it fits)
 const other = ['C', 'S'].find((id) => [...s.hand, ...s.reserve].some((x) => x && x.cat === 'arte' && x.owner === id));
+await p.waitForFunction((id) => window.__sb.battle.combat.heroReady(id), other);
 await p.tap(`.hero-btn[data-hero="${other}"]`);
 await wait(150);
 s = await S();
@@ -170,7 +181,7 @@ check('11b. the stashed card was played later from Reserve', s.stats.reservePlay
 // 14. that hero's arte: basic attacks until it is affordable, then the arte
 for (let i = 0; i < 6 && s.combo; i++) {
   const a = [...s.hand, ...s.reserve].find((x) => x && x.cat === 'arte' && x.owner === other && x.ok);
-  if (a) { await tapCard(a.uid); s = await S(); break; }
+  if (a) { const history = s.history.length; await tapCard(a.uid); s = await finishArte(history); break; }
   const bsc = [...s.hand, ...s.reserve].filter((x) => x && x.cat === 'basic' && x.ok).sort((x, y) => x.rank - y.rank)[0];
   if (!bsc) break;
   await tapCard(bsc.uid);

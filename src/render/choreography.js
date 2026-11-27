@@ -2,6 +2,7 @@
 const cue = (clip, shape, color, notes) => ({ clip, shape, color, notes });
 const SLAG = '#ff9466', BRASS = '#ffd782', VIOLET = '#dbadff', TEAL = '#75efde', BLUE = '#99d8ff';
 const hessa = {
+  latchshield: cue('shieldLatch', 'interlock', BRASS, [43, 55, 47, 51]),
   scrapfall: cue('cleave', 'cleave', SLAG, [48, 43]),
   scrap_feed: cue('ram', 'anvil', BRASS, [47, 52]),
   dead_drop: cue('anchor', 'escrow', BLUE, [49, 56, 45]),
@@ -23,6 +24,8 @@ const hessa = {
   iron_oath: cue('anchor', 'escrow', BRASS, [48, 60, 64]),
 };
 const corvin = {
+  pressure_splice: cue('pressureSplice', 'splice', VIOLET, [46, 58, 63, 67]),
+  signal_case: cue('signalCase', 'cache', TEAL, [65, 57, 69]),
   thermal_lance: cue('lens', 'rail', SLAG, [55, 62, 50]),
   coil_charge: cue('orbit', 'ratchet', VIOLET, [58, 65, 72]),
   kindling: cue('orbit', 'cinders', SLAG, [61, 67]),
@@ -45,6 +48,7 @@ const corvin = {
   pressure_valve: cue('meter', 'pressure', BLUE, [58, 65, 50]),
 };
 const pin = {
+  ratchet_burst: cue('ratchetBurst', 'ratchet', BRASS, [62, 45, 62, 52]),
   bolt_volley: cue('salvo', 'rail', BRASS, [56, 61, 63]),
   splitter: cue('fan', 'fork', BRASS, [52, 59, 64]),
   slipstream: cue('sidestep', 'echo', TEAL, [54, 61]),
@@ -79,6 +83,8 @@ export function cardCue(ev) {
 }
 
 export const EX_CUES = {
+  switchyard: cue(null, 'splice', TEAL, [48, 60, 57, 72]),
+  safety_interlock: cue(null, 'interlock', BLUE, [48, 55, 66, 62]),
   straight_circuit: cue(null, 'stair', TEAL, [62, 65, 69, 74]),
   salvage_circuit: cue(null, 'ratchet', BRASS, [57, 64, 60]),
   stored_strike: cue(null, 'cache', BLUE, [50, 62, 70]),
@@ -98,6 +104,9 @@ export const EX_CUES = {
 
 const foe = (motion, shape, color, notes, bias = 0) => ({ motion, shape, color, notes, bias });
 export const ENEMY_CUES = {
+  rail_bailiff: foe('brace', 'interlock', BRASS, [37, 49, 41]),
+  phase_lantern: foe('float', 'prism', TEAL, [58, 64, 69]),
+  vector_winch: foe('press', 'splice', SLAG, [39, 50, 43]),
   rush_hound: foe('pounce', 'cleave', SLAG, [42, 37]),
   wire_jammer: foe('antenna', 'cross', VIOLET, [46, 54]),
   interference_mite: foe('skitter', 'shear', TEAL, [53, 44]),

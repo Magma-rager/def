@@ -735,7 +735,7 @@ export class BattleView {
     ctx.globalAlpha = alpha;
     const art = ENEMY_ART[a.art];
     const params = { t: this.reducedMotion ? 0 : t + a.slot * 1.7, wind, atk: this.reducedMotion ? 0 : atk,
-      hurt: this.reducedMotion ? 0 : a.hurt, phase: e.phase, parry: e.st.parry || 0 };
+      hurt: this.reducedMotion ? 0 : a.hurt, phase: e.phase, exposed: e.st.exposed > 0, parry: e.st.parry || 0 };
     art(ctx, params);
     if (!this.reducedMotion && a.flash > 0) {
       ctx.globalCompositeOperation = 'lighter';

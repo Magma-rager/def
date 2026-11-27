@@ -605,22 +605,29 @@ export class Run {
       if (minRarity === 'uncommon' && rarity === 'common') rarity = 'uncommon';
       if (minRarity === 'rare') rarity = 'rare';
       const fresh = (c) => !out.some((o) => o.id === c.id);
-      let cands = pool.filter((c) => c.rarity === rarity && fresh(c));
+      const pivot = !tag && n >= 3 && i === n - 1;
+      const outside = (c) => c.tags.every((t) => t !== lead && t !== second && t !== openingSignal);
+      const alternatives = pivot ? pool.filter((c) => fresh(c) && outside(c)) : [];
+      const eligible = alternatives.length ? alternatives : pool;
+      let cands = eligible.filter((c) => c.rarity === rarity && fresh(c));
       if (i === 0 && needBasic) {
         const b = cands.filter((c) => c.category === 'basic');
-        cands = b.length ? b : pool.filter((c) => c.category === 'basic' && fresh(c));
+        cands = b.length ? b : eligible.filter((c) => c.category === 'basic' && fresh(c));
         // the basic attack offered still leans towards the build when one of its basics exists
-        if (b.length === 0 && cands.length === 0) cands = pool.filter((c) => c.rarity === rarity && fresh(c));
-        if (lead && rng.chance(0.6)) { const lb = pool.filter((c) => c.category === 'basic' && c.tags.includes(lead) && fresh(c)); if (lb.length) cands = lb; }
+        if (b.length === 0 && cands.length === 0) cands = eligible.filter((c) => c.rarity === rarity && fresh(c));
+        if (lead && rng.chance(0.6)) { const lb = eligible.filter((c) => c.category === 'basic' && c.tags.includes(lead) && fresh(c)); if (lb.length) cands = lb; }
       }
-      const pivot = !tag && n >= 3 && i === n - 1;
       let want = null;
       if (tag) want = tag;
-      else if (pivot) {
+      else if (i === 1 && kind === 'battle' && this.d.act === 1 && this.d.battleCount >= 1 && this.d.battleCount <= 2) {
+        // One ordinary early slot introduces a hand tool. The lead, rarity floors and
+        // pivot still compete for the other slots, and the player can pass on any card.
+        want = this.d.battleCount === 1 ? 'reserve' : 'churn';
+      } else if (pivot) {
         // an archetype outside the build's top two that this offer has not shown yet
         // (any rarity: a tag with no card at the rolled rarity takes its nearest one below, so Reserve and
         // Cash Out, which have no commons, are offered as often as the others)
-        const away = Object.keys(ARCHETYPES).filter((t) => t !== lead && t !== second && t !== openingSignal && !offeredTags.has(t) && pool.some((c) => c.tags.includes(t) && fresh(c)));
+        const away = Object.keys(ARCHETYPES).filter((t) => t !== lead && t !== second && t !== openingSignal && !offeredTags.has(t) && eligible.some((c) => c.tags.includes(t) && fresh(c)));
         want = away.length ? rng.pick(away) : null;
       } else if (i === 0 && lead && rng.chance(0.6)) want = lead;
       else if (i === 0 && openingSignal && rng.chance(0.4)) want = openingSignal;
@@ -632,7 +639,7 @@ export class Run {
         // the nearest rarity it has, so the lean never silently drops
         if (!t.length && !(i === 0 && needBasic)) {
           const near = { common: ['uncommon', 'rare'], uncommon: ['common', 'rare'], rare: ['uncommon', 'common'] }[rarity] || [];
-          for (const r of near) { t = pool.filter((c) => c.rarity === r && c.tags.includes(want) && fresh(c)); if (t.length) break; }
+          for (const r of near) { t = eligible.filter((c) => c.rarity === r && c.tags.includes(want) && fresh(c)); if (t.length) break; }
         }
         if (t.length) cands = t;
       } else {
@@ -640,7 +647,7 @@ export class Run {
         const t = cands.filter((c) => c.tags.length && c.tags.every((x) => !offeredTags.has(x)));
         if (t.length) cands = t;
       }
-      if (!cands.length) cands = pool.filter(fresh);
+      if (!cands.length) cands = eligible.filter(fresh);
       const pick = rng.pick(cands);
       if (!pick) break;
       for (const t of pick.tags) offeredTags.add(t);

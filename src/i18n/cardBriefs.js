@@ -1,6 +1,12 @@
 // Compact combat-hand readings. The complete rule text and its terminology remain in card details.
 // Placeholders use the same live card values as the long form, including upgrades.
 export const CARD_BRIEFS = {
+  pocket_gauge: ['From Reserve: Expose {s}s. Hit {d}.', 'Из Резерва: Открытость {s} с. Урон {d}.'],
+  index_slug: ['Hit {d}. From Churn this chain: next hit +{b}.', 'Урон {d}. Из Замены в комбо: след. урон +{b}.'],
+  latchshield: ['Hit {d}. From Reserve: {g} Guard, {n} Counter.', 'Урон {d}. Из Резерва: Щит {g}, ответ {n}.'],
+  pressure_splice: ['Hit {d}. Churn this chain: next hit +{b}, +{f}s Flow.', 'Урон {d}. После Замены в комбо: след. +{b}, Поток +{f} с.'],
+  ratchet_burst: ['Hit {d}. Twice after a Churn draw played in this part.', 'Урон {d}. Дважды после атаки из Замены в части.'],
+  signal_case: ['Heal {h}. From Reserve in chain: +{f}s Flow, unlock 1.', 'Лечение {h}. Из Резерва в комбо: +{f} с Потока, снять блок.'],
   spark_primer: ['{d} damage. Next attack +{b}.', 'Урон {d}. След. атака +{b}.'],
   first_rung: ['{d} damage. Each Step this combo +{b}.', 'Урон {d}. Каждый Шаг в комбо +{b}.'],
   cold_start: ['{d} damage. At 0 Momentum: +{m}.', 'Урон {d}. При 0 Импульса: +{m}.'],
@@ -9,7 +15,7 @@ export const CARD_BRIEFS = {
   open_ledger: ['{d} damage. Cash Out +{p}%.', 'Урон {d}. Выплата +{p}%.'],
   step_up: ['{d} damage. Step: +{b} and +1 Momentum.', 'Урон {d}. Шаг: +{b} и +1 Импульс.'],
   gauge_read: ['{d} damage. Reserve occupied: +1 Momentum, +0.3s Flow.', 'Урон {d}. Есть Резерв: +1 Импульс, +0,3 с Потока.'],
-  junk_toss: ['{d} damage. +{p} per Churn this fight, max +{m}.', 'Урон {d}. +{p} за Замену в бою, до +{m}.'],
+  junk_toss: ['Hit {d}. +{b} if a Churn draw played this chain.', 'Урон {d}. +{b} за карту из Замены в комбо.'],
   fault_finder: ['{d} damage. Exposed 4s. Hand Locked/Scrambled: +{b}.', 'Урон {d}. Уязв. 4 с. Блок/Искажение в руке: +{b}.'],
   polarity_shift: ['{d} damage. Set combo suit to B.', 'Урон {d}. Масть комбо → B.'],
   tally_mark: ['{d} damage. Cash Out +{b} per card.', 'Урон {d}. Выплата +{b} за карту.'],
@@ -28,7 +34,7 @@ export const CARD_BRIEFS = {
   bulwark_shift: ['Guard = {p}% of combo damage, min 6.', 'Щит = {p}% урона комбо, мин. 6.'],
   downshift: ['Combo rank −{r}. +{f}s Flow.', 'Ранг комбо −{r}. Поток +{f} с.'],
   capstone: ['{d} damage. Double at 2+ Steps.', 'Урон {d}. ×2 при 2+ Шагах.'],
-  junkstorm: ['{d} to all, +{p} per Churn this fight (max +{m}).', 'Всем {d}, +{p} за Замену в бою (до +{m}).'],
+  junkstorm: ['All {d}, +{b} per played Churn draw (max two).', 'Всем {d}, +{b} за карту из Замены (до двух).'],
   kindling: ['{s} Scorch. Double if already Scorched.', 'Ожог {s}. Вдвое больше по горящему.'],
   overture: ['{d} to all. +1 Momentum per party hero.', 'Всем {d}. +1 Импульс за героя отряда.'],
   rethread: ['Combo rank −{r}.', 'Ранг комбо −{r}.'],

@@ -244,6 +244,15 @@ async function botBattle(ms = 240000) {
 // ═══════════════════════════ Scenario G — the whole campaign through the UI ═══════════════════════════
 if (MODE === 'campaign') {
   const MIN = +(process.env.SB_MINUTES || 45);
+  const profilePath = process.env.SB_CAMPAIGN_PROFILE;
+  if (profilePath) {
+    const profile = JSON.parse(fs.readFileSync(profilePath, 'utf8'));
+    await p.addInitScript((saved) => {
+      const key = 'signalbreak.meta.v1';
+      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(saved));
+    }, profile);
+    log(`Returning-profile fixture: ${profilePath}. All subsequent choices use the interface.`);
+  }
   await p.goto(URL);
   await p.waitForFunction(() => window.__sb);
   const previous = await p.evaluate(() => window.__sb.meta.totalRuns);

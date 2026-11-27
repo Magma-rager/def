@@ -1203,9 +1203,74 @@ function core(ctx, a) {
   ctx.fill();
 }
 
+// A walking crossing barrier. The counterweight draws the beam back before its sweep.
+function bailiff(ctx, a) {
+  for (const x of [-19, 19]) {
+    legSeg(ctx, x * .8, -32, x, -9, 5, IRON2);
+    capsule(ctx, x - 9, -5, x + 7, -5, 4, 4);
+    fillStroke(ctx, IRONHI, 1.7);
+  }
+  roundRect(ctx, -17, -49, 34, 23, 5);
+  fillStroke(ctx, lin(ctx, 0, -49, 0, -26, [BRASSHI, BRASS2]), 2);
+  rivets(ctx, [[-12,-44], [12,-44], [-12,-31], [12,-31]], 1.5);
+  ctx.save();
+  ctx.translate(0,-48);
+  ctx.rotate(-.26 - .68*a.wind + .69*a.atk);
+  capsule(ctx, -38, 0, 24, 0, 6, 5);
+  fillStroke(ctx, RUST, 2);
+  for (let x=-30;x<18;x+=11) {
+    poly(ctx,[x,-4,x+6,-4,x+2,4,x-4,4]);
+    ctx.fillStyle=BRASSHI; ctx.fill();
+  }
+  circle(ctx,25,0,8); fillStroke(ctx,IRON2,1.5);
+  ctx.restore();
+  circle(ctx,0,-47,5); fillStroke(ctx,AMBER,1.6);
+}
+
+// Three folding petals leave the repair lens exposed after a pulse.
+function lantern(ctx, a) {
+  ctx.save();
+  ctx.translate(0,-8);
+  for (let i=0;i<3;i++) {
+    ctx.save();
+    ctx.rotate(i*2*Math.PI/3 + .12*s(a.t*2));
+    const open = 5*a.wind + (a.exposed ? 8 : 0);
+    poly(ctx,[-7,-14-open,0,-36-open,10,-21-open,6,-13-open]);
+    fillStroke(ctx,lin(ctx,0,-38,0,-12,[TEAL,IRON2]),2);
+    circle(ctx,0,-22-open,2); fillStroke(ctx,BRASSHI,1);
+    ctx.restore();
+  }
+  circle(ctx,0,0,17); fillStroke(ctx,IRON2,2);
+  circle(ctx,0,0,12);
+  fillStroke(ctx,rad(ctx,-4,-5,2,12,['#edfff9',TEAL,PLUM2]),1.8);
+  eye(ctx,-2,0,4,a.exposed ? '#fff2c8' : TEAL);
+  ctx.restore();
+}
+
+// Cable spool on two sprung skids, with a hinged return hook.
+function winch(ctx, a) {
+  for (const x of [-19, 16]) {
+    legSeg(ctx,x*.7,-38,x,-7,7,IRON2);
+    capsule(ctx,x-11,-5,x+10,-5,4,4); fillStroke(ctx,BRASS2,1.5);
+  }
+  roundRect(ctx,-30,-66,57,38,8); fillStroke(ctx,PLUM,2.3);
+  ctx.save();
+  ctx.translate(1,-49);
+  ctx.rotate(a.t*.55+a.wind*1.1-a.atk*1.45);
+  gear(ctx,0,0,18,9,0,IRONHI);
+  for (const r of [7,11,15]) { circle(ctx,0,0,r);ctx.strokeStyle=BRASS;ctx.lineWidth=1;ctx.stroke(); }
+  ctx.restore();
+  const reach=14*a.atk;
+  capsule(ctx,-17,-55,-38-reach,-67+10*a.wind,4,3);fillStroke(ctx,IRON,1.5);
+  poly(ctx,[-38-reach,-70+10*a.wind,-50-reach,-65+10*a.wind,-42-reach,-57+10*a.wind,-39-reach,-64+10*a.wind]);
+  fillStroke(ctx,BRASSHI,1.5);
+  circle(ctx,24,-59,4); fillStroke(ctx,a.exposed?RED_EYE:TEAL,1.3);
+}
+
 export const ENEMY_ART = {
   hound: (c, a) => hound(c, a),
   hound2: (c, a) => hound(c, a, { body: '#4a5470', body2: '#2e3448', hi: '#6a7896', eye: TEAL, dish: true, fast: true }),
+  bailiff, lantern, winch,
   jammer, mite, maw, snare, scrambler, wing, wisp, bulwark, predator, overseer, shard,
   warden, houndmother, censor, choir, knight, eater,
   regent, tyrant, auditor, mirror, corruptor, core,
@@ -1213,6 +1278,7 @@ export const ENEMY_ART = {
 
 // Approximate art bounds (in art units, before size scaling) for HUD placement and hit-testing.
 export const ART_BOUNDS = {
+  bailiff: [-42, -84, 36, 2], lantern: [-42, -54, 42, 36], winch: [-64, -75, 34, 2],
   hound: [-40, -56, 36, 2], hound2: [-40, -60, 36, 2], jammer: [-34, -92, 34, 2], mite: [-16, -32, 16, 2], maw: [-60, -80, 36, 2],
   snare: [-30, -68, 30, 2], scrambler: [-34, -86, 34, 2], wing: [-36, -30, 32, 10], wisp: [-16, -36, 34, 26], bulwark: [-30, -92, 30, 2],
   predator: [-40, -96, 34, 2], overseer: [-48, -108, 36, 2], shard: [-18, -30, 18, 22], warden: [-48, -112, 36, 2], houndmother: [-62, -90, 56, 2],

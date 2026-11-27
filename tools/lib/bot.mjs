@@ -1,3 +1,4 @@
+import { handTactic } from './hand-tactics.mjs';
 // Phase 5 player policy shared by the headless simulators (simulate, pacing) and the UI bots
 // (milestone, encounter, uiplay, accept5). It reads the combat engine only through its public state,
 // check(), relayCheck() and the projected chain (proj()) — the same rules the interface shows — and
@@ -254,7 +255,10 @@ export function decide(c, { profile = 'regular', rng = Math.random, relay = 'car
   if (sup && (!c.combo || c.flowHeld() || c.flowLeft() > 2)) return { type: 'play', uid: sup };
 
   const P = c.proj();
-  const bm = buildMove(c, build === 'auto' ? deckBuild(c) : build, P, busy);
+  const direction = build === 'auto' ? deckBuild(c) : build;
+  const legacyHand = typeof process !== 'undefined' && process.env.SB_LEGACY_HAND === '1';
+  const bm = !legacyHand && (direction === 'reserve' || direction === 'churn')
+    ? handTactic(c, direction, P, busy) : buildMove(c, direction, P, busy);
   if (bm) return bm;
   if (!P.open) {
     if (busy && profile === 'learner') return { type: 'wait' };

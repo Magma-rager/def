@@ -128,7 +128,7 @@ The version follows the development roadmap. The title screen and Patch Notes sh
 - `0.N.P`: P counts published builds with changes since that gate.
 - `1.0.0`: the eventual release after the revised roadmap and final beta.
 
-Current: **0.2.10**. Phase 10 updates combat choreography and sound, separates EX results from the battlefield, and reflows the hand for larger readable text. See [the Phase 10 report](docs/PHASE10.md) for visual and gameplay evidence, [the Phase 9 report](docs/PHASE9.md) for permanent progression and [the development audit](docs/AUDIT.md) for earlier work. The version comes from `src/version.js`, and tests enforce that the package and iOS project match. The title menu shows the build date and source commit. The next human beta follows completion of the revised roadmap through Phase 12.
+Current: **0.2.11**. Phase 11 adds new hand-management abilities, three enemy designs and their formations, new EX recipes, and narrower reward and Churn changes. See the [Phase 11 report](docs/PHASE11.md), [Phase 10 presentation report](docs/PHASE10.md) and [Phase 9 progression report](docs/PHASE9.md). The version comes from `src/version.js`, and tests enforce that the package and iOS project match. The title shows the source build stamp. The human beta follows completion of the roadmap through Phase 12.
 
 ## Verification tools
 

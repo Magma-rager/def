@@ -1072,10 +1072,13 @@ export class BattleScreen {
       // a recovering performer (or every hero recovering): the card just says when it can be played
       const why = chk.ok ? '' : chk.reason === 'busy' && chk.text && chk.text.k === '{hero} recovering {s}s' ? t('Ready in {s}s', { s: chk.text.p.s })
         : chk.reason === 'heroes' ? t('Ready in {s}s', { s: { n: Math.min(...c.party.map((m) => c.recoverLeft(m.id))), d: 1 } }) : msg(chk.text || '');
-      const st = `${chk.ok ? 'legal' : 'illegal'}|${locked}|${scr}|${why}|${c.effRank(uid)}${c.effVariant(uid)}`;
+      const churnDraw = c.hasChurnMark(uid);
+      const st = `${churnDraw}|${chk.ok ? 'legal' : 'illegal'}|${locked}|${scr}|${why}|${c.effRank(uid)}${c.effVariant(uid)}`;
       if (st !== s.state) {
         s.state = st;
         const el = s.el;
+        el.classList.toggle('churn-draw', churnDraw);
+        el.title = churnDraw ? t('Churn draw') : '';
         el.classList.toggle('legal', chk.ok);
         el.classList.toggle('illegal', !chk.ok);
         el.classList.toggle('locked', locked);

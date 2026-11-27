@@ -5,6 +5,7 @@ export const MUTATIONS = {
   relay_resonance: { name: 'Relay Resonance', tag: 'relay', text: 'Every Relay Echoes the last attack at 25%.' },
   overpressure_valve: { name: 'Overpressure Valve', tag: 'momentum', text: 'Max Momentum +4. At 10+ Momentum, your cards deal +25%.' },
   long_breath: { name: 'Long Breath', tag: 'flow', text: 'Spending Momentum on Flow costs 1 less and grants +2.0s instead of +1.5s.' },
+  reclaim_circuit: { name: 'Reclaim Circuit', tag: 'churn', text: 'The first attack played from a Churn draw each combo grants 7 Guard and +1.25s Flow.' },
   grinder: { name: 'Grinder', tag: 'churn', text: '+2 max Churn charges. Every Churn deals 4 damage to a random enemy.' },
   deep_pockets: { name: 'Deep Pockets', tag: 'reserve', text: 'Reserve +1 slot. Cards played from Reserve deal +4 and grant +1 Momentum.' },
   bastion_protocol: { name: 'Bastion Protocol', tag: 'guard', text: 'Guard decays 50% slower. When Guard absorbs a hit, deal 50% of the absorbed amount back.' },

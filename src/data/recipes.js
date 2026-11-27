@@ -189,6 +189,28 @@ export const RECIPES = [
     match: (x) => arte(x) && x.e.rank >= 6 && x.c.owners.length >= 3 && x.c.cards.length >= 6,
     fx: (a) => { a.strikeAll(0.3, 12); a.guard(10); },
   },
+  {
+    id: 'switchyard', tier: 'advanced', priority: 64, on: 'card', tags: ['churn', 'reserve'], kind: 'offense',
+    name: 'Switchyard',
+    how: 'Play a basic attack drawn by Churn, then an arte from Reserve in the same hero’s segment.',
+    effect: 'A strike for 25% of the combo’s damage (at least 7) and 5 Guard.',
+    hint: 'Draw the approach under pressure. Save the finisher ahead of time.',
+    purpose: 'Joins two forms of hand preparation in one segment.',
+    seq: ['CHURN', 'NEW', 'RES', 'A'],
+    match: (x) => arte(x) && x.e.fromReserve && seg(x).some((e) => e.category === 'basic' && e.fromChurn),
+    fx: (a) => { a.strike(0.25, 7); a.guard(5); },
+  },
+  {
+    id: 'safety_interlock', tier: 'intermediate', priority: 67, on: 'card', tags: ['reserve', 'guard'], kind: 'defense', support: true,
+    name: 'Safety Interlock',
+    how: 'While one hero attacks, another plays support from Reserve. The attacking hero then lands an arte.',
+    effect: '7 Guard and Counter 5.',
+    hint: 'Keep one support card ready for someone else’s combo.',
+    purpose: 'Makes saved support useful in a deck that rarely saves attacks.',
+    seq: ['B', 'RES', 'A'],
+    match: (x) => arte(x) && before(x, (l) => l.k === 'support' && l.fromReserve && l.hero !== l.attacker && l.attacker === x.e.owner),
+    fx: (a) => { a.guard(7); a.counter(5); },
+  },
 ].sort((a, b) => a.priority - b.priority);
 
 export const RECIPE_MAP = Object.fromEntries(RECIPES.map((r) => [r.id, r]));

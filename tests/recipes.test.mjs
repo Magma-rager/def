@@ -47,8 +47,8 @@ const exIds = (c) => c.ex.map((e) => e.id);
 const integrity = (c) => { assert.deepEqual(c.verifyZones(), { ok: true }); assert.ok(c.momentum >= 0 && c.reserved >= 0 && c.reserved <= c.momentum); };
 
 // ── the catalogue ──
-test('the catalogue: 15 recipes with stable unique ids, explicit priorities, texts, tags and a sequence', () => {
-  assert.equal(RECIPES.length, 15);
+test('the catalogue: 17 recipes with stable unique ids, explicit priorities, texts, tags and a sequence', () => {
+  assert.equal(RECIPES.length, 17);
   assert.equal(new Set(RECIPE_IDS).size, RECIPES.length);
   const prios = RECIPES.map((r) => r.priority);
   assert.deepEqual(prios, [...prios].sort((a, b) => a - b), 'sorted by priority');

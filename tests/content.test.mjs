@@ -282,8 +282,30 @@ test('relics — boss trophies: Auditor\'s Seal, Mirror Lens (and the others abo
   assert.ok(echo(['mirror_lens']) > echo([]), 'Echoes 25% stronger');
 });
 
+test('Index Spring, Reclaim Circuit and Slip Case reward first executed uses, once per chain', () => {
+  const c = mk(['scrapline', 'mend_circuit', 'salvage', 'thermal_lance', 'junk_toss', 'latchshield'],
+    ['cold_start', 'pinprick', 'pocket_gauge', 'piston_strike'], {
+      momentum: 2, relics: ['index_spring', 'slip_case'], mutations: ['reclaim_circuit'],
+    });
+  assert.ok(c.stash(uid(c, 'latchshield')).ok);
+  play(c, 'scrapline');
+  assert.equal(c.nextCard(), 'c8');
+  assert.ok(c.churnCard(uid(c, 'salvage')).ok);
+  const m = c.momentum;
+  play(c, 'pocket_gauge');
+  assert.equal(c.combo.cards.at(-1).fromChurn, true);
+  assert.equal(c.momentum, m + 3); // Basic, Cross and Index Spring
+  assert.equal(c.stats.guardGained, 12);
+  assert.ok(c.stats.flowGained >= 1.25);
+  play(c, 'latchshield');
+    assert.equal(c.counter, 4);
+  assert.equal(c.stats.exByRecipe.switchyard, 1);
+  assert.equal(c.stats.guardGained, 26 + 5, 'Switchyard has its independent 5 Guard payoff');
+  integrity(c);
+});
+
 test('every relic is covered by a scenario above and has a description', () => {
-  const covered = ['pressure_gauge', 'overflow_valve', 'twin_dials', 'flywheel', 'tower_plate', 'stopwatch_gear', 'brass_metronome', 'long_fuse', 'heat_shield', 'counter_spring', 'iron_filings', 'quiet_coil', 'scrap_heart', 'tuning_fork', 'patch_kit', 'ladder_rungs', 'wild_hinge', 'kettle_drum', 'prism_lens', 'echo_splice', 'relay_harness', 'beta_badge', 'churn_gear', 'oiled_bearings', 'spare_pockets', 'breach_clamp', 'grease_trap', 'regent_mainspring', 'glitch_jar', 'root_key', 'signal_flare', 'coal_heart', 'riveted_ledger', 'junk_dividend', 'dead_mans_switch', 'scrap_magnet', 'lucky_rivet', 'auditor_seal', 'mirror_lens'];
+  const covered = ['pressure_gauge', 'overflow_valve', 'twin_dials', 'flywheel', 'tower_plate', 'stopwatch_gear', 'brass_metronome', 'long_fuse', 'heat_shield', 'counter_spring', 'iron_filings', 'quiet_coil', 'scrap_heart', 'tuning_fork', 'patch_kit', 'ladder_rungs', 'wild_hinge', 'kettle_drum', 'prism_lens', 'echo_splice', 'relay_harness', 'beta_badge', 'churn_gear', 'oiled_bearings', 'spare_pockets', 'breach_clamp', 'grease_trap', 'regent_mainspring', 'glitch_jar', 'root_key', 'signal_flare', 'coal_heart', 'riveted_ledger', 'junk_dividend', 'dead_mans_switch', 'scrap_magnet', 'lucky_rivet', 'auditor_seal', 'mirror_lens', 'index_spring', 'slip_case'];
   assert.deepEqual([...covered].sort(), [...RELIC_IDS].sort());
   for (const id of RELIC_IDS) assert.ok(RELICS[id].text && RELICS[id].text.length > 10, id);
 });
@@ -344,7 +366,7 @@ test('mutations — all twelve do what they say', () => {
   run.chooseMutation('glass_cannon');
   assert.equal(run.d.maxHp, Math.round(max0 * 0.85), 'party max HP −15%');
   assert.deepEqual([...MUTATION_IDS].sort(), Object.keys(MUTATIONS).sort());
-  assert.equal(MUTATION_IDS.length, 12);
+  assert.equal(MUTATION_IDS.length, 13);
 });
 
 test('a mutation chosen after a boss persists into the next act and through a save', () => {
@@ -399,7 +421,7 @@ test('grafts — all ten trigger at the right moment, and only where they can', 
   // eligibility: damage, Relay and combo grafts only on attacks
   for (const gid of ['keen', 'breaker', 'echoing', 'ledger']) { assert.equal(graftFits(gid, CARDS.mend_circuit), false, gid); assert.equal(graftFits(gid, CARDS.scrapline), true, gid); }
   for (const gid of ['spark', 'quick', 'plated', 'cached', 'churnfed', 'anchored']) assert.equal(graftFits(gid, CARDS.rethread), true, gid);
-  assert.equal(Object.keys(GRAFTS).length, 10);
+  assert.equal(Object.keys(GRAFTS).length, 11);
   const run = Run.create({ seed: 5, tutorial: false });
   const heal = run.d.deck.find((x) => x.id === 'mend_circuit');
   assert.equal(run.canApplySelect('graft:keen', heal), false);

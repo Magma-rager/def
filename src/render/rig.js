@@ -688,6 +688,14 @@ Object.assign(CLIPS, {
   victory: { dur: .72, hold: true, keys: [[0,'idle'],[.19,'salute'],[.43,'victory'],[.72,'victory']] },
   ko: { dur: .62, hold: true, keys: [[0,'stagger'],[.24,'kneel'],[.62,'ko']] },
 });
+// Phase 11: latch the shield, vent a splice and ratchet into a second shot.
+Object.assign(CLIPS, {
+  shieldLatch: { ...clip('gather', 'guard', 'drive'), keys: [[0,'idle'],[.11,'gather'],[.20,'plant'],[.28,'drive'],[.37,'guard'],[.58,'idle']],
+    root: [[0,0],[.18,0],[.28,.7],[.37,.35],[.58,0]] },
+  pressureSplice: { ...clip('focus', 'vent', 'castHold'), keys: [[0,'idle'],[.13,'focus'],[.20,'lattice'],[.28,'vent'],[.44,'castHold'],[.58,'idle']] },
+  ratchetBurst: { ...clip('load', 'hipFire', 'recoil'), keys: [[0,'idle'],[.07,'load'],[.17,'kneel'],[.28,'hipFire'],[.39,'recoil'],[.49,'load'],[.58,'idle']] },
+  signalCase: clip('calibrate', 'tend', 'lattice'),
+});
 export function clipClock(elapsed, realImpact, realDuration, c) {
   if (realImpact == null) return elapsed;
   const hit = c.impact ?? c.dur * .5;

@@ -137,8 +137,8 @@ card({
 });
 card({
   id: 'junk_toss', name: 'Junk Toss', category: 'basic', rank: 2, variant: 'B', rarity: 'common', anim: 'melee', glyph: 'box',
-  v: { d: [4, 5], p: [4, 4], m: [20, 24] }, text: 'Deal {d}, +{p} per Churn used this battle (max +{m}).', tags: ['churn'],
-  fx: (A) => A.dmg(A.v('d') + Math.min(A.v('m'), A.v('p') * A.c.stats.churns)),
+  v: { d: [8, 10], b: [11, 13] }, text: 'Deal {d}. If you played a Churn draw this combo: +{b} damage.', tags: ['churn'],
+  fx: (A) => A.dmg(A.v('d') + (A.ctx.cards.some((e) => e.fromChurn) ? A.v('b') : 0)),
 });
 card({
   id: 'fault_finder', name: 'Fault Finder', category: 'basic', rank: 2, variant: 'A', rarity: 'uncommon', anim: 'shoot', glyph: 'eye',
@@ -260,8 +260,8 @@ card({
 });
 card({
   id: 'junkstorm', name: 'Junkstorm', owner: 'V', category: 'arte', rank: 6, variant: 'A', rarity: 'rare', anim: 'melee', glyph: 'box',
-  v: { d: [8, 10], p: [4, 5], m: [36, 45] }, text: 'Deal {d} +{p} per Churn used this battle (max +{m}) to ALL enemies.', tags: ['churn'],
-  fx: (A) => A.dmg(A.v('d') + Math.min(A.v('m'), A.v('p') * A.c.stats.churns), { all: true }),
+  v: { d: [16, 19], b: [13, 15] }, text: 'Deal {d} to ALL. +{b} per Churn draw played this combo, up to two.', tags: ['churn'],
+  fx: (A) => A.dmg(A.v('d') + A.v('b') * Math.min(2, A.ctx.cards.filter((e) => e.fromChurn).length), { all: true }),
 });
 // Corvin (C): fire, area damage, Momentum and Echoes
 card({
@@ -504,6 +504,41 @@ card({
   fx: (A) => { const n = A.spendMomentum(A.v('n')); A.dmg(A.v('d') * (1 + n)); if (n > 0) A.guard(A.v('g') * n); },
 });
 
+// Phase 11: early hand tools and their hero-specific payoffs.
+card({
+  id: 'pocket_gauge', name: 'Pocket Gauge', category: 'basic', rank: 2, variant: 'B', rarity: 'common', anim: 'shoot', glyph: 'eye',
+  v: { d: [5, 7], s: [3, 4] }, text: 'From Reserve: Expose for {s}s. Deal {d}.', tags: ['reserve'],
+  fx: (A) => { if (A.fromReserve) A.status('exposed', A.v('s')); A.dmg(A.v('d')); },
+});
+card({
+  id: 'index_slug', name: 'Index Slug', category: 'basic', rank: 2, variant: 'B', rarity: 'common', anim: 'shoot', glyph: 'gear',
+  v: { d: [7, 9], b: [6, 8] }, text: 'Deal {d}. Drawn by Churn for this combo: next attack deals +{b}.', tags: ['churn'],
+  fx: (A) => { A.dmg(A.v('d')); if (A.entry.fromChurn) A.nextBonus(A.v('b')); },
+});
+card({
+  id: 'latchshield', name: 'Latchshield', owner: 'V', category: 'arte', rank: 4, variant: 'A', rarity: 'common', anim: 'melee', glyph: 'shield',
+  v: { d: [8, 11], g: [9, 12], n: [4, 6] }, text: 'Deal {d}. From Reserve: gain {g} Guard and Counter {n}.', tags: ['reserve', 'guard'],
+  fx: (A) => { A.dmg(A.v('d')); if (A.fromReserve) { A.guard(A.v('g')); A.counter(A.v('n')); } },
+});
+card({
+  id: 'pressure_splice', name: 'Pressure Splice', owner: 'C', category: 'arte', rank: 4, variant: 'EX', rarity: 'common', anim: 'cast', glyph: 'gear',
+  v: { d: [10, 12], b: [6, 8], f: [1.0, 1.3] }, text: 'Deal {d}. If you Churned this combo: next attack deals +{b} and gain {f}s Flow.', tags: ['churn', 'flow'],
+  fx: (A) => { A.dmg(A.v('d')); if (A.ctx.churned) { A.nextBonus(A.v('b')); A.flow(A.v('f')); } },
+});
+card({
+  id: 'ratchet_burst', name: 'Ratchet Burst', owner: 'S', category: 'arte', rank: 5, variant: 'B', rarity: 'uncommon', anim: 'shoot', glyph: 'gear',
+  v: { d: [14, 17] }, text: 'Deal {d}. Hit twice if an attack drawn by Churn was played earlier in this segment.', tags: ['churn'],
+  fx: (A) => {
+    const fed = A.ctx.cards.some((e) => e.index < A.entry.index && e.seg === A.entry.seg && e.fromChurn);
+    A.dmg(A.v('d'), { hits: fed ? 2 : 1 });
+  },
+});
+card({
+  id: 'signal_case', name: 'Signal Case', owner: 'C', category: 'support', variant: 'A', rarity: 'uncommon', anim: 'buff', glyph: 'box',
+  v: { h: [4, 6], f: [0.7, 1.0] }, text: 'Heal {h}. From Reserve during a combo: +{f}s Flow and unlock one card.', tags: ['reserve', 'flow'],
+  fx: (A) => { A.heal(A.v('h')); if (A.fromReserve && A.c.combo) { A.flow(A.v('f')); A.unlockOne(); } },
+});
+
 // ─────────────────────────── STATUS / JUNK ───────────────────────────
 card({
   id: 'glitch', name: 'Glitch', owner: null, category: 'junk', rank: 0, variant: 'EX', rarity: 'status', anim: 'buff', glyph: 'glitch',
@@ -523,7 +558,7 @@ export function gaugedRank(def, rankMod = 0) {
   return Math.max(r[0], Math.min(r[1], def.rank + (rankMod || 0)));
 }
 // Grafts that need damage, a Relay or a place in the combo only fit attacks (support has none of them).
-const ATTACK_GRAFTS = new Set(['keen', 'breaker', 'echoing', 'ledger']);
+const ATTACK_GRAFTS = new Set(['keen', 'breaker', 'echoing', 'ledger', 'pocket_seal']);
 export function graftFits(g, def) {
   if (!def || def.category === 'junk' || def.category === 'status') return false;
   return !ATTACK_GRAFTS.has(g) || isOffensive(def);
@@ -567,6 +602,7 @@ export const GRAFTS = {
   plated: { name: 'Plated', text: '+3 Guard when played.', tag: 'guard' },
   echoing: { name: 'Echoing', text: 'As the first card after a Relay, Echoes itself at 30%.', tag: 'relay' },
   keen: { name: 'Keen', text: '+3 damage to its first hit.', tag: 'ladder' },
+  pocket_seal: { name: 'Pocket Seal', text: 'First sealed attack played from Reserve each combo: Expose its target for 3s before damage.', tag: 'reserve' },
   cached: { name: 'Cached', text: '+50% power when played from Reserve.', tag: 'reserve' },
   churnfed: { name: 'Churnfed', text: 'When Churned: +1 Momentum and +2 Guard.', tag: 'churn' },
   breaker: { name: 'Breaker', text: 'Its damage pierces Guard.', tag: 'guard' },

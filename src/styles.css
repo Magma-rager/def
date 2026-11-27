@@ -1001,3 +1001,6 @@ html.reduced-motion .progress-toast, html.reduced-motion .progress-toast.out { t
 .achievement-meter::-webkit-progress-bar { background: #131821; }
 .achievement-meter::-webkit-progress-value { background: #91c6af; }
 .achievement-meter::-moz-progress-bar { background: #91c6af; }
+
+/* An indexed replacement keeps its marked edge until played, lost or the chain ends. */
+.hand .churn-draw .card-frame { border-top: 3px double #106b71; }

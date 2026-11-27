@@ -166,6 +166,8 @@ async function motion() {
     ['V','fortress_slam','clockwork_regent'],['V','sunderline','scrap_tyrant'],
     ['C','pressure_valve','protocol_auditor'],['C','suit_storm','mirror_array'],
     ['S','bolt_volley','the_corruptor'],['S','grand_relay','signalbreak_core'],
+    ['V','latchshield','clockwork_regent'],['C','pressure_splice','mirror_array'],
+    ['S','ratchet_burst','signalbreak_core'],
   ];
   const trace = [];
   for (const [hero,card,boss] of cases) {
@@ -176,12 +178,25 @@ async function motion() {
       c.cards.set('motion-basic',{ uid:'motion-basic',id:'scrapline',variant:'A' });
       c.cards.set('motion-arte',{ uid:'motion-arte',id:card,variant:'B' });
       c.draw = []; c.reserve = []; c.discard = [];
+      const marks = card === 'ratchet_burst' || card === 'pressure_splice';
+      if (marks) {
+        c.hand[2] = 'motion-victim';
+        c.cards.set('motion-victim',{uid:'motion-victim',id:'salvage'});
+        c.cards.set('motion-churn',{uid:'motion-churn',id:'index_slug'});
+        c.cards.set('motion-next',{uid:'motion-next',id:'pinprick'});
+        c.draw.push('motion-next','motion-churn');
+      }
+      if (card === 'latchshield' && !c.stash('motion-arte').ok) throw Error('Reserve setup refused');
       c.enemies[0].hp = c.enemies[0].maxHp;
       c.selectHero(hero);
       c.momentum = 10;
       const frame = () => { bs.view.update(1/60); c.update(1/60); bs.consumeEvents(c.drainEvents()); bs.updateHud(true); };
       if (!c.commit('motion-basic').ok) throw Error('Opening basic refused');
       for (let i=0;i<44;i++) frame();
+      if (marks) {
+        if (!c.churnCard('motion-victim').ok || !c.commit('motion-churn').ok) throw Error('Churn setup refused');
+        for (let i=0;i<44;i++) frame();
+      }
       bs.view.fx.length=0; bs.view.numbers.length=0;
       window.motion = { frame, events:[] };
       const original = c.emit.bind(c);

@@ -660,3 +660,27 @@ Cards and relics are discovered on legitimate acquisition, enemies on encounter 
 The combat view reads the command's existing hit and end offsets at execution start. Anticipation and follow-through are fitted to those offsets. Damage numbers, defender reactions, contact graphics and contact audio consume resolved events with their actual recipient IDs. A recipe carries its stable ID on the events it resolves. The EX result rail can summarize several discoveries together independently of the boss adaptation panel.
 
 Playback of these cues has no authority over the scheduler, enemy ATB, decision time or run records. Reduced Motion uses steady framing, local impact shapes and the same text and status indicators. The [Phase 10 report](PHASE10.md) covers display measurements and verification.
+
+## 32. Phase 11 · Hand preparation and encounter roles
+
+The last legitimate pre-chain Churn draw can be carried into the next chain. Executing
+that attack grants one Momentum once. In-chain paid or Badge Churns mark the exact draw.
+A discarded or spent UID loses its mark. Status-card deletion, support recycling and
+a stranded safety draw do not create a prepared attack. Starting a chain transfers the one
+prepared mark. Ending it expires unused marks. Echoes do not copy this bookkeeping.
+Salvage Circuit and the existing mastery counter still require a draw Churned in the live
+chain. Switchyard accepts a prepared or live-chain draw, then an Arte from Reserve in the
+same segment. Safety Interlock waits for another hero's executed Reserve support.
+
+The first two ordinary battle offers reserve a side slot for a Reserve and then a Churn
+tool. Eligible cards within those pools are still drawn using the rarity rules. All other
+slots, the pivot and shop alternatives remain available. A pivot excludes all tags of the
+leading pair where there is an eligible alternative. This also protects the pivot after
+the addition of multi-tag tools. Keeping an old Complete Journal achievement is independent
+of the expanded Journal count.
+
+Rail Bailiff shields a single threatened companion, Phase Lantern opens and exposes itself
+to repair a companion, and Vector Winch accelerates one companion without skipping minimum
+action spacing. Their formations enter from Act I depth 3, Act II depth 1 and Act III depth 0.
+The Core's late Churn response snares for three seconds and drains one charge. Its Reserve
+response latches once per Counter-Strategy. Its existing adaptation still applies separately.
