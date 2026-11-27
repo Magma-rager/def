@@ -146,3 +146,235 @@ policy uses that action in visible danger and the learner policy does not. The o
 range, 28 versus 23. On both learner ranges the leader is Ladder Rungs. No account-level
 stats, starter conditions or unlock thresholds changed. Early unlock concentration remains
 a replayability question for the beta rather than a reason to add grinds.
+
+## Release-candidate engineering
+
+| Finding | Reproduction | Correction and regression evidence |
+|---|---|---|
+| A stale tab could overwrite a newer run checkpoint or profile. Malformed data looked like a fresh profile. | Load the same snapshot in two sessions, update one, then save from the other. Separately make localStorage unavailable or seed a malformed record. | Save APIs distinguish an empty key, an unreadable record, a changed snapshot and a successful write. They check the current identity before overwriting or clearing it. The UI reports the failure and offers the latest checkpoint. Storage fixtures cover newer runs, newer checkpoints within one run, malformed fields, denied writes, and intentional data erasure limited to game keys. |
+| An interrupted run finalization could leave a live save after the profile commit. | Fail the clear operation after the profile has already been written, then resume. | The Phase 9 two-stage protocol handles recovery with exactly one run record and one set of awards. Browser fault injection demonstrated this in Russian, with three assertions passing. The save schema and storage keys are unchanged. An ordinary Continue from combat restarts that encounter from the checkpoint. |
+| A new worker could cache an old page and activate with a mismatched bundle. It could also remove a sibling scope's cache. | Serve the worker before its matching HTML. Use a sibling app-cache sentinel in the same origin. | The worker validates the page bytes and completes its own asset install before it can activate. Failures leave the previous cache usable. Activation removes only this app scope's superseded caches. Tests assert an old offline launch, a subsequent upgrade, survival of the sibling cache and a save/unlock still readable offline after restart. |
+| Backwards presentation timestamps could stop the Canvas draw loop. | Replayed on the Phase 11 distribution with a controlled negative timestamp, and the old mirror-update run also produced a negative Canvas radius. | Battle and scene clocks are monotonic and the current build draws successfully under the same timestamp fixture. The test observes the real draw loop across the timestamp change. Combat scheduling and elapsed-time caps remain in force. |
+| The compact target label could fall outside the play area, and party labels could intersect the adaptation plaque. | Use the 740×360 DPR 2 Mirror Array fixture with actual summoned enemies and EX recap. | Keep selection labels inside the field and give hero labels clearance. Mirror Array with two shards and a three-enemy ordinary formation retained three separate targets, 12 px effect text and independent adaptation and EX recap areas in the fixture. |
+| Hunt and Reflection forecast information could misstate the defended or dynamic hit. | Change live Guard and vary the last resolved hit. | The intent previews and executed abilities use the same damage inputs. Contract tests cover dynamic Reflection, and the bilingual entry explains Hunt mitigation and the new destination of a latched Reserve card. |
+| Quiet paused screens continued redrawing. The audio scheduler advanced into a muted or interrupted context. | Count Canvas paint calls while paused, and inspect context and music state following real control events. | Static paused state is invalidated by presentation changes such as viewport changes. Bounded viewport rescaling is accounted for. Audio unlock understands pointer, keyboard and click activation, and music work is suspended when its context or volume cannot produce playback. |
+
+The procedural stress fixture walked reachable nodes and edges on all three generated Act
+graphs for each of 1,024 seeds. It observed all 33 ordinary formations and checked Act
+restrictions and reachable routes. Combat tests exercise reservations, legal cancellation,
+target death and retargeting, interrupted EX actions, Reserve, Churn, enemy summons and boss
+adaptations. The existing historical Phase 4–8 coverage is retained. The original undocumented
+Phase 8 Act II stall still has no established root cause. Recent campaigns and recovery tests
+exercise the transitions that succeeded, so their completion does not identify the old failure.
+
+## Performance and presentation evidence
+
+Measurements used desktop Chromium in a 740×360 viewport at DPR 2. An instrumented page
+counted actual battle draws and collected RAF interval, event-to-paint time, observer latency
+and post-GC heap data. Timings include the browser and test runner under variable load.
+
+| Measurement | Phase 11 | Phase 12 |
+|---|---:|---:|
+| Packaged HTML | 1,022,039 bytes | 1,025,366 bytes |
+| Swift Playgrounds ZIP | 921,980 bytes | 921,858 bytes |
+| First app ready, observed | 1,750 ms | 1,458 ms |
+| Warm ready, three samples | 609, 534, 534 ms | 721, 436, 338 ms |
+| Paused Canvas draws over 1.8 s | 77 | 0 |
+| Simple active draw p95 | 5.8 ms | 5.6 ms |
+| Crowded active draw p95, stressed sample | 25.1 ms | 4.6 ms |
+| Heap after collection, first / eighth mount | approximately 4.06 / 5.86 MB | approximately 4.03 / 5.90 MB |
+
+The repeatable optimization is elimination of static paused draws. The loading, active draw
+and timing samples vary with competing processes. They do not establish a general rendering
+speedup or rule out slow accumulation on very long sessions. No mobile hardware, thermal,
+battery or hardware audio measures were available.
+
+The eight bilingual viewport sizes were measured on the packaged build, with no detected
+collisions between the sampled card affordances, enemy plates and EX recap. All 16 combinations
+preserved at least 12 CSS pixels for essential card effects. The shortest field is 141 px.
+Rotation, touch selection, browser focus restoration and keyboard input were sampled
+separately. Linux Firefox ESR 153.5.1 and WebKitGTK 2.52.6 each opened the package at phone
+dimensions, accepted user input, executed a Basic and restored the same run and language.
+These were smoke tests. Firefox audio remained suspended in the headless test. WebKitGTK
+entered a running audio context, while the host had no usable PCM output. Safari, fullscreen
+standalone on iOS and physical Apple device tests remain open.
+
+The mixed music/effects stress recording peaked around 0.159 on a normalized scale with
+zero clipped samples. Muting, first user activation, pause ducking and unmute recovery were
+measured, with Chromium reaching a running context again. These are technical checks.
+Sound quality and device interruption behavior belong to direct listening and physical tests.
+
+See [crowded compact field](phase12/compact-formation.jpg),
+[Mirror Array and the EX recap](phase12/compact-mirror.jpg), and
+[offline campaign results](phase12/offline-results.jpg). The Mirror fixture and scheduler
+frame sequences are controlled presentation evidence. The campaign is ordinary progression.
+
+The larger Russian sweep visited 1,040 rendered screens, including base and upgraded cards.
+It reproduced five small overflows at 740×360 on Dead Drop, Mirror Wire and Pressure Splice.
+Their final compact wording keeps the conditions and values. The detail views retain the
+full wording. In a dedicated packaged retest, all six versions remained at 12 px and fit
+without measured overflow. [Before and after, top then bottom](phase12/compact-copy-comparison.jpg).
+
+A second packaged performance sample found median warm readiness about 557 ms, simple and
+crowded active draw p95 of 3.1 and 5.7 ms, 0 paused draws, 7 ms button-to-paint and 1.4 ms
+save persistence p95. Its first ready result was 1,744 ms. These readings confirm the sizing
+and pause result, with the spread of the remaining timings visible.
+
+## Regression matrix
+
+| Coverage | Evidence |
+|---|---|
+| Unit and integration tests | 281/281 on the Phase 11 checkpoint and 288/288 on the clean final source. The matrix includes the original combat, timing, campaign, rarity, archetype, adaptation and progression suites. |
+| R1 enemy pacing and R2 decision time | Identical Phase 11 and Phase 12 canonical 2.5-second learner opening output. Enemy pace and deliberate Relay timing remain under the standard suites. |
+| R3 downtime and action scheduling | Phase 5 browser fixture 33/33. The queue position, contact, cancellation, reserved Momentum, post-chain breather and enemy ATB during Recovery are independently checked. |
+| R4 targeting | 36/36 over English and Russian touch viewports. The queued attack fixture records one hit and one command still waiting before the retarget. Death, indicators and target cycling were checked separately. |
+| R5 early survivability and content | 60/60 opening and Act I completions for every measured policy and loadout. The original Phase 8 focused formation suite passed 11/11, with all ten actual build paths represented. |
+| R6 presentation and accessibility | Sixteen bilingual layout combinations, Russian full-surface sweep and fixed-card retest, reduced motion, muted state, animated combat fixtures, and the snapshot comparisons above. The engine and Canvas checks were run separately from the sweep. |
+| R7 saves, localization, offline and progression | Russian Phase 7 EX fixture 47/47, Phase 8 interface scenario 51/51, Phase 9 historical and interrupted-finalization fixtures 6/6 and 3/3, plus complete ordinary campaigns and real worker cache replacement. |
+
+The eight Phase 4 failures carried through Phase 10 no longer reproduced as a group. The
+historical suite initially recorded 22/23. Its single intermittent missed snapshot was a
+Reserve refill preview check. Read-only event logging was added to show the exact slot,
+draw, gesture and intervening actions. The same assertion passed with the observed predicted
+card in the same slot, 23/23. The first miss had insufficient evidence to establish a cause.
+
+Phase 5 reproduced a different problem in its fixture. The Warden Locked Pin's exact
+scripted Arte, then its regional Static modifier could lock it again. Two naturally active
+Iron Maws keep the planned chain and enemy ATB coverage. The test still checks lossless
+cancellation, all three heroes, and actual outcome, and the tutorial suite checks enemy Lock
+as its own interaction. Phase 6's initial queue lesson expected an eligible hand at one
+particular moment. The harness now lets the player reach another eligible chain through its
+ordinary controls and asserts the actual paused lesson and executing/waiting UI. The
+returning-player and staged tutorial run passed 32/32. Targeting replaced a wall-clock sleep
+between contact and retargeting with browser-clock fixture control. Every gameplay input is
+still a touch and the exact combat queue assertion is stronger.
+
+The earlier Phase 11 → Phase 12 Pages update passed 22/22. The historical mirror path
+completed all cache and save operations but reproduced one page error stamped
+`c35c1c1`, the old build's Canvas radius exception. Candidate-only Pages and mirror packages
+passed 22/22 and 21/21 with interrupted worker publication, isolated off-origin scope
+coverage and browser-offline restart. The rollback below uses the same game versioning,
+scope and saved profile protocol.
+
+### Ordinary gameplay and controlled coverage
+
+| Packaged session | Evidence |
+|---|---|
+| Phase 11 baseline, EN tablet, seed 727643445 | 16/16. Ordinary campaign completed before corrective work. |
+| 0.2.12 EN tablet, fresh Badge, seed 201643931 | 16/16. Tyrant, Mirror Array, Corruptor. Three resumes, credits, next run. |
+| 0.2.12 RU phone, historical profile with Echo Splice, seed 806842376 | 16/16. Tyrant, Mirror Array, Corruptor. Three resumes, credits, next run. |
+| 0.2.12 EN phone offline, fresh Badge, Reserve-focused policy, seed 393416783 | 18/18. Tyrant, Mirror Array, Core. Victory and Reserve-led build through ordinary card offers. Three resumes, credits, Museum, next start, zero network requests while offline. |
+| Earlier 0.2.12 iteration, ordinary seeds 449171355, 46982699, 396826758 | EN tablet Badge, RU phone Echo Splice and EN phone offline Badge. Together with the later candidate runs, ordinary browser victories exercised all six bosses. These runs supply Regent and Protocol Auditor coverage. |
+| Defeat and subsequent start | A separate ordinary fresh run permitted enemy damage through defeat. Results, one defeat record, reload and the new run were checked independently from victory. |
+
+Historical profiles supplied only the previously earned starting eligibility at session start.
+Campaigns otherwise used actual taps, standard map generation, legal transactions and
+ordinary rewards. Between them, the campaigns reached shops, events, rest, surgery, mutations,
+elite fights, both endings relevant to their outcomes and subsequent runs. Rail Bailiff, Phase
+Lantern and Vector Winch appeared in naturally generated fights. The Phase 12 roster, split-EX,
+late-boss, time reversal, damaged storage and unusual queue tests supplied controlled coverage
+for cases normal campaign sampling may miss. None of the completed campaign runs above needed
+an automatic nudge or exposed a reproducible progression stall.
+
+## Reproducibility, rollback and release
+
+Build input is source `ba84a11062b9eb9673c96daecdb0c9c285294aeb`, which includes the
+gameplay and storage changes in `6e9d6ae3a0f9499943c2640add5a89f348cb4402`. The final
+package is 0.2.12. A second build from the clean source reproduces the HTML, service worker
+and binary Swift Playgrounds ZIP byte for byte. SHA-256 values for the same build follow.
+
+- `dist/index.html` `31681edbe19c5893925a2851545781d9475475e67faeb5580f7a79c424fbaef5`.
+- `dist/ios/SignalBreak.swiftpm.zip` `4b54c8ccdd7debaba0091b913b5884e89662cb1074facf7463901bfd82e86808`.
+- `git log -1 --format=%H -- dist/index.html` identifies the distribution commit on the development branch.
+
+```sh
+npm ci
+npm test
+npm run build:ios
+unzip -t dist/ios/SignalBreak.swiftpm.zip
+node tools/serve.mjs dist 8128
+```
+
+The archive holds the existing Swift wrapper, Info and icon configuration, and built game
+resources. The package declares iOS 16.0, iPhone and iPad families and landscape. Install
+Playwright as a test tool and use the browser build it supports, then run the relevant
+acceptance commands in another terminal.
+
+```sh
+SB_URL=http://localhost:8128/index.html node tools/accept8.mjs campaign en 1194 834 /tmp/sb-beta-en
+SB_URL=http://localhost:8128/index.html SB_CAMPAIGN_PROFILE=tests/fixtures/meta-v2-phase8.json SB_CAMPAIGN_STARTER=echo_splice node tools/accept8.mjs campaign ru 844 390 /tmp/sb-beta-ru
+PWA_OFFLINE_CAMPAIGN=1 SB_CAMPAIGN_FOCUS=reserve node tools/pwa.mjs /tmp/sb-beta-offline
+node tools/pwa.mjs /tmp/sb-pwa-pages
+PWA_PATH=/signalbreak/ PWA_PORT=8201 node tools/pwa.mjs /tmp/sb-pwa-mirror
+node tools/beta-browser.mjs compact /tmp/sb-beta-compact
+node tools/beta-browser.mjs card-fit /tmp/sb-beta-fit
+node tools/beta-browser.mjs performance /tmp/sb-beta-perf
+node tools/beta-browser.mjs audio /tmp/sb-beta-audio
+node tools/phase12-balance.mjs /tmp/sb-balance-a.json 1001 30
+node tools/phase11-audit.mjs /tmp/sb-builds-a.json 30 1001
+node tools/accept8.mjs runs 3 1 1 /tmp/sb-formation
+```
+
+Use seed starts 3001 and 5001 for the replication and holdout. For historical comparisons,
+run the identical tool and policy in worktrees pinned to the earlier source and distribution
+checkpoints. The reporting coverage spans the project’s existing test harnesses, so browser
+tools that import `/src/` use the development server documented at their heads.
+
+For a deliberate web rollback on the verified development branch, restore the published
+`dist` files from `77ed51bd848436a3ef1e7d62f6c9844bec6ebb9d` in a clean checkout, review and
+commit the complete folder together, and push to the same branch. Confirm the Mirror
+workflow served the old source stamp `c35c1c1` and verify an offline relaunch with a retained
+profile after activation. The Phase 11 source is separately recoverable at
+`c35c1c1ea4671774f5a67276d5ade0bf2b58ee15`. No rollback was performed.
+
+The [development mirror](https://signalbreak-game.website.yandexcloud.net/) is the established
+candidate route. The GitHub Actions [Mirror web app workflow](https://github.com/Magma-rager/def/actions/workflows/mirror.yml)
+publishes the candidate there and checks HTTP 200 and the served source stamp. Direct
+independent Yandex and Pages connections from this environment are refused by the network
+proxy. Alternate hosting and App Store distribution are outside this milestone.
+
+## Defect register and beta readiness
+
+No unresolved reproducible critical defect remains in the verified Chromium beta environment.
+Phase 12 confirmation is bounded by the routes, browsers, fault cases and seeds above.
+
+| Priority | Open item | Consequence |
+|---|---|---|
+| Major balance observation | Winch/Wing still takes learners out at roughly its former rate. Cash Out leads the current policy and Interference still trails. | Reassess repeated inaccessible pressure or dominant choices against human run circumstances. Current simulations do not establish perceived fairness. |
+| Historical investigation | Phase 8 Act II stall, and one intermittent Phase 4 preview snapshot. | No independently reconstructed stall on current transitions. Preserve coverage, and capture exact pending state and UI on any recurrence. |
+| Minor presentation | Grouped results toasts can cover part of the last boss line briefly at phone size. | The finished-run record and result controls remain accessible after the notification expires. |
+| Compatibility verification | Firefox headless audio stayed suspended. No Safari/device, iOS installed-app or physical interruption test. | Cross-browser smoke evidence is available. Native installation, lifecycle, listening and actual device interaction need the planned verification. |
+| Measurement limit | Eight-mount heap sample and repeated rendering measurements. | No bounded effect-list runaway observed in the stress runs. Long sessions and actual mobile performance remain unmeasured. |
+
+| Distribution target | Verdict | Basis and remaining gate |
+|---|---|---|
+| Browser-based human beta | **Ready** in tested Chromium | Both languages, entire campaigns, defeat, reload, progression and package deployment. Firefox and WebKitGTK are smoke coverage. Safari is pending. |
+| Offline PWA beta | **Ready** in tested Chromium | Actual offline campaign, interrupted worker update, scoped replacement, local save retention and re-entry. iOS Add to Home Screen is unverified. |
+| Native Apple device testing | **Conditionally ready** | Valid, deterministic Playgrounds archive. Compile, run, save/resume, rotate, suspend and measure on hardware with the Apple toolchain. |
+| Eventual public web release | **Not ready** | Owner-led beta, evidence-based fixes and final distribution verification remain. |
+| Eventual App Store release | **Not ready** | Native compilation, real bundle identity, signing, device verification, beta and explicit submission approval remain. |
+
+The bilingual [beta packet](PLAYTEST.md) describes access, controls and accessibility, and
+collects experience-sensitive feedback on comprehension, timing, targeting, builds,
+progression, presentation and performance. It includes a reproducibility template, asks whether
+a player used Reserve and Churn spontaneously, and treats subjective observations separately
+from repeatable failures. The [draft notes](RELEASE_NOTES.md) are prepared for later distribution.
+Human beta testing has not commenced.
+
+## Developer retrospective
+
+Relative to the inherited implementation, the Phase 9 work demonstrates continuation of
+the same run engine and coherent progression through stable saves, achievements and museum
+records. Phase 10 authored differentiated animation clips and synchronized visual contact
+with the scheduler. Phase 11 delivered new cards, procedural enemy sprites and enemy poses,
+with acquisition and ordinary encounter evidence. Phase 12 reproduced earlier policies and
+worked back from fight traces to narrow late-game changes. It also addressed stale save
+writers, mixed package activation and the stopped Canvas loop. The same architecture survived
+those changes, and the candidate can be regenerated from a named source commit.
+
+This supports technical ownership and continued iteration on SIGNAL//BREAK. The earlier
+Claude Code work established the core gameplay, procedural look and many of the regression
+tools this phase used. The phase evidence shows new audiovisual work in that established
+style and actual motion and gameplay review. It does not establish that the work equals or
+surpasses the earlier artistic quality. Direct listening, device-specific polish, human
+balance and comprehension, and native deployment remain unestablished capabilities here.

@@ -114,17 +114,13 @@ English and Russian. Switch on the title screen (top-left) or in Settings → La
 - `src/i18n/ru.js` holds every Russian string: interface text keyed by the English string used in `t('…')`, and content keyed by the ids in `src/data/*`. Terminology: `docs/GLOSSARY_RU.md`.
 - The engine, run layer and save code never import `src/i18n`. They produce ids and message keys, so balance and saves are identical in both languages, and a run saved in one language continues in the other.
 - Cyrillic comes from extra faces in the same font families (Fira Sans Extra Condensed for Barlow Condensed, Oswald for Big Shoulders Display, and Spectral's own Cyrillic), embedded in the build, so the game stays offline.
-- Card names and texts that run long shrink to fit (`fitCard` in `src/ui/cardView.js`), and names may take a second line.
+- The combat hand uses concise localized descriptions on compact screens. Essential effects retain a 12 CSS pixel floor. Hold a card for its full description.
 
 **Adding a language:** copy `src/i18n/ru.js` to `src/i18n/<code>.js`, translate the values (keep `{placeholders}`, and give plural groups as many forms as the language needs; `pluralIndex` in `index.js` decides which form is used), then register it in `DICTS` and `LANGS` in `src/i18n/index.js`. `npm test` lists anything untranslated, and `node tools/i18n-layout.mjs <outDir> <code>` reports clipped text on every screen at six viewports. Add font faces if the script needs them.
 
 ## Version
 
-The version follows the development roadmap. The title screen and Patch Notes show the current build.
-
-- `0.N.x`: N is the highest roadmap phase whose exit gate has passed, with the evidence recorded in `docs/AUDIT.md`.
-- `0.N.P`: P counts published builds with changes since that gate.
-- `1.0.0`: the eventual release after the revised roadmap and final beta.
+The current roadmap uses the `0.2.x` development sequence. The title screen and Patch Notes show the current version and the title also gives the source stamp. Version 1.0.0 is reserved for the authorized release after the beta, resulting corrections and release verification.
 
 **0.2.12** is the pre-beta candidate. The title shows the source build stamp. The [Phase 12 report](docs/PHASE12.md) records corrective balancing, safety changes, platform evidence and the rollback procedure. See the [draft release notes](docs/RELEASE_NOTES.md), [beta protocol](docs/PLAYTEST.md), [Phase 11 content report](docs/PHASE11.md), [Phase 10 presentation report](docs/PHASE10.md) and [Phase 9 progression report](docs/PHASE9.md).
 
