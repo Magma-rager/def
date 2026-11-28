@@ -166,7 +166,7 @@ test('Steps and Crosses are counted and pay Momentum on resolution (Weak +1, Med
 });
 
 test('support is independent: playable before, during and outside combos; never starts, extends or ends one; its performer recovers', () => {
-  const c = fixed(['salvage', 'mend_circuit', 'scrapline', 'rivet_jab', 'spare_parts', 'hold_the_line'], ['pinprick', 'tripwire', 'cold_start', 'junk_toss'], { momentum: 2 });
+  const c = fixed(['salvage', 'mend_circuit', 'scrapline', 'rivet_jab', 'spare_parts', 'hold_the_line'], ['scrapline_b', 'piston_strike_b', 'cold_start', 'junk_toss'], { momentum: 2 });
   c.hp = 60;
   assert.ok(c.check(slot(c, 0)).ok, 'free support with no chain');
   play(c, slot(c, 0)); // Hessa's Salvage
@@ -208,7 +208,7 @@ test('Glitch is unplayable, never starts a combo, and Churn deletes it for free'
 
 // ── Momentum accounting (docs/COMBAT_SPEC.md §11) ──
 test('a committed card reserves its cost: the same Momentum cannot be spent twice; cancel releases it and gains nothing', () => {
-  const c = fixed(['piston_strike', 'scrapfall', 'sunderline', 'scrapline'], ['rivet_jab', 'pinprick'], { momentum: 3 });
+  const c = fixed(['piston_strike', 'scrapfall', 'sunderline', 'scrapline'], ['rivet_jab', 'scrapline_b'], { momentum: 3 });
   c.selectHero('V');
   const s = c.commit(slot(c, 0)); // Strong starts executing at once
   assert.equal(c.executing.cmd.uid, s.cmd.uid);
@@ -283,7 +283,7 @@ test('Flywheel, Long Breath and Pressure Gauge still change Momentum costs and c
 
 // ── the persistent hand (docs/COMBAT_SPEC.md §6) ──
 test('the hand stays mixed: a played card\'s slot refills only after it resolves, from the card the preview showed', () => {
-  const c = fixed(['scrapline', 'scrapfall', 'mend_circuit', 'rivet_jab', 'salvage', 'bolt_volley'], ['piston_strike', 'tripwire', 'pinprick']);
+  const c = fixed(['scrapline', 'scrapfall', 'mend_circuit', 'rivet_jab', 'salvage', 'bolt_volley'], ['piston_strike', 'piston_strike_b', 'scrapline_b']);
   const before = c.hand.slice();
   const next = c.nextCard();
   assert.equal(CARDS[c.cards.get(next).id].id, 'piston_strike');
@@ -300,7 +300,7 @@ test('the hand stays mixed: a played card\'s slot refills only after it resolves
 });
 
 test('the preview never draws or reshuffles; an empty draw pile shows nothing until a draw reshuffles the discard', () => {
-  const c = fixed(['scrapline', 'rivet_jab', 'pinprick', 'tripwire', 'cold_start', 'junk_toss'], []);
+  const c = fixed(['scrapline', 'rivet_jab', 'scrapline_b', 'piston_strike_b', 'cold_start', 'junk_toss'], []);
   c.discard.push(...c.hand.splice(2, 4, null, null, null, null));
   c.hand.length = RULES.HAND;
   for (let i = 0; i < 4; i++) c.hand[2 + i] = null;
@@ -314,7 +314,7 @@ test('the preview never draws or reshuffles; an empty draw pile shows nothing un
 });
 
 test('Churn replaces exactly one card with the previewed one; outside a combo it pushes enemy ATB', () => {
-  const c = fixed(['scrapline', 'rivet_jab', 'scrapfall', 'salvage', 'pinprick', 'tripwire'], ['piston_strike', 'cold_start']);
+  const c = fixed(['scrapline', 'rivet_jab', 'scrapfall', 'salvage', 'scrapline_b', 'piston_strike_b'], ['piston_strike', 'cold_start']);
   c.enemies[0].atb = 0.2;
   const before = c.hand.slice();
   const next = c.nextCard();
@@ -328,7 +328,7 @@ test('Churn replaces exactly one card with the previewed one; outside a combo it
 });
 
 test('Reserve: bounded, and Reserve cards obey the same legality, costs and arte rules as the hand', () => {
-  const c = fixed(['scrapfall', 'scrapline', 'rivet_jab', 'pinprick', 'mend_circuit', 'tripwire'], ['cold_start', 'junk_toss', 'piston_strike'], { momentum: 0 });
+  const c = fixed(['scrapfall', 'scrapline', 'rivet_jab', 'scrapline_b', 'mend_circuit', 'piston_strike_b'], ['cold_start', 'junk_toss', 'piston_strike'], { momentum: 0 });
   c.selectHero('V');
   const arte = slot(c, 0), heal = slot(c, 4);
   assert.ok(c.stash(arte).ok);
@@ -348,7 +348,7 @@ test('Reserve: bounded, and Reserve cards obey the same legality, costs and arte
 });
 
 test('card modifiers (upgrade, graft, rank modifier, suit) travel with the instance through every zone', () => {
-  const c = fixed([{ id: 'scrapline', up: true, graft: 'spark', rankMod: 1, variant: 'B' }, 'rivet_jab'], ['pinprick', 'tripwire', 'cold_start', 'junk_toss', 'tinder_toss']);
+  const c = fixed([{ id: 'scrapline', up: true, graft: 'spark', rankMod: 1, variant: 'B' }, 'rivet_jab'], ['scrapline_b', 'piston_strike_b', 'cold_start', 'junk_toss', 'fault_finder']);
   const u = slot(c, 0);
   assert.equal(c.effRank(u), 2);
   assert.equal(c.effVariant(u), 'B');
@@ -365,7 +365,7 @@ test('card modifiers (upgrade, graft, rank modifier, suit) travel with the insta
 });
 
 test('playing another hero\'s card never changes the performer: only the Relay command hands a chain over', () => {
-  const c = fixed(['scrapline', 'bolt_volley', 'rivet_jab'], ['pinprick']);
+  const c = fixed(['scrapline', 'bolt_volley', 'rivet_jab'], ['scrapline_b']);
   c.selectHero('V');
   play(c, slot(c, 0));
   assert.equal(c.check(slot(c, 1)).reason, 'owner', "Pin's arte in Hessa's chain");
@@ -393,7 +393,7 @@ test('Cash Out needs 2+ cards ending on a basic attack; after an arte the button
 });
 
 test('Cash Out pays out and differs from a Perfect', () => {
-  const c = fixed(['scrapline', 'rivet_jab'], ['pinprick'], { enemies: ['foundry_warden'] });
+  const c = fixed(['scrapline', 'rivet_jab'], ['scrapline_b'], { enemies: ['foundry_warden'] });
   play(c, slot(c, 0));
   play(c, slot(c, 1));
   const hp = c.enemies[0].hp + c.enemies[0].guard;
@@ -419,7 +419,7 @@ test('when Flow runs out the combo drops after a basic attack, but counts as a P
 });
 
 test('illegal taps during a combo stumble with a bounded penalty; the third ends it', () => {
-  const c = fixed(['piston_strike', 'scrapline', 'rivet_jab'], ['pinprick'], { momentum: 3 });
+  const c = fixed(['piston_strike', 'scrapline', 'rivet_jab'], ['scrapline_b'], { momentum: 3 });
   play(c, slot(c, 0));
   const bad = slot(c, 1);
   assert.equal(c.check(bad).reason, 'rank');
@@ -515,7 +515,7 @@ test('echo restriction: echoes repeat damage only', () => {
 });
 
 test('Shuffle Step replaces exactly the hand cards that cannot be played now', () => {
-  const c = fixed(['shuffle_step', 'scrapfall', 'scrapline', 'rivet_jab', 'bolt_volley', 'salvage'], ['pinprick', 'tripwire', 'cold_start', 'junk_toss']);
+  const c = fixed(['shuffle_step', 'scrapfall', 'scrapline', 'rivet_jab', 'bolt_volley', 'salvage'], ['scrapline_b', 'piston_strike_b', 'cold_start', 'junk_toss']);
   const keep = [slot(c, 2), slot(c, 3), slot(c, 5)];
   play(c, slot(c, 0));
   for (const u of keep) assert.ok(c.hand.includes(u), 'playable cards stay');
@@ -657,7 +657,7 @@ test('defeat when the pool reaches 0; the outcome reports the pool', () => {
 
 // ── Phase 4 support with Phase 3 survival ──
 test('Braced: +20% Defense on the hero an enemy is aiming at (by default), visible in the damage, capped, and it expires', () => {
-  const c = fixed(['hold_the_line', 'scrapline'], ['pinprick'], { momentum: 1 });
+  const c = fixed(['hold_the_line', 'scrapline'], ['scrapline_b'], { momentum: 1 });
   const e = c.enemies[0];
   e.intent = { ...e.intent, kind: 'atk', dmg: 10, target: 'C' };
   e.atb = 0.5;
@@ -682,7 +682,7 @@ test('Braced: +20% Defense on the hero an enemy is aiming at (by default), visib
 });
 
 test("Hessa's Guard support grants Guard and starts Cover; Corvin's heal fills the pool, never above max", () => {
-  const c = fixed(['salvage', 'mend_circuit', 'scrapline'], ['pinprick', 'tripwire'], { momentum: 2 });
+  const c = fixed(['salvage', 'mend_circuit', 'scrapline'], ['scrapline_b', 'piston_strike_b'], { momentum: 2 });
   c.hp = 120;
   play(c, slot(c, 0));
   assert.ok(c.guard >= 5);
@@ -693,7 +693,7 @@ test("Hessa's Guard support grants Guard and starts Cover; Corvin's heal fills t
 
 // ── beta-feedback pacing under the Phase 5 decision window ──
 test('Flow holds while the first card executes and for the read hold after it, without shortening the combo', () => {
-  const c = fixed(['scrapline', 'rivet_jab'], ['pinprick']);
+  const c = fixed(['scrapline', 'rivet_jab'], ['scrapline_b']);
   c.playCard(slot(c, 0));
   const start = c.combo.start;
   assert.ok(Math.abs(c.flowLeft() - RULES.FLOW_INITIAL) < 1e-9);
@@ -734,7 +734,7 @@ test('the Flow rules give a learning player time for a five-card combo', () => {
 });
 
 test('Flow holds while a command executes (its real duration), but not after a wrong card', () => {
-  const c = fixed(['scrapline', 'rivet_jab', 'scrapline', 'piston_strike'], ['pinprick', 'tripwire']);
+  const c = fixed(['scrapline', 'rivet_jab', 'scrapline', 'piston_strike'], ['scrapline_b', 'piston_strike_b']);
   play(c, slot(c, 0));
   advance(c, RULES.FLOW_READ_GRACE + 0.5);
   c.playCard(slot(c, 1));
@@ -759,7 +759,7 @@ test('enemies never act within ENEMY_SPACING of each other', () => {
 });
 
 test('enemies advance before a combo and wait during the breather after one', () => {
-  const c = fixed(['scrapline', 'rivet_jab'], ['pinprick'], { enemies: ['rush_hound'] });
+  const c = fixed(['scrapline', 'rivet_jab'], ['scrapline_b'], { enemies: ['rush_hound'] });
   c.enemies[0].atb = 0;
   advance(c, 1.0);
   assert.ok(c.enemies[0].atb > 0, 'ATB advances in PRE');

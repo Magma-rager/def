@@ -695,6 +695,9 @@ Object.assign(CLIPS, {
   pressureSplice: { ...clip('focus', 'vent', 'castHold'), keys: [[0,'idle'],[.13,'focus'],[.20,'lattice'],[.28,'vent'],[.44,'castHold'],[.58,'idle']] },
   ratchetBurst: { ...clip('load', 'hipFire', 'recoil'), keys: [[0,'idle'],[.07,'load'],[.17,'kneel'],[.28,'hipFire'],[.39,'recoil'],[.49,'load'],[.58,'idle']] },
   signalCase: clip('calibrate', 'tend', 'lattice'),
+  kitShield: clip('gather', 'receive', 'guard'),
+  kitCircuit: clip('tend', 'receive', 'calibrate'),
+  kitQuick: clip('load', 'receive', 'salute'),
 });
 export function clipClock(elapsed, realImpact, realDuration, c) {
   if (realImpact == null) return elapsed;

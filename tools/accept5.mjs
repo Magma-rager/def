@@ -256,6 +256,7 @@ await tapCard(b25);
 const heal = await uidById('mend_circuit');
 const m25 = (await S()).momentum;
 await tapCard(heal);
+await tapSel('.hero-btn[data-hero="C"]');
 s = await S();
 const healCmd = s.queue.find((q) => q.uid === heal);
 const reservedWhileQueued = s.reserved;

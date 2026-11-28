@@ -39,7 +39,6 @@ const corvin = {
   overpressure: cue('lens', 'pressure', SLAG, [45, 56, 42]),
   suit_storm: cue('array', 'prism', TEAL, [57, 64, 71]),
   echo_chamber: cue('orbit', 'echo', VIOLET, [53, 65, 60]),
-  mend_circuit: cue('mend', 'mend', TEAL, [60, 64, 69]),
   ward_weave: cue('mend', 'plates', BLUE, [49, 56, 61]),
   low_gear: cue('meter', 'ratchet', VIOLET, [48, 52, 60]),
   signal_boost: cue('array', 'scan', TEAL, [57, 66]),
@@ -72,9 +71,15 @@ const basic = {
   S: [cue('snap', 'rail', BRASS, [60]), cue('sidestep', 'fork', BRASS, [55, 62]), cue('braceShot', 'rail', BRASS, [48, 60])],
 };
 const utility = cue('handoff', 'relay', TEAL, [55, 62]);
+const kits = {
+  V: cue('kitShield', 'kit', TEAL, [52, 60, 67]),
+  C: cue('kitCircuit', 'kit', TEAL, [55, 62, 69]),
+  S: cue('kitQuick', 'kit', TEAL, [57, 64, 71]),
+};
 export function cardCue(ev) {
   if (ev.role === 'counter') return cue('riposte', 'cleave', SLAG, [53, 46]);
   if (ev.role === 'momentum') return hessa.brace_up;
+  if (ev.id === 'mend_circuit') return kits[ev.who] || kits.C;
   if (CARD_CUES[ev.id]) return CARD_CUES[ev.id];
   if (ev.category === 'basic') return basic[ev.who]?.[Math.max(0, Math.min(2, ev.rank - 1))] || basic.S[0];
   if (ev.id === 'cache_hook') return cue('handoff', 'cache', TEAL, [63, 55]);

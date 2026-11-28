@@ -64,7 +64,7 @@ function migrate(obj) {
     obj.stats = { ...emptyStats(), ...(obj.stats || {}) };
     obj.version = 6;
   }
-  if (obj.version === 6 || obj.version === 7) {
+  if (obj.version === 6 || obj.version === 7 || obj.version === 8) {
     if (!Array.isArray(obj.exFound)) obj.exFound = [];
     obj.exFound = obj.exFound.filter((id) => typeof id === 'string');
     obj.stats = obj.stats || emptyStats();
@@ -648,10 +648,13 @@ export class Run {
         ((i === 0 && needBasic && !lead) || (i === 0 && !want && rng.chance(0.20)) || (n === 5 && i === 3));
       const standard = standardSlot && cands.filter((c) => c.standard);
       if (standard?.length) {
-        const countsByRank = [0, 0, 0, 0];
-        for (const inst of this.d.deck) if (CARDS[inst.id].category === 'basic') countsByRank[this.effRank(inst)]++;
-        const minimum = Math.min(...standard.map((c) => countsByRank[c.rank]));
-        cands = standard.filter((c) => countsByRank[c.rank] === minimum);
+        cands = standard;
+        if (i === 0 && needBasic) {
+          const countsByRank = [0, 0, 0, 0];
+          for (const inst of this.d.deck) if (CARDS[inst.id].category === 'basic') countsByRank[this.effRank(inst)]++;
+          const minimum = Math.min(...standard.map((c) => countsByRank[c.rank]));
+          cands = standard.filter((c) => countsByRank[c.rank] === minimum);
+        }
       } else if (want) {
         let t = cands.filter((c) => c.tags.includes(want));
         // If the style is unavailable at the rolled rarity, try its nearest permitted rarities.

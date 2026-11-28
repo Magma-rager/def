@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 let packagedPolicy;
 export async function installUiPolicy(page) {
   packagedPolicy ??= bundle({
-    stdin: { contents: `export { decide } from './bot.mjs';
+    stdin: { contents: `export { decide, restorativePerformer } from './bot.mjs';
       export { starterOptions } from '../../src/engine/progression.js';`,
       resolveDir: fileURLToPath(new URL('.',import.meta.url)) },
     format:'iife', bundle:true, globalName:'__sbTestPolicy', write:false,
@@ -23,11 +23,12 @@ export async function uiDecision(p, profile = 'regular', build = null) {
     const bs = window.__sb && window.__sb.battle;
     const c = bs && bs.combat;
     if (!c || c.phase === 'END' || bs.ended) return null;
-    const { decide } = window.__sbTestPolicy || await import('/tools/lib/bot.mjs');
+    const { decide, restorativePerformer } = window.__sbTestPolicy || await import('/tools/lib/bot.mjs');
     const a = decide(c, { profile, build });
     if (a.uid) {
       a.zone = c.hand.includes(a.uid) ? 'hand' : c.reserve.includes(a.uid) ? 'reserve' : null;
       a.card = c.def(a.uid).id;
+      if (a.type === 'play') a.performer = restorativePerformer(c, a.uid);
     }
     return a;
   }, { profile, build });
@@ -68,7 +69,10 @@ export async function uiPerform(p, a, { touch = false } = {}) {
       const ok = await tap(cardSel(a.uid, a.zone));
       // a hero-targeted support opens the hero picker: tap the chosen hero, or the card again (default)
       const picking = await p.evaluate(() => { const b = document.querySelector('.pick-cancel'); return !!(b && !b.hidden); });
-      if (ok && picking) return a.target ? tap(`.hero-btn[data-hero="${a.target}"]`) : tap(cardSel(a.uid, a.zone));
+      if (ok && picking) {
+        const hero = a.performer || a.target;
+        return hero ? tap(`.hero-btn[data-hero="${hero}"]`) : tap(cardSel(a.uid, a.zone));
+      }
       return ok;
     }
     case 'select': return tap(`.hero-btn[data-hero="${a.hero}"]`);

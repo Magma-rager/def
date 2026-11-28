@@ -126,7 +126,7 @@ export const LESSONS = [
   },
   {
     key: 'support', intro: true, need: ['attack'], title: 'SUPPORT ✚',
-    body: '<b>Support</b> heals, guards or helps — at any time, even during another hero\'s combo, without touching it. The hero who performs it recovers for 2s afterwards.',
+    body: '<b>Support</b> works during an ally\'s combo. For a <b>Repair Kit</b>, choose a Ready hero to heal the party. The performer recovers for 2s.',
     when: (c) => {
       const pressed = c.hp < c.maxHp * 0.9 || c.aliveEnemies().some((e) => e.intent && e.intent.dmg > 0 && e.atb >= 0.5);
       if (!pressed) return null;

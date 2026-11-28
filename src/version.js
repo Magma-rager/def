@@ -3,4 +3,4 @@
 //   0.N.P  — P counts published builds with changes since that gate
 //   1.0.0  — the eventual release after the revised roadmap and final beta
 // package.json and the iOS project must carry the same number (checked by tests/systems.test.mjs).
-export const VERSION = '0.2.12';
+export const VERSION = '0.2.13';

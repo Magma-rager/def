@@ -1,6 +1,6 @@
 # SIGNAL//BREAK
 
-A single-player, real-time, party-based roguelite deckbuilding JRPG. The 0.2.12 pre-beta is played in landscape. See the [beta packet](docs/PLAYTEST.md) and [verification status](docs/PHASE12.md).
+A single-player, real-time, party-based roguelite deckbuilding JRPG. The 0.2.13 pre-beta is played in landscape. See the [beta packet](docs/PLAYTEST.md) and [combat refinement and verification](docs/COMBAT_REFINEMENT.md).
 
 Granraku, a cynical trash-game hunter, enters a malfunctioning experimental card RPG and discovers that its "deprecated" **Relay** combat system is brilliant. Three heroes share one deck and one six-card hand. Combos of neutral basic attacks climbing into a hero's artes resolve in real time while enemies keep acting on their ATB bars.
 
@@ -122,7 +122,7 @@ English and Russian. Switch on the title screen (top-left) or in Settings → La
 
 The current roadmap uses the `0.2.x` development sequence. The title screen and Patch Notes show the current version and the title also gives the source stamp. Version 1.0.0 is reserved for the authorized release after the beta, resulting corrections and release verification.
 
-**0.2.12** is the pre-beta candidate. The title shows the source build stamp. The [Phase 12 report](docs/PHASE12.md) records corrective balancing, safety changes, platform evidence and the rollback procedure. See the [draft release notes](docs/RELEASE_NOTES.md), [beta protocol](docs/PLAYTEST.md), [Phase 11 content report](docs/PHASE11.md), [Phase 10 presentation report](docs/PHASE10.md) and [Phase 9 progression report](docs/PHASE9.md).
+**0.2.13** is the combat refinement preview. Six standard attacks form the starting combo toolkit. A Ready hero you choose can play the neutral Repair Kit. The title shows the source build stamp. The [Phase 12 report](docs/PHASE12.md) records corrective balancing, safety changes, platform evidence and the rollback procedure. See the [draft release notes](docs/RELEASE_NOTES.md), [beta protocol](docs/PLAYTEST.md), [Phase 11 content report](docs/PHASE11.md), [Phase 10 presentation report](docs/PHASE10.md) and [Phase 9 progression report](docs/PHASE9.md).
 
 Profiles remain local to their browser and origin. Historical schema migration is covered by the test suite. Continue restores the last checkpoint and restarts an unfinished battle. Cached PWA updates verify the matching game page before replacing the previous cache. An unreadable record or a newer checkpoint from another tab is protected from overwrite.
 

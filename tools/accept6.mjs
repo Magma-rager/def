@@ -72,7 +72,17 @@ const tapSel = async (sel) => { const at = await center(sel); if (!at) return fa
 const uidOf = (id, zone = 'hand') => p.evaluate(([cid, z]) => { const c = window.__sb.battle.combat; return (z === 'hand' ? c.hand : c.reserve).find((u) => u && c.def(u).id === cid) || null; }, [id, zone]);
 // a lesson the tap makes relevant opens at once: record and dismiss it (the scenario reads the log)
 const afterTap = async () => { await wait(40); const x = await S(); if (x && x.lesson) await dismissLesson(x); };
-const tapCard = async (id) => { const u = await uidOf(id); if (!u) return false; const ok = await tapSel(`.hand .card[data-uid="${u}"]`); await afterTap(); return ok; };
+const tapCard = async (id) => {
+  const u = await uidOf(id);
+  if (!u) return false;
+  const ok = await tapSel(`.hand .card[data-uid="${u}"]`);
+  if (ok && id === 'mend_circuit' && await p.locator('.pick-cancel').isVisible()) {
+    const ready = '.hero-btn.pick:enabled';
+    await tapSel(await p.locator(`${ready}[data-hero="C"]`).count() ? `${ready}[data-hero="C"]` : ready);
+  }
+  await afterTap();
+  return ok;
+};
 const tapHero = async (id) => { const ok = await tapSel(`.hero-btn[data-hero="${id}"]`); await afterTap(); return ok; };
 const swipeCard = async (id, dy) => {
   const slot = await p.evaluate((cid) => { const c = window.__sb.battle.combat; return c.hand.findIndex((u) => u && c.def(u).id === cid); }, id);

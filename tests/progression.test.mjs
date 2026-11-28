@@ -256,9 +256,9 @@ test('Relay, Churn, high-rank, Flow and Momentum evidence requires a successful 
   applyCheckpoint(meta, run);
   earned(meta, 'relay_trio');
 
-  c = arranged(nearBattle(run), ['scrapline', 'pinprick', 'scrapfall', 'jam_breaker', 'capstone', 'mend_circuit'], ['salvage', 'rivet_jab']);
+  c = arranged(nearBattle(run), ['scrapline', 'scrapline_b', 'scrapfall', 'jam_breaker', 'capstone', 'mend_circuit'], ['salvage', 'rivet_jab']);
   action(c, 'scrapline');
-  const churned = c.hand.find((id) => id && c.def(id).id === 'pinprick');
+  const churned = c.hand.find((id) => id && c.def(id).id === 'scrapline_b');
   assert.ok(c.churnCard(churned).ok);
   assert.ok(c.spendMomentumFlow().ok);
   action(c, 'rivet_jab');
@@ -315,7 +315,7 @@ test('acquired cards and traded relics persist, declined offers and unknowns sta
   const run = start(5, 'spare_pockets');
   applyCheckpoint(meta, run);
   const starterCount = new Set(STARTER_DECK.map((s) => s.id)).size;
-  assert.deepEqual(collections(meta).cards, [starterCount, 87]);
+  assert.deepEqual(collections(meta).cards, [starterCount, 82]);
   assert.ok(meta.relicsFound.includes('spare_pockets'));
   const offer = rewardPool().filter((c) => !run.d.progress.cards.includes(c.id) && c.category === 'arte').slice(0, 2);
   run.d.pending = { type: 'reward', cards: offer, relics: ['twin_dials'] };
@@ -482,8 +482,11 @@ test('captured historical profiles and v6 run migrate idempotently without inven
   const raw = fixture('save-v6-0.2.8-gameover.json');
   assert.equal(raw.version, 6);
   const r = Run.load(saveCopy(raw));
-  assert.equal(r.d.version, 7);
-  assert.deepEqual(r.d.deck, raw.deck);
+  assert.equal(r.d.version, 8);
+  assert.equal(r.d.deck.length, raw.deck.length);
+  assert.deepEqual(r.d.deck.map(({ uid, up, graft, rankMod }) => [uid, up, graft, rankMod]),
+    raw.deck.map(({ uid, up, graft, rankMod }) => [uid, up, graft, rankMod]));
+  assert.ok(r.d.deck.every(({ id }) => CARDS[id]));
   assert.deepEqual(r.d.pending, raw.pending);
   assert.deepEqual(r.d.progress.proofs, {});
   const old = normalizeMeta({ version: 2, totalRuns: 3, defeats: 3, runs: [{ result: 'abandoned' }] });

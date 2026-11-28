@@ -240,7 +240,7 @@ for (const [W, H] of VIEWPORTS) {
     const { ADAPTATIONS } = await import('/src/data/adaptations.js');
     const r = app.run;
     r.d.deck = []; r.d.nextUid = 1;
-    for (const id of ['scrapline', 'hotwire', 'salvage', 'rivet_jab', 'spark_primer', 'gauge_read', 'rethread', 'step_up', 'gear_swap', 'dead_drop', 'relay_baton', 'shuffle_step', 'scrapfall', 'last_word', 'final_notice', 'grand_relay', 'hold_the_line']) r.addCard({ id });
+    for (const id of ['scrapline', 'hotwire', 'salvage', 'rivet_jab', 'hidden_ace', 'pocket_gauge', 'rethread', 'first_rung', 'gear_swap', 'dead_drop', 'relay_baton', 'shuffle_step', 'scrapfall', 'last_word', 'final_notice', 'grand_relay', 'hold_the_line']) r.addCard({ id });
     // the widest Churn panel: 6 charges (relic + mutation) plus the FREE badge
     if (!r.d.relics.includes('churn_gear')) r.d.relics.push('churn_gear');
     if (!r.d.mutations.includes('grinder')) r.d.mutations.push('grinder');

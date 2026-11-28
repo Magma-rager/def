@@ -41,7 +41,7 @@ const ARCH_LIST = Object.keys(ARCHETYPES);
 const targetFor = (seed) => (BUILD === 'each' ? ARCH_LIST[(seed - 1001) % ARCH_LIST.length] : BUILD && ARCHETYPES[BUILD] ? BUILD : null);
 if (process.env.SB_EX === 'off') RULES.EX_COMBOS = false;
 
-function botBattle(setup, rng, { reaction, profile, recipeAware, tactics }) {
+function botBattle(setup, rng, { reaction, profile, recipeAware, tactics, observeDecision }) {
   const c = new Combat(setup);
   let think = 0.4;
   const dt = 1 / 30;
@@ -52,6 +52,7 @@ function botBattle(setup, rng, { reaction, profile, recipeAware, tactics }) {
     if (think > 0 || c.phase === 'END') continue;
     think = reaction * (0.7 + rng.next() * 0.6);
     const a = decide(c, { profile, rng: r, ex: recipeAware, build: tactics });
+    observeDecision?.(c, a);
     perform(c, a);
     // queueing is a quick tap: a player who just committed may commit the next card sooner
     if (a.type === 'play' || a.type === 'select') think = Math.min(think, reaction * 0.5);
@@ -102,7 +103,7 @@ function executedChurnDraws(c) {
 
 export function simulateCampaign(seed, {
   starterRelic = 'beta_badge', reaction = REACT, profile = PROFILE, recipeAware = EX, tactics = TACTICS,
-  target = targetFor(seed), meta = null, audit = false, observeBattle = null, wanted = target || RELICS[starterRelic].tag,
+  target = targetFor(seed), meta = null, audit = false, observeBattle = null, observeDecision = null, wanted = target || RELICS[starterRelic].tag,
 } = {}) {
   if (meta && !canStartWith(meta, starterRelic)) throw new Error(`Locked starter ${starterRelic}`);
   const rng = new RNG(seed * 7 + 1);
@@ -136,7 +137,7 @@ export function simulateCampaign(seed, {
       case 'battle': {
         const setup = run.battleSetup();
         const before = run.d.hp;
-        const { out, t, c } = botBattle(setup, rng, { reaction, profile, recipeAware, tactics });
+        const { out, t, c } = botBattle(setup, rng, { reaction, profile, recipeAware, tactics, observeDecision });
         observeBattle?.(setup, out, c);
         if (meta) for (const [id, n] of Object.entries(out.stats.exByRecipe)) {
           for (let i = 0; i < n; i++) addRunRecipe(run, id);
@@ -293,9 +294,10 @@ export function simulateCampaign(seed, {
         log.arch = run.archetypeKey();
         log.bossIds = run.d.bossesDefeated.slice();
         log.proofs = run.d.progress.proofs;
-        if (observations) observations.acquired = {
-          cards: run.d.progress.cards, relics: run.d.relicsSeen, mutations: run.d.mutations,
-        };
+        if (observations) {
+          observations.acquired = { cards: run.d.progress.cards, relics: run.d.relicsSeen, mutations: run.d.mutations };
+          observations.endDeck = run.d.deck.map(({ uid, id, up }) => ({ uid, id, up }));
+        }
         log.wantedCards = wanted ? (log.tagCounts[wanted] || 0) : 0;
         log.firstActVictory = run.d.bossesDefeated.some((id) => id === run.d.bosses[1]);
         if (meta) log.summary = settleRun(meta, run, log.result);

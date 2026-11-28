@@ -222,7 +222,7 @@ async function motion() {
         c.hand[2] = 'motion-victim';
         c.cards.set('motion-victim',{uid:'motion-victim',id:'salvage'});
         c.cards.set('motion-churn',{uid:'motion-churn',id:'index_slug'});
-        c.cards.set('motion-next',{uid:'motion-next',id:'pinprick'});
+        c.cards.set('motion-next',{uid:'motion-next',id:'scrapline_b'});
         c.draw.push('motion-next','motion-churn');
       }
       if (card === 'latchshield' && !c.stash('motion-arte').ok) throw Error('Reserve setup refused');

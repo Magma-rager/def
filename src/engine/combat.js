@@ -499,7 +499,7 @@ export class Combat {
   // Single source of truth for "can this card be committed right now" (docs/COMBAT_SPEC.md §8.2,
   // §10). The hand, the Reserve, keyboard input, the bots and the tests all use it. Offensive cards
   // are judged against the projected chain (above); `rank`/`variant` are frozen into the command.
-  check(uid) {
+  check(uid, { performer } = {}) {
     const inst = this.cards.get(uid);
     if (!inst) return { ok: false, reason: 'missing', text: 'Missing card' };
     const d = CARDS[inst.id];
@@ -523,7 +523,9 @@ export class Combat {
         if (P.finish || P.ending) return { ok: false, reason: 'finishing', text: 'Combo ending' };
         if (P.seg < 1) return { ok: false, reason: 'needcard', text: 'Play a card first' };
       }
-      const hero = this.supportPerformer(d);
+      const itemPick = d.item && performer != null;
+      if (itemPick && !this.heroReady(performer)) return { ok: false, reason: 'busy', text: 'Choose a Ready hero' };
+      const hero = itemPick ? performer : this.supportPerformer(d);
       if (!hero) return { ok: false, reason: 'busy', text: d.owner ? this.busyText(d.owner) : 'Every hero is busy' };
       if (this.available() < cost) return short();
       return { ok: true, kind: 'support', zone, category: 'support', hero };
@@ -730,9 +732,9 @@ export class Combat {
   // ───────────────────────── commands (docs/COMBAT_SPEC.md §7.1, §11.3, §16) ─────────────────────────
   // commit: validate, move the card from its slot (or Reserve) into the queue (its slot is held, not
   // refilled), reserve its cost. Execution starts when every earlier command has completed.
-  // o.target: the hero a hero-targeted support (Braced) acts on.
+  // o.target is the recipient of Braced. o.performer is the hero who uses a neutral item.
   commit(uid, o = {}) {
-    const chk = this.check(uid);
+    const chk = this.check(uid, o);
     if (!chk.ok) {
       this.stumble(uid, chk);
       return { ok: false, chk };
@@ -908,7 +910,7 @@ export class Combat {
     if (cmd.type === 'relay') return 'relay';
     if (cmd.type === 'finish') return 'finish';
     const d = this.def(cmd.uid);
-    return d.owner ? d.anim : HERO_ANIM[cmd.hero];
+    return d.owner || d.item ? d.anim : HERO_ANIM[cmd.hero];
   }
   // Execution start: the reservation becomes a spend, the hero acts (animation), effects wait for
   // the impact moment (RULES.RESOLVE_AT).

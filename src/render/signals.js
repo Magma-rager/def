@@ -122,6 +122,12 @@ export function drawSignal(ctx, f, p, reduced) {
     case 'mend':
       arc(ctx,18,-2.8,-.32); arc(ctx,18,.32,2.8);
       line(ctx,[-10,0,-4,0,-4,-6,4,-6,4,0,10,0,10,5,4,5,4,11,-4,11,-4,5,-10,5,-10,0]); break;
+    case 'kit':
+      ctx.strokeRect(-17,-9,34,24);
+      line(ctx,[-7,-9,-7,-15,7,-15,7,-9]);
+      line(ctx,[-8,3,8,3]);
+      line(ctx,[0,-5,0,11]);
+      break;
     case 'prism':
       diamond(ctx,0,0,22); diamond(ctx,0,0,12);
       line(ctx,[-24,8,0,0,25,-8]); break;

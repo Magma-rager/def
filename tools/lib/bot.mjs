@@ -371,9 +371,14 @@ export function decide(c, { profile = 'regular', rng = Math.random, relay = 'car
 }
 
 // Performs an action on the engine (headless players). Returns the engine's result.
+export function restorativePerformer(c, uid) {
+  if (!c.def(uid)?.item) return undefined;
+  return c.heroReady('C') ? 'C' : c.check(uid).hero;
+}
+
 export function perform(c, a) {
   switch (a.type) {
-    case 'play': return c.playCard(a.uid, a.target ? { target: a.target } : undefined);
+    case 'play': return c.playCard(a.uid, { target: a.target, performer: restorativePerformer(c, a.uid) });
     case 'select': return c.selectHero(a.hero);
     case 'finish': return c.finishOrCashOut();
     case 'churn': return c.churnCard(a.uid);

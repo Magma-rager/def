@@ -126,7 +126,7 @@ export function msg(m) {
 }
 
 // ───────────────────────── content ─────────────────────────
-export const cardName = (id) => (pick('cards', id) || {}).name || CARDS[id].name;
+export const cardName = (id) => (pick('cards', id) || {}).name || CARDS[id]?.name || id;
 export const cardTemplate = (id) => (pick('cards', id) || {}).text || CARDS[id].text;
 export const categoryName = (cat) => pick('categories', cat) || CATEGORY_NAMES[cat];
 export const categoryPlural = (cat) => pick('categoriesPlural', cat) || `${CATEGORY_NAMES[cat]}s`;

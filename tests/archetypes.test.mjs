@@ -141,16 +141,16 @@ test('Guard & Counter: Counter strikes back when an enemy attacks', () => {
 
 test('Cash Out Specialist: Tally Mark boosts the payout per card', () => {
   const run = (tally) => {
-    const c = mk(['open_ledger', tally ? 'tally_mark' : 'step_up', 'scrapfall'], { relics: ['riveted_ledger'] });
-    play(c, 'open_ledger');
-    play(c, tally ? 'tally_mark' : 'step_up');
+    const c = mk(['scrapline', tally ? 'tally_mark' : 'rivet_jab', 'scrapfall'], { relics: ['riveted_ledger'] });
+    play(c, 'scrapline');
+    play(c, tally ? 'tally_mark' : 'rivet_jab');
     return c.payoutAmount(1).amount;
   };
   assert.ok(run(true) > run(false));
 });
 
 test('Interference Exploitation: Breach Payload scales with interference endured', () => {
-  const c = mk(['scrapline', 'step_up', 'breach_payload', 'tripwire']);
+  const c = mk(['scrapline', 'step_up', 'breach_payload', 'piston_strike_b']);
   const e = c.enemies[0];
   for (let i = 0; i < 4; i++) {
     c.lockCards(e, 1);

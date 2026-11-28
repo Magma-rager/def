@@ -33,7 +33,7 @@ function churn(c, id) {
 }
 
 test('Index Slug primes the next hit only after the exact Churn draw is executed', () => {
-  const c = fixture(['scrapline','salvage','junk_toss','piston_strike','scrapfall','bolt_volley'], ['pinprick','index_slug','rivet_jab']);
+  const c = fixture(['scrapline','salvage','junk_toss','piston_strike','scrapfall','bolt_volley'], ['scrapline_b','index_slug','rivet_jab']);
   play(c, 'scrapline');
   churn(c, 'salvage');
   assert.ok(c.combo.churnDraws.has(find(c, 'index_slug')));
@@ -53,7 +53,7 @@ test('Index Slug primes the next hit only after the exact Churn draw is executed
 });
 
 test('a Junk Toss drawn by Churn gains its own payoff on the executed hit', () => {
-  const c = fixture(['scrapline','salvage','piston_strike','scrapfall','bolt_volley','mend_circuit'], ['pinprick','junk_toss']);
+  const c = fixture(['scrapline','salvage','piston_strike','scrapfall','bolt_volley','mend_circuit'], ['scrapline_b','junk_toss']);
   play(c, 'scrapline');
   churn(c, 'salvage');
   play(c, 'junk_toss');
@@ -61,7 +61,7 @@ test('a Junk Toss drawn by Churn gains its own payoff on the executed hit', () =
 });
 
 test('only the last prepared Churn draw carries into the next chain, with no Salvage Circuit credit', () => {
-  const c = fixture(['scrapline','salvage','piston_strike','scrapfall','bolt_volley','mend_circuit'], ['index_slug','pocket_gauge','pinprick']);
+  const c = fixture(['scrapline','salvage','piston_strike','scrapfall','bolt_volley','mend_circuit'], ['index_slug','pocket_gauge','scrapline_b']);
   churn(c,'salvage');
   const expired = find(c,'index_slug');
   churn(c,'mend_circuit');
@@ -79,7 +79,7 @@ test('only the last prepared Churn draw carries into the next chain, with no Sal
 
 test('Ratchet Burst fires its second hit only after an executed Churn draw in Pin’s segment', () => {
   for (const powered of [false, true]) {
-    const c = fixture(['scrapline','salvage','ratchet_burst','piston_strike','scrapfall','grand_relay'], ['pinprick','index_slug']);
+    const c = fixture(['scrapline','salvage','ratchet_burst','piston_strike','scrapfall','grand_relay'], ['scrapline_b','index_slug']);
     c.selectHero('S');
     play(c, 'scrapline');
     if (powered) { churn(c, 'salvage'); play(c, 'index_slug'); }
@@ -91,7 +91,7 @@ test('Ratchet Burst fires its second hit only after an executed Churn draw in Pi
 
 test('Pressure Splice offers its next-hit and Flow payoff only after a Churn in the live chain', () => {
   for (const powered of [false, true]) {
-    const c = fixture(['scrapline','salvage','pressure_splice','piston_strike','scrapfall','overture'], ['pinprick','rivet_jab']);
+    const c = fixture(['scrapline','salvage','pressure_splice','piston_strike','scrapfall','overture'], ['scrapline_b','rivet_jab']);
     c.selectHero('C');
     play(c, 'scrapline');
     if (powered) churn(c, 'salvage');
@@ -103,7 +103,7 @@ test('Pressure Splice offers its next-hit and Flow payoff only after a Churn in 
 });
 
 test('Pocket Gauge and Pocket Seal expose the struck enemy before damage from Reserve', () => {
-  const c = fixture(['scrapline',{ id:'pocket_gauge', graft:'pocket_seal' },'salvage','piston_strike','scrapfall','mend_circuit'], ['pinprick']);
+  const c = fixture(['scrapline',{ id:'pocket_gauge', graft:'pocket_seal' },'salvage','piston_strike','scrapfall','mend_circuit'], ['scrapline_b']);
   assert.ok(c.stash(find(c, 'pocket_gauge')).ok);
   play(c, 'scrapline');
   play(c, 'pocket_gauge');
@@ -113,7 +113,7 @@ test('Pocket Gauge and Pocket Seal expose the struck enemy before damage from Re
 });
 
 test('Safety Interlock waits for saved support and a later Arte, never its cancellation', () => {
-  const c = fixture(['scrapline','signal_case','scrapfall','salvage','capstone','piston_strike'], ['pinprick','hotwire']);
+  const c = fixture(['scrapline','signal_case','scrapfall','salvage','capstone','piston_strike'], ['scrapline_b','hotwire']);
   assert.ok(c.stash(find(c,'signal_case')).ok);
   play(c, 'scrapline');
   c.locks[find(c, 'piston_strike')] = { until: 50 };
@@ -153,7 +153,7 @@ test('new enemies use ally guard, repair and acceleration as forecast', () => {
 });
 
 test('the Core counters Churn and Reserve without removing a full hand plan', () => {
-  const hand = ['scrapline','salvage','pocket_gauge','latchshield','pinprick','piston_strike'];
+  const hand = ['scrapline','salvage','pocket_gauge','latchshield','scrapline_b','piston_strike'];
   const draw = ['rivet_jab','mend_circuit'];
   const core = { act:3, enemies:['signalbreak_core'] };
   const churner = fixture(hand, draw, { ...core, profileArch:'churn' });
@@ -187,7 +187,7 @@ test('Hunt forecasts its actual high damage and updates when the party uses Guar
 
 test('Index Spring and Reclaim Circuit stack once per combo and do not replenish Churn', () => {
   const c = fixture(['scrapline','salvage','mend_circuit','piston_strike','scrapfall','bolt_volley'],
-    ['pinprick','index_slug','rivet_jab','quickdraw'], { relics:['index_spring'], mutations:['reclaim_circuit'] });
+    ['scrapline_b','index_slug','rivet_jab','quickdraw'], { relics:['index_spring'], mutations:['reclaim_circuit'] });
   c.selectHero('C');
   play(c,'scrapline');
   const charges = c.churn.charges;

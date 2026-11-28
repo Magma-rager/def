@@ -81,7 +81,7 @@ test('a hero cannot reshape the combo they are running: Corvin\'s technique duri
 });
 
 test('a technique needs a combo with a card in its current part', () => {
-  const c = fixed(['scrapline', 'rivet_jab', 'cache_hook', 'scrapfall'], ['pinprick']);
+  const c = fixed(['scrapline', 'rivet_jab', 'cache_hook', 'scrapfall'], ['scrapline_b']);
   assert.equal(c.check(uid(c, 'cache_hook')).reason, 'nocombo');
   c.selectHero('V');
   play(c, 'scrapline', 'rivet_jab');
@@ -127,7 +127,7 @@ test('queue: cancelling the technique drops the card that needed it (revalidated
 });
 
 test('queue: a technique queued before a Relay rewinds the outgoing part; the incoming part starts from rank 0 regardless', () => {
-  const c = fixed(['scrapline', 'rivet_jab', 'cache_hook', 'scrapline', 'bolt_volley', 'piston_strike'], ['pinprick', 'tripwire'], { momentum: 2 });
+  const c = fixed(['scrapline', 'rivet_jab', 'cache_hook', 'scrapline', 'bolt_volley', 'piston_strike'], ['scrapline_b', 'piston_strike_b'], { momentum: 2 });
   c.selectHero('V');
   play(c, 'scrapline', 'rivet_jab');
   const t = c.commit(uid(c, 'cache_hook')); // neutral: Corvin or Pin (free) performs it
@@ -157,7 +157,7 @@ test('queue: several waiting commands; the technique lands between them in order
 });
 
 test('the technique\'s owner recovering: refused; the combo about to expire: a waiting technique is cancelled with the combo', () => {
-  const c = fixed(['scrapline', 'rivet_jab', 'rethread', 'mend_circuit', 'scrapfall'], ['pinprick'], { momentum: 4 });
+  const c = fixed(['scrapline', 'rivet_jab', 'rethread', 'mend_circuit', 'scrapfall'], ['scrapline_b'], { momentum: 4 });
   c.hp = 90;
   c.selectHero('V');
   play(c, 'scrapline');
@@ -165,7 +165,7 @@ test('the technique\'s owner recovering: refused; the combo about to expire: a w
   assert.equal(c.heroState('C'), 'RECOVERING');
   assert.equal(c.check(uid(c, 'rethread')).reason, 'busy');
   // a technique still waiting when the combo drops goes back with its Momentum
-  const d = fixed(['scrapline', 'rivet_jab', 'cache_hook', 'piston_strike'], ['pinprick']);
+  const d = fixed(['scrapline', 'rivet_jab', 'cache_hook', 'piston_strike'], ['scrapline_b']);
   d.selectHero('V');
   play(d, 'scrapline');
   assert.ok(d.commit(uid(d, 'rivet_jab')).ok);
@@ -212,7 +212,7 @@ test('Downshift: Hessa (free) rewinds Pin\'s combo by 4 and adds Flow within the
 
 test('Cache Hook from Reserve rewinds further and gives +1 Momentum; from the hand less', () => {
   const run = (fromReserve) => {
-    const c = fixed(['scrapline', 'rivet_jab', 'piston_strike', 'cache_hook'], ['pinprick', 'tripwire']);
+    const c = fixed(['scrapline', 'rivet_jab', 'piston_strike', 'cache_hook'], ['scrapline_b', 'piston_strike_b']);
     if (fromReserve) assert.ok(c.stash(uid(c, 'cache_hook')).ok);
     c.selectHero('V');
     play(c, 'scrapline', 'rivet_jab', 'piston_strike'); // rank 3
@@ -245,7 +245,7 @@ test('techniques never duplicate EX Combos: Straight Circuit once, and no recipe
 });
 
 test('a scrambled card in hand is judged with its scrambled rank, before and after a technique', () => {
-  const c = fixed(['scrapline', 'rivet_jab', 'cache_hook', 'piston_strike', 'scrapfall'], ['pinprick'], { enemies: ['suit_scrambler'] });
+  const c = fixed(['scrapline', 'rivet_jab', 'cache_hook', 'piston_strike', 'scrapfall'], ['scrapline_b'], { enemies: ['suit_scrambler'] });
   c.selectHero('V');
   play(c, 'scrapline', 'rivet_jab');
   c.scrambleCards(c.enemies[0], 1, 'rank');
@@ -260,7 +260,7 @@ test('a scrambled card in hand is judged with its scrambled rank, before and aft
 });
 
 test('Pressure Valve: vents at most its cap, half of it as Guard, never reserved Momentum, and keeps the rest', () => {
-  const c = fixed(['scrapline', 'rivet_jab', 'pressure_valve', 'kindling'], ['pinprick'], { momentum: 9 });
+  const c = fixed(['scrapline', 'rivet_jab', 'pressure_valve', 'kindling'], ['scrapline_b'], { momentum: 9 });
   c.selectHero('C');
   play(c, 'scrapline', 'rivet_jab'); // +1 +1 → 11 (cap 10)
   const m0 = Math.min(c.momentum, c.momentumMax());
@@ -273,7 +273,7 @@ test('Pressure Valve: vents at most its cap, half of it as Guard, never reserved
   assert.equal(c.combo.cards.at(-1).spent, 6, 'spent = cost + vented');
   integrity(c);
   // reserved Momentum is never vented: an arte waiting in the queue keeps its reservation
-  const d = fixed(['scrapline', 'rivet_jab', 'pressure_valve', 'tripwire', 'coil_charge'], ['pinprick'], { momentum: 5 });
+  const d = fixed(['scrapline', 'rivet_jab', 'pressure_valve', 'piston_strike_b', 'coil_charge'], ['scrapline_b'], { momentum: 5 });
   d.selectHero('C');
   play(d, 'scrapline', 'rivet_jab'); // 7
   assert.ok(d.commit(uid(d, 'pressure_valve')).ok); // executing, cost 3 spent at start
@@ -286,7 +286,7 @@ test('Pressure Valve: vents at most its cap, half of it as Guard, never reserved
 
 test('Pressure Valve against Overpressure: capped and defensive vs all-in; upgraded vents 4 at 7 per point', () => {
   const vent = (id, up, mom) => {
-    const c = fixed(['scrapline', 'rivet_jab', { id, up }], ['pinprick'], { momentum: mom });
+    const c = fixed(['scrapline', 'rivet_jab', { id, up }], ['scrapline_b'], { momentum: mom });
     c.selectHero('C');
     play(c, 'scrapline', 'rivet_jab');
     const h0 = c.enemies[0].hp, g0 = Math.floor(c.guard), m0 = c.momentum;
@@ -305,7 +305,7 @@ test('Pressure Valve against Overpressure: capped and defensive vs all-in; upgra
   assert.equal(up.spent, 3 + 4, 'upgraded vents up to 4');
   assert.ok(up.dmg >= 7 * 5);
   // a long combo: Pressure Valve then another arte, both paid for (Pressure Release reads 6 + 2 = 8)
-  const c = fixed(['scrapline', 'rivet_jab', 'pressure_valve', 'cache_hook', 'last_word'], ['scrapline', 'tripwire'], { momentum: 9 });
+  const c = fixed(['scrapline', 'rivet_jab', 'pressure_valve', 'cache_hook', 'last_word'], ['scrapline', 'piston_strike_b'], { momentum: 9 });
   c.selectHero('C');
   play(c, 'scrapline', 'rivet_jab', 'pressure_valve');
   assert.ok(c.momentum >= 4, 'enough left for a rank-6 arte');

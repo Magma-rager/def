@@ -64,7 +64,7 @@ for (const [lang, w, h] of [['en', 844, 390], ['ru', 1194, 834], ['ru', 667, 375
     const c = bs.combat;
     for (const e of c.enemies) e.atb = 0; // no enemy action in between
     // any single-target basic attack (Static Bloom and Junk Toss-style cards aside)
-    const uid = c.hand.find((u) => u && c.check(u).ok && c.categoryOf(u) === 'basic' && !['static_bloom', 'tripwire', 'gear_swap'].includes(c.def(u).id));
+    const uid = c.hand.find((u) => u && c.check(u).ok && c.categoryOf(u) === 'basic' && !['static_bloom', 'piston_strike_b', 'gear_swap'].includes(c.def(u).id));
     const el = uid && document.querySelector(`.hand .card[data-uid="${uid}"]`);
     if (!el) return null;
     const r = el.getBoundingClientRect();

@@ -1005,3 +1005,7 @@ html.reduced-motion .progress-toast, html.reduced-motion .progress-toast.out { t
 
 /* An indexed replacement keeps its marked edge until played, lost or the chain ends. */
 .hand .churn-draw .card-frame { border-top: 3px double #106b71; }
+.card[data-kind="standard"] .role-tag { background: #e2d5b0; color: #3e3329; }
+.card[data-kind="specialized"] .role-tag { background: #5a3f78; color: #fff1ff; }
+.card[data-kind="item"] .role-tag { background: #206a59; color: #fffdf2; }
+.card[data-kind="item"] .card-frame { border-top-color: #297d6b; }

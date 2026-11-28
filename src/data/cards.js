@@ -108,6 +108,11 @@ card({
 });
 // Specialized Medium (rank 2)
 card({
+  id: 'step_up', name: 'Step Up', category: 'basic', rank: 2, variant: 'A', rarity: 'common', anim: 'shoot', glyph: 'ladder',
+  v: { d: [4, 5], b: [3, 4] }, text: 'Deal {d}. As a Step: +{b} damage and +1 Momentum.', tags: ['ladder'],
+  fx: (A) => { const st = A.step; A.dmg(A.v('d') + (st ? A.v('b') : 0)); if (st) A.mom(1); },
+});
+card({
   id: 'junk_toss', name: 'Junk Toss', category: 'basic', rank: 2, variant: 'B', rarity: 'common', anim: 'melee', glyph: 'box',
   v: { d: [8, 10], b: [11, 13] }, text: 'Deal {d}. If you played a Churn draw this combo: +{b} damage.', tags: ['churn'],
   fx: (A) => A.dmg(A.v('d') + (A.ctx.cards.some((e) => e.fromChurn) ? A.v('b') : 0)),
@@ -384,12 +389,13 @@ card({
   v: { g: [12, 16] }, text: 'Gain {g} Guard. Guard stops decaying for 8s.', tags: ['guard'],
   fx: (A) => { A.guard(A.v('g')); A.holdGuard(8); },
 });
-// Corvin: healing, Momentum, debuffs
+// Neutral restorative item. The stable ID preserves the old support's upgrades and discoveries.
 card({
-  id: 'mend_circuit', name: 'Mend Circuit', owner: 'C', category: 'support', cost: 2, variant: 'B', rarity: 'common', anim: 'cast', glyph: 'wave',
+  id: 'mend_circuit', name: 'Repair Kit', owner: null, item: true, category: 'support', cost: 2, variant: 'B', rarity: 'common', anim: 'cast', glyph: 'kit',
   v: { h: [14, 20] }, text: 'Heal the party {h}.', tags: ['guard'],
   fx: (A) => A.heal(A.v('h'), 'all'),
 });
+// Corvin: Momentum and tactical support
 card({
   id: 'ward_weave', name: 'Ward Weave', owner: 'C', category: 'support', cost: 1, variant: 'B', rarity: 'common', anim: 'guard', glyph: 'shield',
   v: { g: [7, 9] }, text: 'Gain {g} Guard.', tags: ['guard'],
@@ -522,7 +528,7 @@ export function graftFits(g, def) {
 }
 
 // Starter deck (docs/COMBAT_SPEC.md §18.1, prototype): 3 Weak, 3 Medium, 2 Strong with mixed suits,
-// one rank-4 arte per hero, Corvin's heal and Hessa's Guard/Cover support.
+// one rank-4 arte per hero, a neutral Repair Kit and Hessa's Guard/Cover support.
 export const STARTER_DECK = [
   { id: 'scrapline' }, { id: 'scrapline_b' }, { id: 'scrapline' },
   { id: 'rivet_jab' }, { id: 'hotwire' }, { id: 'hotwire' },
@@ -552,7 +558,6 @@ export const RETIRED_ATTACKS = Object.freeze({
   spark_primer: ['scrapline', 'EX'],
   pinprick: ['scrapline', 'A'],
   open_ledger: ['scrapline', 'A'],
-  step_up: ['rivet_jab', 'A'],
   tinder_toss: ['rivet_jab', 'A'],
   gauge_read: ['rivet_jab', 'EX'],
   polarity_shift: ['rivet_jab', 'A'],
@@ -568,7 +573,11 @@ export function refineCardSpec(spec) {
   const variant = spec.variant || suit;
   const id = variant === 'B' && !spec.recut && Object.hasOwn(STANDARD_B, base) ? STANDARD_B[base] : base;
   if (id === spec.id) return spec;
-  return { ...spec, id, ...(previous && !spec.variant && suit !== CARDS[id].variant ? { variant: suit } : {}) };
+  return {
+    ...spec, id,
+    ...(spec.uid ? { was: spec.was || spec.id } : {}),
+    ...(previous && !spec.variant && suit !== CARDS[id].variant ? { variant: suit } : {}),
+  };
 }
 
 export function refineDiscoveries(ids) {

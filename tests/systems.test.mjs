@@ -77,7 +77,7 @@ test('Interference: Churn snare, Reserve latch, Flow drain and Glitch cards all 
 });
 
 test('Glitch cards: unplayable, Churned for free, removed from the game', () => {
-  const c = mk(['scrapline', 'hotwire', 'salvage', 'rethread', 'scrapfall', 'step_up'], ['the_corruptor']);
+  const c = mk(['scrapline', 'hotwire', 'salvage', 'rethread', 'scrapfall', 'first_rung'], ['the_corruptor']);
   c.addGlitch(c.enemies[0], 3);
   const charges = c.churn.charges;
   for (let i = 0; i < 40; i++) c.update(0.05);

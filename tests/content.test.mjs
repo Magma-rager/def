@@ -65,10 +65,10 @@ function playCardInContext(id, up) {
   const ally = hero === 'V' ? 'S' : 'V';
   let hand, starter, steps;
   if (d.category === 'basic') { hand = [cardSpec]; starter = 'V'; steps = [id]; }
-  else if (d.category === 'arte') { hand = ['scrapline', 'pinprick', cardSpec]; starter = hero; steps = ['scrapline', id]; }
+  else if (d.category === 'arte') { hand = ['scrapline', 'scrapline_b', cardSpec]; starter = hero; steps = ['scrapline', id]; }
   else if (d.tech) { hand = ['scrapline', 'rivet_jab', cardSpec]; starter = d.owner ? (d.owner === 'V' ? 'S' : 'V') : 'V'; steps = ['scrapline', 'rivet_jab', id]; }
   else { hand = [cardSpec, 'scrapline']; starter = ally; steps = [id]; }
-  const c = mk(hand, ['tripwire', 'cold_start', 'step_up', 'pinprick'], { momentum: 6, hp: 90, enemies: ['foundry_warden', 'rush_hound'] });
+  const c = mk(hand, ['piston_strike_b', 'cold_start', 'first_rung', 'scrapline_b'], { momentum: 6, hp: 90, enemies: ['foundry_warden', 'rush_hound'] });
   c.selectHero(starter);
   for (const s of steps) {
     const u = uid(c, s);
@@ -173,16 +173,16 @@ test('relics — Step and Cross: Ladder Rungs, Wild Hinge, Kettle Drum, Prism Le
   assert.equal(c.combo.cards[1].cross, true);
   assert.equal(c.combo.cards[1].step, true);
   // Kettle Drum: an arte in a combo of 5+ cards deals +25%
-  const k5 = (relics) => { const x = mk(['scrapline', 'rivet_jab', 'piston_strike', 'cache_hook', 'tripwire', 'scrapfall'], [], { relics, momentum: 4 }); x.selectHero('V'); play(x, 'scrapline', 'rivet_jab', 'piston_strike', 'cache_hook', 'tripwire'); assert.ok(x.combo.cards.length >= 4); const h0 = hp(x); play(x, 'scrapfall'); return { d: h0 - hp(x), n: x.combo ? x.combo.cards.length : 5 }; };
+  const k5 = (relics) => { const x = mk(['scrapline', 'rivet_jab', 'piston_strike', 'cache_hook', 'piston_strike_b', 'scrapfall'], [], { relics, momentum: 4 }); x.selectHero('V'); play(x, 'scrapline', 'rivet_jab', 'piston_strike', 'cache_hook', 'piston_strike_b'); assert.ok(x.combo.cards.length >= 4); const h0 = hp(x); play(x, 'scrapfall'); return { d: h0 - hp(x), n: x.combo ? x.combo.cards.length : 5 }; };
   const a = k5(['kettle_drum']), b = k5([]);
   assert.equal(a.n, 5);
   assert.ok(a.d >= Math.round(b.d * 1.25) - 1, `arte as the 5th card: ${a.d} vs ${b.d}`);
-  assert.equal(dmgOf(['spark_primer'], { relics: ['prism_lens'] }) - dmgOf(['spark_primer'], {}), 3, 'EX card +3');
+  assert.equal(dmgOf(['hidden_ace'], { relics: ['prism_lens'] }) - dmgOf(['hidden_ace'], {}), 3, 'EX card +3');
 });
 
 test('relics — Relay: Echo Splice and Relay Harness on the Relay command', () => {
   const relayed = (relics) => {
-    const c = mk(['scrapline', 'rivet_jab', 'scrapline', 'pinprick'], [], { relics });
+    const c = mk(['scrapline', 'rivet_jab', 'scrapline', 'scrapline_b'], [], { relics });
     c.selectHero('V');
     play(c, 'scrapline', 'rivet_jab');
     const h0 = hp(c);
@@ -200,7 +200,7 @@ test('relics — Relay: Echo Splice and Relay Harness on the Relay command', () 
 });
 
 test('relics — Churn and Reserve: Beta Badge, Churn Gear, Oiled Bearings, Spare Pockets', () => {
-  let c = mk(['scrapline', 'rivet_jab', 'piston_strike'], ['tripwire', 'pinprick'], { relics: ['beta_badge'] });
+  let c = mk(['scrapline', 'rivet_jab', 'piston_strike'], ['piston_strike_b', 'scrapline_b'], { relics: ['beta_badge'] });
   const ch = c.churn.charges;
   assert.ok(c.churnCard(uid(c, 'scrapline')).ok);
   assert.equal(c.churn.charges, ch, 'first Churn free');
@@ -212,11 +212,11 @@ test('relics — Churn and Reserve: Beta Badge, Churn Gear, Oiled Bearings, Spar
   advance(c, RULES.CHURN_REGEN / 1.3 + 0.1);
   assert.equal(c.churn.charges, 1, 'regenerates 30% faster');
   // Oiled Bearings: no Flow cost in a combo, no ATB push outside one
-  const ob = (relics) => { const x = mk(['scrapline', 'rivet_jab', 'piston_strike'], ['tripwire', 'pinprick'], { relics }); x.selectHero('V'); play(x, 'scrapline'); x.combo.graceUntil = 0; const d0 = x.combo.deadline - x.t; x.churnCard(uid(x, 'piston_strike')); return d0 - (x.combo.deadline - x.t); };
+  const ob = (relics) => { const x = mk(['scrapline', 'rivet_jab', 'piston_strike'], ['piston_strike_b', 'scrapline_b'], { relics }); x.selectHero('V'); play(x, 'scrapline'); x.combo.graceUntil = 0; const d0 = x.combo.deadline - x.t; x.churnCard(uid(x, 'piston_strike')); return d0 - (x.combo.deadline - x.t); };
   assert.ok(ob([]) > 0.25 && ob(['oiled_bearings']) < 0.05);
   c = mk(['hidden_ace', 'scrapline'], [], { relics: ['spare_pockets'] });
   assert.equal(c.reserveMax(), RULES.RESERVE + 1);
-  const res = (relics) => { const x = mk(['scrapline', 'pinprick'], [], { relics }); x.stash(uid(x, 'scrapline')); x.selectHero('V'); const h0 = hp(x); assert.ok(x.commit(x.reserve[0]).ok); settle(x); return h0 - hp(x); };
+  const res = (relics) => { const x = mk(['scrapline', 'scrapline_b'], [], { relics }); x.stash(uid(x, 'scrapline')); x.selectHero('V'); const h0 = hp(x); assert.ok(x.commit(x.reserve[0]).ok); settle(x); return h0 - hp(x); };
   assert.equal(res(['spare_pockets']) - res([]), 3);
 });
 
@@ -284,7 +284,7 @@ test('relics — boss trophies: Auditor\'s Seal, Mirror Lens (and the others abo
 
 test('Index Spring, Reclaim Circuit and Slip Case reward first executed uses, once per chain', () => {
   const c = mk(['scrapline', 'mend_circuit', 'salvage', 'thermal_lance', 'junk_toss', 'latchshield'],
-    ['cold_start', 'pinprick', 'pocket_gauge', 'piston_strike'], {
+    ['cold_start', 'scrapline_b', 'pocket_gauge', 'piston_strike'], {
       momentum: 2, relics: ['index_spring', 'slip_case'], mutations: ['reclaim_circuit'],
     });
   assert.ok(c.stash(uid(c, 'latchshield')).ok);
@@ -325,12 +325,12 @@ test('mutations — all twelve do what they say', () => {
   c = mk(['scrapline'], [], { mutations: ['long_breath'] });
   assert.equal(c.momentumCostFlow(), RULES.MOMENTUM_COST - 1);
   assert.equal(c.flowSpendAmount(), 2.0);
-  c = mk(['scrapline', 'rivet_jab'], ['pinprick'], { mutations: ['grinder'] });
+  c = mk(['scrapline', 'rivet_jab'], ['scrapline_b'], { mutations: ['grinder'] });
   assert.equal(c.churnMax(), RULES.CHURN_MAX + 2);
   const gh = hp(c);
   c.churnCard(uid(c, 'rivet_jab'));
   assert.equal(gh - hp(c), 4, 'Grinder: every Churn deals 4');
-  c = mk(['scrapline', 'pinprick'], [], { mutations: ['deep_pockets'] });
+  c = mk(['scrapline', 'scrapline_b'], [], { mutations: ['deep_pockets'] });
   assert.equal(c.reserveMax(), RULES.RESERVE + 1);
   c.stash(uid(c, 'scrapline'));
   c.selectHero('V');
@@ -395,15 +395,15 @@ test('grafts — all ten trigger at the right moment, and only where they can', 
   const br = (graft) => { const c = mk([{ id: 'scrapline', graft }], []); c.enemies[0].guard = 50; c.selectHero('V'); const h0 = hp(c); play(c, 'scrapline'); return h0 - hp(c); };
   assert.ok(br('breaker') >= 5 && br(null) === 0);
   // Cached: +50% from Reserve only
-  const ca = (fromReserve) => { const c = mk([{ id: 'scrapline', graft: 'cached' }, 'pinprick'], []); if (fromReserve) c.stash('c0'); c.selectHero('V'); const h0 = hp(c); c.commit('c0'); settle(c); return h0 - hp(c); };
+  const ca = (fromReserve) => { const c = mk([{ id: 'scrapline', graft: 'cached' }, 'scrapline_b'], []); if (fromReserve) c.stash('c0'); c.selectHero('V'); const h0 = hp(c); c.commit('c0'); settle(c); return h0 - hp(c); };
   assert.ok(ca(true) >= Math.round(ca(false) * 1.5) - 1);
   // Churnfed: on an actual Churn only
-  let c = mk([{ id: 'scrapline', graft: 'churnfed' }, 'rivet_jab'], ['pinprick']);
+  let c = mk([{ id: 'scrapline', graft: 'churnfed' }, 'rivet_jab'], ['scrapline_b']);
   const m0 = c.momentum, g0 = c.guard;
   c.churnCard('c0');
   assert.equal(c.momentum - m0, 1);
   assert.equal(Math.round(c.guard - g0), 2);
-  c = mk([{ id: 'scrapline', graft: 'churnfed' }, 'rivet_jab'], ['pinprick']);
+  c = mk([{ id: 'scrapline', graft: 'churnfed' }, 'rivet_jab'], ['scrapline_b']);
   c.selectHero('V');
   const m1 = c.momentum;
   play(c, 'scrapline'); // played and discarded, not Churned
@@ -448,7 +448,7 @@ test('support-heavy, arte-heavy and rank-modified decks still finish real fights
   const decks = {
     support: ['scrapline', 'rivet_jab', 'piston_strike', 'scrapline', 'mend_circuit', 'salvage', 'brace_up', 'ward_weave', 'low_gear', 'signal_boost', 'hold_the_line', 'spare_parts', 'shuffle_step', 'rethread', 'cache_hook', 'vault_guard'],
     arte: ['scrapline', 'rivet_jab', 'piston_strike', 'scrapfall', 'recycler', 'sunderline', 'capstone', 'thermal_lance', 'detonate', 'last_word', 'overpressure', 'bolt_volley', 'crosscut', 'ladder_peak', 'grand_relay', 'chorus_break'],
-    ranked: [{ id: 'scrapline', rankMod: 2 }, { id: 'scrapline', rankMod: 2 }, { id: 'rivet_jab', rankMod: 1 }, { id: 'piston_strike' }, { id: 'pinprick', rankMod: 2 }, { id: 'scrapfall', rankMod: 2 }, { id: 'thermal_lance', rankMod: 2 }, { id: 'bolt_volley', rankMod: 2 }, 'mend_circuit', 'salvage', { id: 'step_up', rankMod: 1 }, { id: 'quickdraw' }],
+    ranked: [{ id: 'scrapline', rankMod: 2 }, { id: 'scrapline', rankMod: 2 }, { id: 'rivet_jab', rankMod: 1 }, { id: 'piston_strike' }, { id: 'scrapline_b', rankMod: 2 }, { id: 'scrapfall', rankMod: 2 }, { id: 'thermal_lance', rankMod: 2 }, { id: 'bolt_volley', rankMod: 2 }, 'mend_circuit', 'salvage', { id: 'first_rung', rankMod: 1 }, { id: 'quickdraw' }],
   };
   for (const [name, ids] of Object.entries(decks)) {
     for (const enemies of [['rush_hound', 'wire_jammer'], ['foundry_warden']]) {

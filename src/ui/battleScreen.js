@@ -90,7 +90,7 @@ export class BattleScreen {
     this.lessonOpen = null;
     this.exLog = []; // EX Combos shown in this battle: { id, fresh } (also read by tools)
     this.lastFlowWarn = 0;
-    this.pick = null; // a hero-targeted support (Braced) waiting for the player to choose its hero
+    this.pick = null; // choose Braced's recipient or a neutral item's performer
   }
 
   mount(root) {
@@ -377,9 +377,14 @@ export class BattleScreen {
     if (this.app.paused || this.ended) return;
     const c = this.combat;
     const def = c.def(uid);
-    // a hero-targeted support (Braced): the first tap asks which hero; tapping it again uses the default
-    if (def && def.targetHero && !opts) {
-      if (this.pick && this.pick.uid === uid) { const tgt = this.pick.def; this.endPick(false); return this.doPlay(uid, { target: tgt }); }
+    if (this.pick && this.pick.uid !== uid) this.endPick(false);
+    if ((def?.targetHero || def?.item) && !opts) {
+      if (this.pick?.uid === uid) {
+        if (this.pick.item) return;
+        const target = this.pick.def;
+        this.endPick(false);
+        return this.doPlay(uid, { target });
+      }
       if (c.check(uid).ok) { this.startPick(uid); return; }
     }
     const res = c.playCard(uid, opts);
@@ -419,9 +424,13 @@ export class BattleScreen {
   doSelectHero(id) {
     if (this.app.paused || this.ended) return;
     if (this.pick) {
-      const uid = this.pick.uid;
+      const { uid, item } = this.pick;
+      if (item && !this.combat.check(uid, { performer: id }).ok) {
+        this.app.audio.sfx('reject');
+        return;
+      }
       this.endPick(false);
-      this.doPlay(uid, { target: id });
+      this.doPlay(uid, item ? { performer: id } : { target: id });
       return;
     }
     const r = this.combat.selectHero(id);
@@ -429,12 +438,11 @@ export class BattleScreen {
     this.afterAction();
   }
 
-  // Braced: choose the hero (hero buttons, a hero on the field, Q/W/E); ✕, Escape or a tap elsewhere
-  // cancels without spending the card
+  // Choose with the hero buttons, the field, or Q/W/E. Cancel without spending the card.
   startPick(uid) {
     const c = this.combat;
-    const d = c.braceTarget();
-    this.pick = { uid, def: d ? d.id : 'V' };
+    const item = !!c.def(uid).item;
+    this.pick = { uid, item, def: item ? null : c.braceTarget()?.id || 'V' };
     this.app.audio.sfx('click');
     this.afterAction();
   }
@@ -811,7 +819,7 @@ export class BattleScreen {
     if (force || hintSig !== this.hintSig) {
       this.hintSig = hintSig;
       const narrowStrip = this.deck.getBoundingClientRect().width < 900;
-      if (this.pick) this.setNext(t('Choose hero'));
+      if (this.pick) this.setNext(this.pick.item ? t('Choose who uses the kit') : t('Choose hero'));
       else if (P.open) {
         const hero = ownerName(P.hero);
         if (P.finish) this.setNext(t('Finishing the combo…'));
@@ -984,11 +992,13 @@ export class BattleScreen {
       const artes = [...c.hand, ...c.reserve].filter((u) => u && c.categoryOf(u) === 'arte' && c.def(u).owner === id).length;
       const rel = P.open && id !== P.hero ? c.relayCheck(id) : null;
       const picking = !!this.pick;
+      const item = !!this.pick?.item;
+      const pickBlocked = item && !c.check(this.pick.uid, { performer: id }).ok;
       const left = c.recoverLeft(id);
-      const mark = picking ? '' : st === 'ACTING' ? '▶' : st === 'RECOVERING' ? num(left, 1) : st === 'COMMITTED' ? '…' : rel && rel.ok ? '⇄' : '';
+      const mark = item && !pickBlocked ? '✚' : picking && !item ? '' : st === 'ACTING' ? '▶' : st === 'RECOVERING' ? num(left, 1) : st === 'COMMITTED' ? '…' : rel && rel.ok && !item ? '⇄' : '';
       // a Relay with little Flow left may not leave the new hero time for an arte: the ⇄ turns amber
       const late = !!(rel && rel.ok) && !c.flowHeld() && c.flowLeft() < 1.6;
-      const sig = `${st}|${artes}|${mark}|${rel ? rel.ok + String(rel.reason) : '-'}|${P.open && P.hero === id}|${c.starter() === id}|${picking}|${this.pick && this.pick.def === id}|${late}`;
+      const sig = `${st}|${artes}|${mark}|${rel ? rel.ok + String(rel.reason) : '-'}|${P.open && P.hero === id}|${c.starter() === id}|${picking}|${this.pick && this.pick.def === id}|${item}|${pickBlocked}|${late}`;
       if (b._sig !== sig) {
         b._sig = sig;
         b.className = `hero-btn owner-${id} st-${st.toLowerCase()}`;
@@ -996,13 +1006,15 @@ export class BattleScreen {
         b.classList.toggle('sel', sel);
         b.classList.toggle('relay', !!(rel && rel.ok) && !picking);
         b.classList.toggle('relay-late', late && !picking);
-        b.classList.toggle('locked', !picking && ((P.open && id !== P.hero && !(rel && rel.ok)) || (!P.open && st !== 'READY')));
-        b.classList.toggle('pick', picking);
+        b.classList.toggle('locked', pickBlocked || (!picking && ((P.open && id !== P.hero && !(rel && rel.ok)) || (!P.open && st !== 'READY'))));
+        b.classList.toggle('pick', picking && !pickBlocked);
+        b.disabled = pickBlocked;
         b.querySelector('.hb-a').textContent = '★'.repeat(Math.min(3, artes));
         b.querySelector('.hb-st').textContent = mark;
         b.setAttribute('aria-pressed', String(sel));
         const state = { READY: t('Ready'), ACTIVE: t('Active'), ACTING: t('Acting'), COMMITTED: t('Committed'), RECOVERING: t('Recovering') }[st];
-        b.title = picking ? t('Brace {hero}', { hero: ownerName(id) })
+        b.title = item ? (pickBlocked ? `${ownerName(id)} · ${state}` : t('{hero} uses the kit', { hero: ownerName(id) }))
+          : picking ? t('Brace {hero}', { hero: ownerName(id) })
           : P.open ? (id === P.hero ? t('{hero} · {s} · attacking', { hero: ownerName(id), s: state }) : rel && rel.ok ? (late ? t('Relay to {hero} (key {k}) · little Flow left: FINISH or CASH OUT is safer', { hero: ownerName(id), k: KEY_OF[id] }) : t('Relay to {hero} (key {k})', { hero: ownerName(id), k: KEY_OF[id] })) : `${ownerName(id)} · ${rel ? msg(rel.text) : state}`)
             : t('{hero} · {s} · starts the next combo (key {k})', { hero: ownerName(id), s: state, k: KEY_OF[id] });
       }
@@ -1035,7 +1047,7 @@ export class BattleScreen {
         s.el = null;
         if (uid) {
           const inst = c.cards.get(uid);
-          const el = cardEl(inst);
+          const el = cardEl(inst, { battle: true });
           el.classList.add('enter');
           setTimeout(() => el.classList.remove('enter'), 320);
           s.box.append(el);

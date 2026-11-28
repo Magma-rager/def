@@ -120,7 +120,7 @@ test('Churn Tax (churn): each Churn pushes the boss ATB 15% → three combos wit
   assert.ok(Math.abs(push() - 0.05) < 0.01, 'only the ordinary 5% again');
 });
 
-for (const [arch, hit, counter] of [['variantA', 'scrapline', ['spark_primer', 'hotwire', 'quickdraw']], ['variantB', 'hotwire', ['scrapline', 'rivet_jab', 'piston_strike']]]) {
+for (const [arch, hit, counter] of [['variantA', 'scrapline', ['hidden_ace', 'hotwire', 'quickdraw']], ['variantB', 'hotwire', ['scrapline', 'rivet_jab', 'piston_strike']]]) {
   test(`Suit Filter ${arch.slice(-1)} (${arch}): ${hit} deals 30% less → 8 off-suit cards break it → full damage`, () => {
     const dmg = (c) => { waitReady(c, 'V'); c.selectHero('V'); const h0 = boss(c).hp; play(c, hit); const d = h0 - boss(c).hp; c.finishOrCashOut(); settle(c); return d; };
     const plain = dmg(fight(null, [hit, 'scrapline']));
@@ -134,8 +134,8 @@ for (const [arch, hit, counter] of [['variantA', 'scrapline', ['spark_primer', '
 }
 
 test('Relay Jammer (relay): Relays give no Momentum → two Perfect combos with ≤1 Relay break it → Relay Momentum back', () => {
-  const c = fight('relay', ['scrapline', 'rivet_jab', 'scrapfall', 'scrapline', 'rivet_jab', 'pinprick'], REP(['scrapline', 'rivet_jab', 'scrapfall', 'pinprick'], 6), { momentum: 8 });
-  const relayGain = () => { waitReady(c, 'V'); waitReady(c, 'S'); c.momentum = Math.min(c.momentum, 3); c.selectHero('V'); play(c, 'scrapline', 'rivet_jab'); c.drainEvents(); assert.ok(c.selectHero('S').ok); settle(c); const g = c.drainEvents().filter((e) => e.type === 'momentum' && e.why === 'Relay').reduce((a, e) => a + e.delta, 0); play(c, 'pinprick'); c.finishOrCashOut(); settle(c); return g; };
+  const c = fight('relay', ['scrapline', 'rivet_jab', 'scrapfall', 'scrapline', 'rivet_jab', 'scrapline_b'], REP(['scrapline', 'rivet_jab', 'scrapfall', 'scrapline_b'], 6), { momentum: 8 });
+  const relayGain = () => { waitReady(c, 'V'); waitReady(c, 'S'); c.momentum = Math.min(c.momentum, 3); c.selectHero('V'); play(c, 'scrapline', 'rivet_jab'); c.drainEvents(); assert.ok(c.selectHero('S').ok); settle(c); const g = c.drainEvents().filter((e) => e.type === 'momentum' && e.why === 'Relay').reduce((a, e) => a + e.delta, 0); play(c, 'scrapline_b'); c.finishOrCashOut(); settle(c); return g; };
   assert.equal(relayGain(), 0, 'jammed');
   for (let i = 0; i < 2; i++) assert.equal(chain(c, 'V', ['scrapline', 'rivet_jab', 'scrapfall']).type, 'perfect');
   assert.ok(broken(c));
@@ -166,7 +166,7 @@ test('Flow Clamp (flow): Flow gains halved → three quick Perfect combos break 
 });
 
 test('Reserve Seal (reserve): boss turns seal the Reserve 3s → three Reserve plays break it → no seal', () => {
-  const c = fight('reserve', ['scrapline', 'rivet_jab', 'piston_strike', 'scrapline', 'rivet_jab', 'pinprick'], REP(['scrapline', 'rivet_jab', 'piston_strike'], 6));
+  const c = fight('reserve', ['scrapline', 'rivet_jab', 'piston_strike', 'scrapline', 'rivet_jab', 'scrapline_b'], REP(['scrapline', 'rivet_jab', 'piston_strike'], 6));
   assert.ok(c.stash(uid(c, 'scrapline')).ok);
   bossActs(c);
   assert.ok(c.reserveLatchUntil > c.t, 'sealed after the boss turn');
@@ -191,7 +191,7 @@ test('Reserve Seal (reserve): boss turns seal the Reserve 3s → three Reserve p
 
 test('Hardened Locks (interference, Clockwork Regent): Locks last 4.5s → 50 damage while Locked breaks it → 3s Locks', () => {
   const HAND = ['scrapline', 'rivet_jab', 'scrapfall', 'thermal_lance', 'scrapline', 'rivet_jab'];
-  const c = fight('interference', HAND, REP(['scrapline', 'rivet_jab', 'scrapfall', 'thermal_lance', 'pinprick', 'bolt_volley'], 6), { boss: 'clockwork_regent', momentum: 12 });
+  const c = fight('interference', HAND, REP(['scrapline', 'rivet_jab', 'scrapfall', 'thermal_lance', 'scrapline_b', 'bolt_volley'], 6), { boss: 'clockwork_regent', momentum: 12 });
   const e = boss(c);
   // the Regent's own turn: its opening intent is a Royal Decree (Lock 2)
   assert.equal(e.intent.kind, 'lock');
@@ -231,7 +231,7 @@ test('an adaptation is off once its boss is gone, and Hardened Locks is never ch
     const run = Run.create({ seed, tutorial: false });
     const bossId = run.d.bosses[1];
     // a run whose evidence is all interference: Hardened Locks only if this boss Locks
-    run.d.deck.push(...['tinder_toss', 'fault_finder', 'static_bloom', 'thermal_lance', 'kindling', 'detonate', 'signal_boost', 'jam_breaker'].map((id, i) => ({ uid: `i${i}`, id, up: false })));
+    run.d.deck.push(...['fault_finder', 'fault_finder', 'static_bloom', 'thermal_lance', 'kindling', 'detonate', 'signal_boost', 'jam_breaker'].map((id, i) => ({ uid: `i${i}`, id, up: false })));
     run.d.stats.interferencePayoffs = 40;
     const a = run.bossAnalysis();
     if (a.arch === 'interference') assert.ok(ENEMIES[bossId].locks, `${bossId} cannot Lock`);

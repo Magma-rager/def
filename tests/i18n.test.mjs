@@ -113,7 +113,7 @@ test('Russian plural forms and number formatting', () => {
     assert.equal(I.t('{n} {n|card|cards}', { n: 11 }), '11 карт');
     assert.equal(I.t('{n} {n|card|cards}', { n: 21 }), '21 карта');
     assert.equal(I.secs(1.5, 1), '1,5 с');
-    assert.equal(I.cardName('scrapline'), 'Ломострел');
+    assert.equal(I.cardName('scrapline'), 'Слабая атака A');
   } finally { I.setLang('en'); }
   assert.equal(I.t('{n} {n|card|cards}', { n: 1 }), '1 card');
   assert.equal(I.secs(1.5, 1), '1.5s');

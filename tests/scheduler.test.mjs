@@ -38,7 +38,7 @@ const CHAIN_DRAW = [{ id: 'scrapline', variant: 'A' }, { id: 'rivet_jab', varian
 
 // ── command queue ──
 test('commit does not resolve an attack: effects happen at the execution impact, the command ends after its duration', () => {
-  const c = fixed(['piston_strike', 'rivet_jab'], ['pinprick', 'tripwire', 'cold_start', 'junk_toss', 'tinder_toss']);
+  const c = fixed(['piston_strike', 'rivet_jab'], ['scrapline_b', 'piston_strike_b', 'cold_start', 'junk_toss', 'fault_finder']);
   const hp0 = ehp(c);
   const r = c.commit(slot(c, 0));
   assert.ok(r.ok);
@@ -178,7 +178,7 @@ test('heroes start Ready; states follow the scheduler; Recovery lengths follow t
 });
 
 test('a support action reserves its performer and costs a 2.0s Recovery; others act meanwhile', () => {
-  const c = fixed(['salvage', 'scrapline', 'mend_circuit', 'rivet_jab'], ['pinprick', 'tripwire'], { momentum: 2 });
+  const c = fixed(['salvage', 'scrapline', 'mend_circuit', 'rivet_jab'], ['scrapline_b', 'piston_strike_b'], { momentum: 2 });
   c.selectHero('V');
   c.commit(slot(c, 1)); // Hessa Weak executing
   const sup = c.check(slot(c, 0));
@@ -198,7 +198,7 @@ test('a support action reserves its performer and costs a 2.0s Recovery; others 
 });
 
 test('with every hero recovering the player waits; enemies keep acting; it always resolves', () => {
-  const c = fixed(['scrapline', 'rivet_jab'], ['pinprick'], { live: true, enemies: ['rush_hound'] });
+  const c = fixed(['scrapline', 'rivet_jab'], ['scrapline_b'], { live: true, enemies: ['rush_hound'] });
   for (const h of ['V', 'C', 'S']) c.startRecovery(h, 2.5, 'test');
   c.enemies[0].atb = 0;
   c.enemies[0].hp = c.enemies[0].maxHp = 999;
@@ -212,7 +212,7 @@ test('with every hero recovering the player waits; enemies keep acting; it alway
 });
 
 test('with the selected hero recovering, the next chain starts with the first Ready hero', () => {
-  const c = fixed(['scrapline', 'rivet_jab'], ['pinprick']);
+  const c = fixed(['scrapline', 'rivet_jab'], ['scrapline_b']);
   c.selectHero('V');
   c.startRecovery('V', 3, 'test');
   assert.equal(c.selectHero('V').ok, false, 'a recovering hero cannot be chosen');
@@ -292,7 +292,7 @@ test('three heroes, two Relays: Hessa → Corvin → Pin in one chain, finished 
 });
 
 test('a cancelled Relay grants nothing; a Relay is refused to a recovering or already-used hero', () => {
-  const c = fixed(['scrapline', 'rivet_jab', 'piston_strike'], ['pinprick', 'tripwire'], { momentum: 0 });
+  const c = fixed(['scrapline', 'rivet_jab', 'piston_strike'], ['scrapline_b', 'piston_strike_b'], { momentum: 0 });
   c.selectHero('V');
   c.commit(slot(c, 0));
   const r = c.selectHero('C');
@@ -309,14 +309,14 @@ test('a cancelled Relay grants nothing; a Relay is refused to a recovering or al
 
 test('Relay rewards and Relay content: Relay Jammer, Echoing graft, Mirror Wire, Hand Off, Chorus Break, Grand Relay, Relay Baton', () => {
   // Relay Jammer: no Momentum, the Relay still works
-  const j = fixed(['scrapline', 'rivet_jab'], ['pinprick'], { enemies: ['scrap_tyrant'], opts: { adaptation: { id: 'relay_jam', need: 2 } } });
+  const j = fixed(['scrapline', 'rivet_jab'], ['scrapline_b'], { enemies: ['scrap_tyrant'], opts: { adaptation: { id: 'relay_jam', need: 2 } } });
   j.enemies[0].tier = 'boss';
   j.commit(slot(j, 0));
   j.selectHero('C');
   settle(j);
   assert.deepEqual([j.combo.relays, j.momentum], [1, 1], 'Relay executed, no Relay Momentum');
   // Echoing: the incoming first card Echoes itself at 30%
-  const e = fixed(['scrapline', { id: 'piston_strike', graft: 'echoing' }], ['pinprick']);
+  const e = fixed(['scrapline', { id: 'piston_strike', graft: 'echoing' }], ['scrapline_b']);
   e.commit(slot(e, 0));
   e.selectHero('S');
   settle(e);
@@ -325,7 +325,7 @@ test('Relay rewards and Relay content: Relay Jammer, Echoing graft, Mirror Wire,
   settle(e);
   assert.ok(e.drainEvents().some((x) => x.type === 'echo' && Math.round(x.mult * 100) === 30 && x.id === 'piston_strike'));
   // Mirror Wire: the first Relay Echoes the last attack
-  const m = fixed(['scrapline', 'mirror_wire', 'rivet_jab'], ['pinprick'], { momentum: 2 });
+  const m = fixed(['scrapline', 'mirror_wire', 'rivet_jab'], ['scrapline_b'], { momentum: 2 });
   m.selectHero('C');
   m.commit(slot(m, 0));
   m.commit(slot(m, 1));
@@ -335,7 +335,7 @@ test('Relay rewards and Relay content: Relay Jammer, Echoing graft, Mirror Wire,
   settle(m);
   assert.ok(m.drainEvents().some((x) => x.type === 'echo' && x.id === 'mirror_wire' && Math.round(x.mult * 100) === 50));
   // Hand Off: only when the very next command is the Relay; it Echoes the last attack
-  const h = fixed(['scrapline', 'hand_off', 'rivet_jab'], ['pinprick']);
+  const h = fixed(['scrapline', 'hand_off', 'rivet_jab'], ['scrapline_b']);
   h.commit(slot(h, 0));
   h.commit(slot(h, 1));
   settle(h);
@@ -344,7 +344,7 @@ test('Relay rewards and Relay content: Relay Jammer, Echoing graft, Mirror Wire,
   settle(h);
   assert.ok(h.drainEvents().some((x) => x.type === 'echo' && x.id === 'scrapline' && Math.round(x.mult * 100) === 40), 'Hand Off: the Relay Echoes Scrapline at 40%');
   // Chorus Break, Grand Relay and Relay Baton count the chain's heroes and Relay cards
-  const g = fixed([{ id: 'scrapline', variant: 'A' }, { id: 'rivet_jab', variant: 'B' }, { id: 'scrapline', variant: 'B' }, 'grand_relay', 'relay_baton', 'pinprick'], ['tripwire', 'cold_start'], { momentum: 10, enemies: ['rush_hound', 'rush_hound'] });
+  const g = fixed([{ id: 'scrapline', variant: 'A' }, { id: 'rivet_jab', variant: 'B' }, { id: 'scrapline', variant: 'B' }, 'grand_relay', 'relay_baton', 'scrapline_b'], ['piston_strike_b', 'cold_start'], { momentum: 10, enemies: ['rush_hound', 'rush_hound'] });
   g.commit(slot(g, 0));
   g.selectHero('C');
   g.commit(slot(g, 1));
@@ -362,7 +362,7 @@ test('Relay rewards and Relay content: Relay Jammer, Echoing graft, Mirror Wire,
 });
 
 test('Chorus Break echoes each first card after a Relay', () => {
-  const c = fixed(['scrapline', 'rivet_jab', 'chorus_break', 'pinprick'], ['tripwire'], { momentum: 6 });
+  const c = fixed(['scrapline', 'rivet_jab', 'chorus_break', 'scrapline_b'], ['piston_strike_b'], { momentum: 6 });
   c.selectHero('V');
   c.commit(slot(c, 0));
   c.selectHero('C');
@@ -377,7 +377,7 @@ test('Chorus Break echoes each first card after a Relay', () => {
 
 // ── support scheduling ──
 test('Braced is committed with the hero the player chose; the default is the hero an enemy is aiming at', () => {
-  const c = fixed(['hold_the_line', 'hold_the_line', 'scrapline'], ['pinprick'], { momentum: 2 });
+  const c = fixed(['hold_the_line', 'hold_the_line', 'scrapline'], ['scrapline_b'], { momentum: 2 });
   const e = c.enemies[0];
   e.intent = { ...e.intent, kind: 'atk', dmg: 10, target: 'C' };
   c.selectHero('V');
@@ -397,7 +397,7 @@ test('Braced is committed with the hero the player chose; the default is the her
 
 // ── decision window ──
 test('refunds come when a card resolves; a cancelled card refunds nothing; the counted-time cap holds', () => {
-  const c = fixed(['scrapline', 'rivet_jab', 'piston_strike'], ['pinprick'], { momentum: 30 });
+  const c = fixed(['scrapline', 'rivet_jab', 'piston_strike'], ['scrapline_b'], { momentum: 30 });
   c.selectHero('V');
   c.commit(slot(c, 0));
   settle(c);
@@ -439,7 +439,7 @@ test('frame rate does not change outcomes: the same commands give the same resul
 
 test('enemy ATB fills while commands execute and while heroes recover, waits in the breather; Tactical slows it only while deciding', () => {
   const mkLive = (tactical) => {
-    const c = fixed(['scrapline', 'rivet_jab', 'piston_strike'], ['pinprick', 'tripwire'], { live: true, enemies: ['iron_maw'], opts: { tactical } });
+    const c = fixed(['scrapline', 'rivet_jab', 'piston_strike'], ['scrapline_b', 'piston_strike_b'], { live: true, enemies: ['iron_maw'], opts: { tactical } });
     c.enemies[0].hp = c.enemies[0].maxHp = 999;
     c.enemies[0].atb = 0;
     return c;
@@ -471,7 +471,7 @@ test('enemy ATB fills while commands execute and while heroes recover, waits in 
 
 // ── endings with pending commands ──
 test('the third Stumble cancels unstarted chain commands, lets the executing one finish, and judges executed cards', () => {
-  const c = fixed(['scrapline', 'rivet_jab', 'pinprick', 'piston_strike'], ['tripwire'], { momentum: 3 });
+  const c = fixed(['scrapline', 'rivet_jab', 'scrapline_b', 'piston_strike'], ['piston_strike_b'], { momentum: 3 });
   c.selectHero('V');
   c.commit(slot(c, 0));
   settle(c);
@@ -489,7 +489,7 @@ test('the third Stumble cancels unstarted chain commands, lets the executing one
 });
 
 test('a queued FINISH or CASH OUT resolves after the commands ahead of it; nothing automatic overrides a queued Relay', () => {
-  const c = fixed(['scrapline', 'rivet_jab', 'pinprick'], ['tripwire'], { enemies: ['foundry_warden'] });
+  const c = fixed(['scrapline', 'rivet_jab', 'scrapline_b'], ['piston_strike_b'], { enemies: ['foundry_warden'] });
   c.selectHero('V');
   c.commit(slot(c, 0));
   c.commit(slot(c, 1));
@@ -514,7 +514,7 @@ test('a queued FINISH or CASH OUT resolves after the commands ahead of it; nothi
 
 // ── interference with queued commands ──
 test('Lock and Scramble never touch committed cards; a queued card keeps the rank it was committed with', () => {
-  const c = fixed(['scrapline', 'rivet_jab', 'piston_strike', 'tripwire'], [], { enemies: ['suit_scrambler'] });
+  const c = fixed(['scrapline', 'rivet_jab', 'piston_strike', 'piston_strike_b'], [], { enemies: ['suit_scrambler'] });
   c.selectHero('V');
   c.scrambleCards(c.enemies[0], 4, 'rankup');
   const strong = slot(c, 2);
@@ -531,7 +531,7 @@ test('Lock and Scramble never touch committed cards; a queued card keeps the ran
 
 test('an enemy raising the chain rank makes a queued card illegal: it is returned at once, never executed', () => {
   // regression: found by the full-run simulation (an illegal queued command between two steps)
-  const c = fixed(['scrapline', 'rivet_jab'], ['pinprick'], { enemies: ['the_corruptor'] });
+  const c = fixed(['scrapline', 'rivet_jab'], ['scrapline_b'], { enemies: ['the_corruptor'] });
   c.selectHero('V');
   c.commit(slot(c, 0));
   const q = c.commit(slot(c, 1)); // Medium 2 waits
@@ -548,7 +548,7 @@ test('an enemy raising the chain rank makes a queued card illegal: it is returne
 });
 
 test('Reserve: a committed Reserve card keeps its place; Reserve latch steals only stored cards; jams skip held slots', () => {
-  const c = fixed(['scrapline', 'rivet_jab', 'pinprick', 'tripwire', 'cold_start', 'junk_toss'], ['tinder_toss', 'gauge_read'], { enemies: ['latch_wisp'] });
+  const c = fixed(['scrapline', 'rivet_jab', 'scrapline_b', 'piston_strike_b', 'cold_start', 'junk_toss'], ['fault_finder', 'pocket_gauge'], { enemies: ['latch_wisp'] });
   c.stash(slot(c, 1));
   c.stash(slot(c, 2));
   c.selectHero('V');

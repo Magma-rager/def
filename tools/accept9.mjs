@@ -226,7 +226,7 @@ async function ui() {
   verify('Fresh profile is empty', fresh.totalRuns === 0 && fresh.cardsSeen.length === 0 && fresh.relicsFound.length === 0);
   await museum('Records');
   const recordText = await loc('.museum-body').innerText();
-  verify('Accurate fresh collection denominators', ['0/87', '0/41', '0/28', '0/17', '0/6', '1/10'].every((x) => recordText.includes(x)), recordText);
+  verify('Accurate fresh collection denominators', ['0/82', '0/41', '0/28', '0/17', '0/6', '1/10'].every((x) => recordText.includes(x)), recordText);
   await close();
   await readStarterLayout('fresh-starter');
   const locked = loc('.starter-opt[data-relic="riveted_ledger"]');

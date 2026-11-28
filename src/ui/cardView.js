@@ -53,6 +53,10 @@ export function cardText(def, up, compact = false) {
 }
 
 function artSvg(def) {
+  if (def.item) return `<svg class="card-glyph" viewBox="-14 -12 28 24" aria-hidden="true">
+    <path class="g-line" d="M-11-5h22v14h-22z M-4-5v-4h8v4 M-11 0h22"/>
+    <path class="g-fill" d="M-2-2h4v3h3v4h-3v3h-4v-3h-3v-4h3z"/>
+  </svg>`;
   const g = ICON_PATHS[GLYPH_MAP[def.glyph] || 'star'];
   const filled = ['shield', 'flame', 'star', 'coin', 'chest'].includes(GLYPH_MAP[def.glyph]);
   return `<svg class="card-glyph" viewBox="-14 -12 28 24" aria-hidden="true">
@@ -78,14 +82,18 @@ export function cardEl(inst, opts = {}) {
   // neutral cards (basic attacks, some support): any hero (three colour dots); Glitch: '!'
   const owner = def.owner || (def.category === 'junk' ? 'X' : 'N');
   const chip = owner === 'N' ? '<i class="o-V"></i><i class="o-C"></i><i class="o-S"></i>' : owner === 'X' ? '!' : ownerInitial(owner);
+  const kind = def.standard ? 'standard' : def.category === 'basic' ? 'specialized' : def.item ? 'item' : def.category;
   const el = h('div', {
     class: `card owner-${owner} cat-${def.category} v-${variant}${inst.up ? ' upgraded' : ''}${opts.mini ? ' mini' : ''}${opts.static ? ' static' : ''}`,
     'data-uid': inst.uid,
+    'data-kind': kind,
   });
   const mods = [];
   if (inst.rankMod && off) mods.push(`<span class="mod">${t('{n}R', { n: `${inst.rankMod > 0 ? '+' : ''}${inst.rankMod}` })}</span>`);
   if (inst.recut && off) mods.push(`<span class="mod">${t('RECUT')}</span>`);
-  const catWord = def.category === 'basic' ? strengthName(def.rank) : def.tech ? t('Technique') : categoryName(def.category);
+  const catWord = def.standard ? t('Standard') : kind === 'specialized' ? t('Specialized') : def.item ? t('Item') : def.tech ? t('Technique') : categoryName(def.category);
+  const glyph = def.standard ? '◇' : kind === 'specialized' ? '✦' : def.item ? '▣' : CAT_GLYPH[def.category];
+  const title = opts.battle && def.standard ? strengthName(def.rank) : cardName(def.id);
   const art = def.owner ? vignette(def.owner, def.anim, def.id) : '';
   const signal = cardCue({ id: def.id, who: def.owner, category: def.category, rank: def.rank, anim: def.anim });
   el.innerHTML = `
@@ -93,10 +101,10 @@ export function cardEl(inst, opts = {}) {
       <div class="card-top">
         <span class="rank">${off ? rank : def.category === 'support' ? '✚' : '–'}</span>
         ${off ? `<span class="var">${variant}</span>` : ''}
-        <span class="role-tag" title="${esc(categoryName(def.category))}"><i>${CAT_GLYPH[def.category]}</i><span class="rt-word">${esc(catWord)}</span>${def.category === 'basic' ? `<span class="rt-cost gain">+${def.gain}</span>` : def.cost > 0 ? `<span class="rt-cost">${def.cost}</span>` : ''}</span>
+        <span class="role-tag" title="${esc(catWord)}"><i>${glyph}</i><span class="rt-word">${esc(catWord)}</span>${def.category === 'basic' ? `<span class="rt-cost gain">+${def.gain}</span>` : def.cost > 0 ? `<span class="rt-cost">${def.cost}</span>` : ''}</span>
       </div>
       <div class="card-art"${art ? ` style="--vig:url(${art})"` : ''}>${artSvg(def)}<span class="owner-chip${owner === 'N' ? ' any' : ''}">${chip}</span>${costBadge(def)}${def.rarity === 'rare' ? '<span class="rare-gem"></span>' : ''}</div>
-      <div class="card-name"><span class="name-owner">${owner === 'N' ? '◇' : owner === 'X' ? '!' : ownerInitial(owner)}</span>${esc(cardName(def.id))}${inst.up ? '<sup>+</sup>' : ''}</div>
+      <div class="card-name"><span class="name-owner">${def.item ? '✚' : owner === 'N' ? '◇' : owner === 'X' ? '!' : ownerInitial(owner)}</span>${esc(title)}${inst.up ? '<sup>+</sup>' : ''}</div>
       <div class="card-text"><span class="ct-long">${cardText(def, inst.up)}</span><span class="ct-brief">${cardText(def, inst.up, true)}</span></div>
       <div class="card-foot">${inst.graft ? `<span class="graft" title="${esc(graftName(inst.graft))}"><span class="graft-name">${esc(graftName(inst.graft))}</span></span>` : ''}${mods.join('')}<span class="reason"></span></div>
     </div>
