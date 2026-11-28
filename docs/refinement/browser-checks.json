@@ -1,0 +1,1223 @@
+{
+  "campaigns": [
+    {
+      "session": "English tablet",
+      "label": "G-campaign-en-1194",
+      "results": [
+        {
+          "step": "start",
+          "name": "Campaign began with the selected single relic and standard resources",
+          "ok": true,
+          "detail": "{\"relics\":[\"beta_badge\"],\"hp\":130,\"scrap\":80,\"seed\":794184763}"
+        },
+        {
+          "step": "save-1",
+          "name": "Continue restores the ordinary checkpoint",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": "save-2",
+          "name": "Continue restores the ordinary checkpoint",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": "save-3",
+          "name": "Continue restores the ordinary checkpoint",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": 53,
+          "name": "A three-Act run is finished through the interface (victory recorded)",
+          "ok": true,
+          "detail": "acts 1,2,3, bosses clockwork_regent, mirror_array, the_corruptor, battles 20, recorded victory, act 3, bosses clockwork_regent/mirror_array/the_corruptor"
+        },
+        {
+          "step": 54,
+          "name": "The ending is shown",
+          "ok": true,
+          "detail": "dialog,map,battle,reward,surgery,rest,bossprep,mutation,event,credits"
+        },
+        {
+          "step": 55,
+          "name": "The credits roll",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": 56,
+          "name": "The results screen is reached",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": 57,
+          "name": "Run statistics are shown and match the recorded run (score, floors, deck, combos)",
+          "ok": true,
+          "detail": "CORE STABILIZEDScore 1520Act reached3Floors27Bosses defeatedClockwork Regent, Mirror Array, The CorruptorElites0BuildInterference ExploitDeck size32Combos97Perfects65Cash Outs30Finishers35Longest comb"
+        },
+        {
+          "step": "record",
+          "name": "One new campaign is recorded and permanent progress is shown",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": 58,
+          "name": "The Museum opens (from the results screen)",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": 59,
+          "name": "Card/relic discoveries and the EX Combo Journal are recorded",
+          "ok": true,
+          "detail": "13 recipes found"
+        },
+        {
+          "step": 60,
+          "name": "A subsequent run begins with an earned relic and standard resources",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": 61,
+          "name": "Persistent unlocks carry over",
+          "ok": true,
+          "detail": "beta_badge,stopwatch_gear,echo_splice,twin_dials,tower_plate,riveted_ledger,breach_clamp"
+        },
+        {
+          "step": 62,
+          "name": "The previous run was recorded correctly (still the latest record after the new run began)",
+          "ok": true,
+          "detail": "runs recorded 1; latest victory score 1520"
+        },
+        {
+          "step": "—",
+          "name": "No page errors",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "seen": {
+        "acts": [
+          1,
+          2,
+          3
+        ],
+        "bosses": [
+          "clockwork_regent",
+          "mirror_array",
+          "the_corruptor"
+        ],
+        "screens": [
+          "dialog",
+          "map",
+          "battle",
+          "reward",
+          "surgery",
+          "rest",
+          "bossprep",
+          "mutation",
+          "event",
+          "credits"
+        ],
+        "enemies": [
+          "rush_hound",
+          "wire_jammer",
+          "interference_mite",
+          "iron_maw",
+          "churn_snare",
+          "clockwork_regent",
+          "latch_wisp",
+          "signal_hound",
+          "suit_scrambler",
+          "needle_wing",
+          "bulwark_signal",
+          "mirror_array",
+          "scrap_overseer",
+          "predator_needle",
+          "the_corruptor"
+        ],
+        "acquisitions": [
+          "cache_release",
+          "scrapline_b",
+          "signal_boost",
+          "detonate",
+          "coil_charge",
+          "ladder_peak",
+          "jam_breaker",
+          "hand_off",
+          "overclock",
+          "signal_case",
+          "step_up",
+          "static_bloom",
+          "deadeye_set",
+          "short_circuit"
+        ]
+      },
+      "progress": [
+        {
+          "atSeconds": 16,
+          "screen": "dialog",
+          "state": {
+            "act": 1,
+            "floors": 0,
+            "battles": 0,
+            "hp": 130,
+            "pending": "story",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 87,
+          "screen": "reward",
+          "state": {
+            "act": 1,
+            "floors": 3,
+            "battles": 3,
+            "hp": 124,
+            "pending": "reward",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 165,
+          "screen": "reward",
+          "state": {
+            "act": 1,
+            "floors": 6,
+            "battles": 6,
+            "hp": 118,
+            "pending": "reward",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 251,
+          "screen": "reward",
+          "state": {
+            "act": 1,
+            "floors": 9,
+            "battles": 7,
+            "hp": 109,
+            "pending": "reward",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 315,
+          "screen": "reward",
+          "state": {
+            "act": 2,
+            "floors": 12,
+            "battles": 10,
+            "hp": 111,
+            "pending": "reward",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 395,
+          "screen": "reward",
+          "state": {
+            "act": 2,
+            "floors": 15,
+            "battles": 13,
+            "hp": 105,
+            "pending": "reward",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 535,
+          "screen": "reward",
+          "state": {
+            "act": 2,
+            "floors": 18,
+            "battles": 15,
+            "hp": 76,
+            "pending": "reward",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 595,
+          "screen": "map",
+          "state": {
+            "act": 3,
+            "floors": 22,
+            "battles": 17,
+            "hp": 130,
+            "pending": null,
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 666,
+          "screen": "reward",
+          "state": {
+            "act": 3,
+            "floors": 25,
+            "battles": 19,
+            "hp": 52,
+            "pending": "reward",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 811,
+          "screen": "dialog",
+          "state": {
+            "act": 3,
+            "floors": 27,
+            "battles": 20,
+            "hp": 114,
+            "pending": "story",
+            "t": null,
+            "phase": null
+          }
+        }
+      ],
+      "recoveries": [],
+      "seed": 794184763,
+      "starter": "beta_badge",
+      "offline": false,
+      "reloadedActs": [
+        1,
+        2,
+        3
+      ],
+      "disposition": "completed_without_nudge",
+      "errors": []
+    },
+    {
+      "session": "Russian phone",
+      "label": "G-campaign-ru-844",
+      "results": [
+        {
+          "step": "start",
+          "name": "Campaign began with the selected single relic and standard resources",
+          "ok": true,
+          "detail": "{\"relics\":[\"echo_splice\"],\"hp\":130,\"scrap\":80,\"seed\":754160791}"
+        },
+        {
+          "step": "save-1",
+          "name": "Continue restores the ordinary checkpoint",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": "save-2",
+          "name": "Continue restores the ordinary checkpoint",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": "save-3",
+          "name": "Continue restores the ordinary checkpoint",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": 53,
+          "name": "A three-Act run is finished through the interface (victory recorded)",
+          "ok": true,
+          "detail": "acts 1,2,3, bosses scrap_tyrant, protocol_auditor, the_corruptor, battles 21, recorded victory, act 3, bosses scrap_tyrant/protocol_auditor/the_corruptor"
+        },
+        {
+          "step": 54,
+          "name": "The ending is shown",
+          "ok": true,
+          "detail": "dialog,map,battle,reward,treasure,rest,bossprep,mutation,surgery,modal,event,credits"
+        },
+        {
+          "step": 55,
+          "name": "The credits roll",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": 56,
+          "name": "The results screen is reached",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": 57,
+          "name": "Run statistics are shown and match the recorded run (score, floors, deck, combos)",
+          "ok": true,
+          "detail": "ЯДРО СТАБИЛИЗИРОВАНООчки: 1600Достигнут акт3Этажи27Боссов поверженоЛомовой тиран, Аудитор протокола, ИскажательЭлитные бои2БилдЩит и контрударРазмер колоды33Комбо102Безупречные53Выплаты48Добивания29Дл"
+        },
+        {
+          "step": "record",
+          "name": "One new campaign is recorded and permanent progress is shown",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": 58,
+          "name": "The Museum opens (from the results screen)",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": 59,
+          "name": "Card/relic discoveries and the EX Combo Journal are recorded",
+          "ok": true,
+          "detail": "12 recipes found"
+        },
+        {
+          "step": 60,
+          "name": "A subsequent run begins with an earned relic and standard resources",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": 61,
+          "name": "Persistent unlocks carry over",
+          "ok": true,
+          "detail": "beta_badge,stopwatch_gear,echo_splice,twin_dials,tower_plate,riveted_ledger,breach_clamp"
+        },
+        {
+          "step": 62,
+          "name": "The previous run was recorded correctly (still the latest record after the new run began)",
+          "ok": true,
+          "detail": "runs recorded 2; latest victory score 1600"
+        },
+        {
+          "step": "—",
+          "name": "No page errors",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "seen": {
+        "acts": [
+          1,
+          2,
+          3
+        ],
+        "bosses": [
+          "scrap_tyrant",
+          "protocol_auditor",
+          "the_corruptor"
+        ],
+        "screens": [
+          "dialog",
+          "map",
+          "battle",
+          "reward",
+          "treasure",
+          "rest",
+          "bossprep",
+          "mutation",
+          "surgery",
+          "modal",
+          "event",
+          "credits"
+        ],
+        "enemies": [
+          "rush_hound",
+          "interference_mite",
+          "hound_mother",
+          "iron_maw",
+          "churn_snare",
+          "scrap_tyrant",
+          "latch_wisp",
+          "signal_hound",
+          "phase_lantern",
+          "suit_scrambler",
+          "needle_wing",
+          "bulwark_signal",
+          "protocol_auditor",
+          "scrap_overseer",
+          "predator_needle",
+          "null_knight",
+          "the_corruptor"
+        ],
+        "acquisitions": [
+          "vault_guard",
+          "hand_off",
+          "step_up",
+          "relay_baton",
+          "bulwark_shift",
+          "suit_storm",
+          "signal_case",
+          "shield_bash",
+          "mirror_wire",
+          "ward_weave",
+          "hold_the_line",
+          "piston_strike",
+          "grand_relay",
+          "tally_mark",
+          "iron_oath",
+          "downshift",
+          "brace_up"
+        ]
+      },
+      "progress": [
+        {
+          "atSeconds": 13,
+          "screen": "dialog",
+          "state": {
+            "act": 1,
+            "floors": 0,
+            "battles": 0,
+            "hp": 130,
+            "pending": "story",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 99,
+          "screen": "reward",
+          "state": {
+            "act": 1,
+            "floors": 4,
+            "battles": 4,
+            "hp": 113,
+            "pending": "reward",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 222,
+          "screen": "reward",
+          "state": {
+            "act": 1,
+            "floors": 9,
+            "battles": 7,
+            "hp": 130,
+            "pending": "reward",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 304,
+          "screen": "reward",
+          "state": {
+            "act": 2,
+            "floors": 13,
+            "battles": 11,
+            "hp": 130,
+            "pending": "reward",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 435,
+          "screen": "reward",
+          "state": {
+            "act": 2,
+            "floors": 18,
+            "battles": 14,
+            "hp": 130,
+            "pending": "reward",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 503,
+          "screen": "reward",
+          "state": {
+            "act": 3,
+            "floors": 20,
+            "battles": 16,
+            "hp": 130,
+            "pending": "reward",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 586,
+          "screen": "reward",
+          "state": {
+            "act": 3,
+            "floors": 23,
+            "battles": 19,
+            "hp": 114,
+            "pending": "reward",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 745,
+          "screen": "dialog",
+          "state": {
+            "act": 3,
+            "floors": 27,
+            "battles": 21,
+            "hp": 130,
+            "pending": "story",
+            "t": null,
+            "phase": null
+          }
+        }
+      ],
+      "recoveries": [],
+      "seed": 754160791,
+      "starter": "echo_splice",
+      "offline": false,
+      "reloadedActs": [
+        1,
+        2,
+        3
+      ],
+      "disposition": "completed_without_nudge",
+      "errors": []
+    },
+    {
+      "session": "English offline phone",
+      "label": "G-campaign-en-844",
+      "results": [
+        {
+          "step": "offline-start",
+          "name": "The packaged title starts from its offline cache",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": "start",
+          "name": "Campaign began with the selected single relic and standard resources",
+          "ok": true,
+          "detail": "{\"relics\":[\"beta_badge\"],\"hp\":130,\"scrap\":80,\"seed\":341819499}"
+        },
+        {
+          "step": "save-1",
+          "name": "Continue restores the ordinary checkpoint",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": "save-2",
+          "name": "Continue restores the ordinary checkpoint",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": "save-3",
+          "name": "Continue restores the ordinary checkpoint",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": 53,
+          "name": "A three-Act run is finished through the interface (victory recorded)",
+          "ok": true,
+          "detail": "acts 1,2,3, bosses scrap_tyrant, protocol_auditor, signalbreak_core, battles 16, recorded victory, act 3, bosses scrap_tyrant/protocol_auditor/signalbreak_core"
+        },
+        {
+          "step": 54,
+          "name": "The ending is shown",
+          "ok": true,
+          "detail": "dialog,map,battle,reward,surgery,shop,rest,bossprep,mutation,event,modal,credits"
+        },
+        {
+          "step": 55,
+          "name": "The credits roll",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": 56,
+          "name": "The results screen is reached",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": 57,
+          "name": "Run statistics are shown and match the recorded run (score, floors, deck, combos)",
+          "ok": true,
+          "detail": "CORE STABILIZEDScore 1560Act reached3Floors27Bosses defeatedScrap Tyrant, Protocol Auditor, Signalbreak CoreElites1BuildChurn EngineDeck size29Combos62Perfects36Cash Outs26Finishers33Longest combo8 ca"
+        },
+        {
+          "step": "record",
+          "name": "One new campaign is recorded and permanent progress is shown",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": 58,
+          "name": "The Museum opens (from the results screen)",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": 59,
+          "name": "Card/relic discoveries and the EX Combo Journal are recorded",
+          "ok": true,
+          "detail": "13 recipes found"
+        },
+        {
+          "step": 60,
+          "name": "A subsequent run begins with an earned relic and standard resources",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": 61,
+          "name": "Persistent unlocks carry over",
+          "ok": true,
+          "detail": "beta_badge,stopwatch_gear,echo_splice,twin_dials,spare_pockets,tower_plate,riveted_ledger,breach_clamp"
+        },
+        {
+          "step": 62,
+          "name": "The previous run was recorded correctly (still the latest record after the new run began)",
+          "ok": true,
+          "detail": "runs recorded 1; latest victory score 1560"
+        },
+        {
+          "step": "offline-end",
+          "name": "The entire campaign and subsequent start remained offline",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "step": "—",
+          "name": "No page errors",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "seen": {
+        "acts": [
+          1,
+          2,
+          3
+        ],
+        "bosses": [
+          "scrap_tyrant",
+          "protocol_auditor",
+          "signalbreak_core"
+        ],
+        "screens": [
+          "dialog",
+          "map",
+          "battle",
+          "reward",
+          "surgery",
+          "shop",
+          "rest",
+          "bossprep",
+          "mutation",
+          "event",
+          "modal",
+          "credits"
+        ],
+        "enemies": [
+          "rush_hound",
+          "wire_jammer",
+          "interference_mite",
+          "foundry_warden",
+          "churn_snare",
+          "scrap_tyrant",
+          "latch_wisp",
+          "signal_hound",
+          "bulwark_signal",
+          "needle_wing",
+          "phase_lantern",
+          "protocol_auditor",
+          "predator_needle",
+          "scrap_overseer",
+          "iron_maw",
+          "suit_scrambler",
+          "signalbreak_core"
+        ],
+        "acquisitions": [
+          "pocket_gauge",
+          "junk_toss",
+          "hand_off",
+          "junkstorm",
+          "signal_boost",
+          "pressure_splice",
+          "momentum_lance",
+          "cache_hook",
+          "hold_the_line",
+          "pocket_watch",
+          "hidden_ace",
+          "ratchet_burst"
+        ]
+      },
+      "progress": [
+        {
+          "atSeconds": 12,
+          "screen": "dialog",
+          "state": {
+            "act": 1,
+            "floors": 0,
+            "battles": 0,
+            "hp": 130,
+            "pending": "story",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 96,
+          "screen": "reward",
+          "state": {
+            "act": 1,
+            "floors": 4,
+            "battles": 3,
+            "hp": 117,
+            "pending": "reward",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 201,
+          "screen": "reward",
+          "state": {
+            "act": 1,
+            "floors": 9,
+            "battles": 5,
+            "hp": 130,
+            "pending": "reward",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 261,
+          "screen": "map",
+          "state": {
+            "act": 2,
+            "floors": 13,
+            "battles": 7,
+            "hp": 121,
+            "pending": null,
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 380,
+          "screen": "reward",
+          "state": {
+            "act": 2,
+            "floors": 18,
+            "battles": 10,
+            "hp": 85,
+            "pending": "reward",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 445,
+          "screen": "reward",
+          "state": {
+            "act": 3,
+            "floors": 21,
+            "battles": 13,
+            "hp": 111,
+            "pending": "reward",
+            "t": null,
+            "phase": null
+          }
+        },
+        {
+          "atSeconds": 616,
+          "screen": "dialog",
+          "state": {
+            "act": 3,
+            "floors": 27,
+            "battles": 16,
+            "hp": 104,
+            "pending": "story",
+            "t": null,
+            "phase": null
+          }
+        }
+      ],
+      "recoveries": [],
+      "seed": 341819499,
+      "starter": "beta_badge",
+      "offline": true,
+      "reloadedActs": [
+        1,
+        2,
+        3
+      ],
+      "disposition": "completed_without_nudge",
+      "errors": []
+    }
+  ],
+  "itemAndDraftedSpecialist": {
+    "seed": 288925607,
+    "chosenSpecial": "first_rung",
+    "events": [
+      {
+        "kind": "execution",
+        "id": "rivet_jab",
+        "who": "V"
+      },
+      {
+        "kind": "execution",
+        "id": "scrapline",
+        "who": "C"
+      },
+      {
+        "kind": "execution",
+        "id": "thermal_lance",
+        "who": "C"
+      },
+      {
+        "kind": "execution",
+        "id": "scrapline_b",
+        "who": "S"
+      },
+      {
+        "kind": "execution",
+        "id": "bolt_volley",
+        "who": "S"
+      },
+      {
+        "kind": "execution",
+        "id": "salvage",
+        "who": "V"
+      },
+      {
+        "kind": "execution",
+        "id": "hotwire",
+        "who": "C"
+      },
+      {
+        "kind": "execution",
+        "id": "piston_strike_b",
+        "who": "C"
+      },
+      {
+        "kind": "execution",
+        "id": "thermal_lance",
+        "who": "C"
+      },
+      {
+        "kind": "execution",
+        "id": "salvage",
+        "who": "V"
+      },
+      {
+        "kind": "execution",
+        "id": "scrapline_b",
+        "who": "C"
+      },
+      {
+        "kind": "execution",
+        "id": "piston_strike",
+        "who": "C"
+      },
+      {
+        "kind": "execution",
+        "id": "thermal_lance",
+        "who": "C"
+      },
+      {
+        "kind": "execution",
+        "id": "scrapline",
+        "who": "S"
+      },
+      {
+        "kind": "execution",
+        "id": "bolt_volley",
+        "who": "S"
+      },
+      {
+        "kind": "execution",
+        "id": "scrapline",
+        "who": "V"
+      },
+      {
+        "kind": "execution",
+        "id": "recycler",
+        "who": "V"
+      },
+      {
+        "kind": "execution",
+        "id": "hotwire",
+        "who": "C"
+      },
+      {
+        "kind": "execution",
+        "id": "piston_strike_b",
+        "who": "C"
+      },
+      {
+        "kind": "execution",
+        "id": "salvage",
+        "who": "V"
+      },
+      {
+        "kind": "execution",
+        "id": "salvage",
+        "who": "V"
+      },
+      {
+        "kind": "execution",
+        "id": "hotwire",
+        "who": "S"
+      },
+      {
+        "kind": "execution",
+        "id": "piston_strike",
+        "who": "S"
+      },
+      {
+        "kind": "execution",
+        "id": "bolt_volley",
+        "who": "S"
+      },
+      {
+        "kind": "execution",
+        "id": "scrapline_b",
+        "who": "C"
+      },
+      {
+        "kind": "execution",
+        "id": "thermal_lance",
+        "who": "C"
+      },
+      {
+        "kind": "execution",
+        "id": "scrapline",
+        "who": "V"
+      },
+      {
+        "kind": "execution",
+        "id": "scrapfall",
+        "who": "V"
+      },
+      {
+        "kind": "execution",
+        "id": "recycler",
+        "who": "V"
+      },
+      {
+        "kind": "execution",
+        "id": "salvage",
+        "who": "V"
+      },
+      {
+        "kind": "execution",
+        "id": "rivet_jab",
+        "who": "S"
+      },
+      {
+        "kind": "execution",
+        "id": "piston_strike_b",
+        "who": "S"
+      },
+      {
+        "kind": "execution",
+        "id": "bolt_volley",
+        "who": "S"
+      },
+      {
+        "kind": "execution",
+        "id": "scrapline",
+        "who": "V"
+      },
+      {
+        "kind": "execution",
+        "id": "scrapfall",
+        "who": "V"
+      },
+      {
+        "kind": "execution",
+        "id": "scrapline_b",
+        "who": "C"
+      },
+      {
+        "kind": "execution",
+        "id": "thermal_lance",
+        "who": "C"
+      },
+      {
+        "kind": "execution",
+        "id": "salvage",
+        "who": "V"
+      },
+      {
+        "kind": "execution",
+        "id": "scrapline",
+        "who": "C"
+      },
+      {
+        "kind": "execution",
+        "id": "rivet_jab",
+        "who": "C"
+      },
+      {
+        "kind": "execution",
+        "id": "mend_circuit",
+        "who": "S"
+      },
+      {
+        "kind": "kit-heal",
+        "hp": 10
+      },
+      {
+        "kind": "execution",
+        "id": "piston_strike_b",
+        "who": "C"
+      },
+      {
+        "kind": "execution",
+        "id": "thermal_lance",
+        "who": "C"
+      },
+      {
+        "kind": "execution",
+        "id": "scrapline_b",
+        "who": "V"
+      },
+      {
+        "kind": "execution",
+        "id": "recycler",
+        "who": "V"
+      },
+      {
+        "kind": "execution",
+        "id": "hotwire",
+        "who": "S"
+      },
+      {
+        "kind": "execution",
+        "id": "bolt_volley",
+        "who": "S"
+      },
+      {
+        "kind": "execution",
+        "id": "salvage",
+        "who": "V"
+      },
+      {
+        "kind": "execution",
+        "id": "first_rung",
+        "who": "S"
+      }
+    ],
+    "errors": []
+  },
+  "controlledKitContact": [
+    {
+      "lang": "ru",
+      "width": 740,
+      "height": 360,
+      "hero": "S",
+      "size": 12,
+      "events": [
+        {
+          "type": "execResolve",
+          "t": 2.0019999999999993,
+          "hero": "S",
+          "card": "mend_circuit",
+          "clip": "kitQuick"
+        },
+        {
+          "type": "heal",
+          "t": 2.0019999999999993,
+          "amount": 14,
+          "card": "mend_circuit"
+        }
+      ],
+      "expectedClip": "kitQuick",
+      "cues": [
+        {
+          "t": 2.0019999999999993,
+          "notes": [
+            57,
+            64,
+            71
+          ]
+        }
+      ]
+    },
+    {
+      "lang": "en",
+      "width": 1194,
+      "height": 834,
+      "hero": "C",
+      "size": 12.3892,
+      "events": [
+        {
+          "type": "execResolve",
+          "t": 2.4959999999999987,
+          "hero": "C",
+          "card": "mend_circuit",
+          "clip": "kitCircuit"
+        },
+        {
+          "type": "heal",
+          "t": 2.4959999999999987,
+          "amount": 14,
+          "card": "mend_circuit"
+        }
+      ],
+      "expectedClip": "kitCircuit",
+      "cues": [
+        {
+          "t": 2.4959999999999987,
+          "notes": [
+            55,
+            62,
+            69
+          ]
+        }
+      ]
+    },
+    {
+      "lang": "en",
+      "width": 667,
+      "height": 375,
+      "hero": "V",
+      "size": 12,
+      "events": [
+        {
+          "type": "execResolve",
+          "t": 1.0410000000000008,
+          "hero": "V",
+          "card": "mend_circuit",
+          "clip": "kitShield"
+        },
+        {
+          "type": "heal",
+          "t": 1.0410000000000008,
+          "amount": 14,
+          "card": "mend_circuit"
+        }
+      ],
+      "expectedClip": "kitShield",
+      "cues": [
+        {
+          "t": 1.0410000000000008,
+          "notes": [
+            52,
+            60,
+            67
+          ]
+        }
+      ]
+    }
+  ]
+}

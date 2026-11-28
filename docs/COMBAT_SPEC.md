@@ -700,3 +700,22 @@ Run and Museum schemas are unchanged. The checkpoint protocol protects unreadabl
 and detects when the recorded run or profile was edited since this tab loaded or committed
 it. Continue still restarts an unfinished battle. The service worker checks the packaged
 page digest before activation and cleans caches in its own scope after successful install.
+
+## 34. Combat refinement · 0.2.13
+
+Basic attacks now have six standard definitions, an A/B pair at each of the three
+printed ranks. The pairs deal 5/7, 7/9 and 10/13 base/upgraded damage and generate
+1, 1 and 2 Momentum, respectively. They share the existing legality and resolution
+clocks. Fifteen specialized attacks keep distinct effects. Common offers and shops
+can supply any foundation, and the underfilled deck safeguard preserves rank access.
+
+The neutral Repair Kit replaces Mend Circuit on the same card ID. Choosing its
+performer is separate from targeting an ally with Braced. Only a Ready hero can use
+it, including during another hero's combo. The kit costs two Momentum, heals shared HP
+by 14/20 at contact, incurs ordinary support Recovery and cycles through discard.
+The combat grammar, Straight Circuit, Tandem Signal and all existing Relay rules
+remain. The help explains the optional recipes and valid short paths.
+
+Run v8 maps retired attacks and old suit overrides while keeping instance properties
+and pending offers. A Continue still rebuilds the encounter from the saved checkpoint.
+See [the refinement report](COMBAT_REFINEMENT.md) for the full mapping and comparative tests.

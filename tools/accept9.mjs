@@ -15,6 +15,7 @@ import { RU } from '../src/i18n/ru.js';
 import { ACHIEVEMENTS } from '../src/data/achievements.js';
 import { STARTER_OPTIONS } from '../src/data/relics.js';
 import { STARTER_DECK } from '../src/data/cards.js';
+import { Run, SAVE_VERSION } from '../src/engine/run.js';
 import { findIssues } from './lib/text-issues.mjs';
 const { chromium } = createRequire(import.meta.url)('playwright');
 
@@ -128,8 +129,10 @@ async function historical() {
   await tap('Continue');
   const loaded = await ev(() => ({ version: window.__sb.run.d.version, seed: window.__sb.run.d.seed, act: window.__sb.run.d.act,
     deck: window.__sb.run.d.deck, id: window.__sb.run.d.progress.id }));
-  verify('Historical active run continues with deck and identity', loaded.version === 7 && loaded.seed === run.seed &&
-    loaded.act === run.act && loaded.id > 0 && JSON.stringify(loaded.deck) === JSON.stringify(run.deck));
+  const expected = Run.load(structuredClone(run)).d.deck;
+  verify('Historical active run continues with migrated deck and identity', loaded.version === SAVE_VERSION && loaded.seed === run.seed &&
+    loaded.act === run.act && loaded.id > 0 && loaded.deck.length === run.deck.length &&
+    loaded.deck.every((card, i) => card.uid === run.deck[i].uid && JSON.stringify(card) === JSON.stringify(expected[i])));
   await clickAbandon();
   await page.reload();
   await title();

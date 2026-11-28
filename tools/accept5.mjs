@@ -40,10 +40,12 @@ const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: W, height: H }, hasTouch: true });
 await ctx.addInitScript((l) => { if (!localStorage.getItem('signalbreak.settings.v1')) localStorage.setItem('signalbreak.settings.v1', JSON.stringify({ lang: l, hints: false })); }, LANG);
 const p = await ctx.newPage();
+await p.clock.install();
 const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));
 const shot = (name) => p.screenshot({ path: `${out}/${LANG}-${W}-${name}.png` });
 const wait = (ms) => p.waitForTimeout(ms);
+const pauseInputClock = async () => p.clock.pauseAt(await p.evaluate(() => Date.now() + 180));
 
 await p.goto(URL);
 await p.waitForFunction(() => window.__sb);
@@ -130,6 +132,7 @@ check('2. Hessa selected with her hero button', s.selected === 'V' && s.starter 
 // 3-5. Weak, then Medium while Weak executes
 const weak = await uidById('scrapline', 'A');
 const medium = await uidById('rivet_jab', 'B');
+await pauseInputClock();
 const hp0 = (await S()).enemy[0].hp;
 const m0 = (await S()).momentum;
 await tapCard(weak);
@@ -143,19 +146,27 @@ s = await S();
 const dom5 = await p.evaluate(() => ({ wait: document.querySelectorAll('.chip.q.wait').length, ghost: [...document.querySelectorAll('.slot.held .g-s')].map((x) => x.textContent) }));
 check('5. Medium queued while Weak still executes', s.queue.length === 1 && s.queue[0].uid === medium && s.exec && s.exec.uid === weak, JSON.stringify(dom5));
 await shot('05-queued');
+await p.clock.resume();
 s = await idle();
 check('6. executed in order with Momentum on resolution (Weak +1, Medium +1, Cross +1)', JSON.stringify(s.combo.cards) === JSON.stringify(['scrapline', 'rivet_jab']) && s.momentum === m0 + 3, `${s.combo.cards} M ${m0} → ${s.momentum}`);
 
 // 7-8. Hessa's arte; the chain stays open
 const scrapfall = await uidById('scrapfall');
+await pauseInputClock();
 const L7 = (await S()).flowLeft;
 await tapCard(scrapfall);
-s = await idle();
+const duration = await p.evaluate(() => {
+  const x = window.__sb.battle.combat.executing;
+  return Math.ceil((x.endAt - x.start) * 1000);
+});
+await p.clock.runFor(duration + 24);
+s = await S();
 const L7b = s.flowLeft;
 check('7. Hessa\'s arte executed', s.combo && s.combo.cards.at(-1) === 'scrapfall');
 const relayCls = await p.evaluate(() => document.querySelector('.hero-btn[data-hero="C"]').classList.contains('relay'));
 check('8. the chain did not end: FINISH available and Corvin offered as a Relay target', s.combo && s.canFinish && relayCls);
 check('22. execution time was not taken from the decision window (Flow before and after the arte, refund aside)', Math.abs(L7b - (L7 + 1.0)) < 0.25, `${L7.toFixed(2)}s → ${L7b.toFixed(2)}s`);
+await p.clock.resume();
 await shot('08-arte');
 
 // 9-12. Relay to Corvin
@@ -252,8 +263,9 @@ s = await until((x) => x.heroes.S === 'READY' && x.heroes.C === 'READY', 6000);
 await tapSel('.hero-btn[data-hero="S"]');
 await wait(100);
 const b25 = await p.evaluate(() => { const c = window.__sb.battle.combat; return c.hand.filter((u) => u && c.categoryOf(u) === 'basic' && c.check(u).ok)[0]; });
-await tapCard(b25);
 const heal = await uidById('mend_circuit');
+await pauseInputClock();
+await tapCard(b25);
 const m25 = (await S()).momentum;
 await tapCard(heal);
 await tapSel('.hero-btn[data-hero="C"]');
@@ -263,6 +275,7 @@ const reservedWhileQueued = s.reserved;
 const dom23 = await p.evaluate((id) => !!document.querySelector(`.chip.q.wait[data-cmd="${id}"]`), healCmd ? healCmd.id : -1);
 check('23. the queue was visible and controllable (waiting chip, held placeholder)', dom23 && dom5.wait >= 1 && dom5.ghost.length >= 1, JSON.stringify(dom5.ghost));
 if (healCmd) await tapSel(`.chip.q.wait[data-cmd="${healCmd.id}"]`);
+await p.clock.resume();
 await wait(100);
 s = await S();
 check('25. tapping the waiting heal cancelled it: its 2 Momentum reservation was returned, the card is back',

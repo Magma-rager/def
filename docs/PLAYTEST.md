@@ -1,10 +1,10 @@
-# SIGNAL//BREAK · beta candidate 0.2.12
+# SIGNAL//BREAK · beta candidate 0.2.13
 
-This packet is prepared for the project owner’s post-roadmap beta. The build stamp appears under the title menu. Record it when reporting a result. [Development web build](https://signalbreak-game.website.yandexcloud.net/) · [Known issues and verification](PHASE12.md)
+This packet is prepared for the project owner’s post-roadmap beta. The build stamp appears under the title menu. Record it when reporting a result. [Development web build](https://signalbreak-game.website.yandexcloud.net/) · [Combat refinement and verification](COMBAT_REFINEMENT.md)
 
 ## English
 
-Signalbreak is a real-time deckbuilding RPG. Hessa, Corvin and Pin share one hand, one deck and one party health bar. Build attacks from low to high rank, use an Arte to finish or hand the combo to another hero with Relay. In a run you choose routes, fight, adjust your deck and discover new options for future runs.
+Signalbreak is a real-time deckbuilding RPG. Hessa, Corvin and Pin share one hand, one deck and one party health bar. The six standard attacks are Weak, Medium and Strong in suits A and B. Any of the three ranks can start a combo. Follow with higher ranks, then an Arte or a Relay. Tap a Repair Kit and choose a Ready hero to restore shared HP. In a run you choose routes, fight, adjust your deck and discover new options for future runs.
 
 **Access.** Open the development build in a landscape browser. For an offline test, first wait for **Available offline**, then go offline and reopen the same URL. Saves and unlocks belong to the browser and address you use. An active encounter restarts on Continue. Apple Home Screen installation and the native Swift Playgrounds build are separate device tests. The candidate has a small-screen rotation prompt. Native execution, listening quality and physical touch comfort still need device evidence.
 
@@ -33,7 +33,7 @@ For a defect, give the shortest sequence you know, expected outcome, actual outc
 
 ## Русский
 
-Signalbreak — ролевая игра с колодой и боями в реальном времени. У Хессы, Корвина и Пина общие рука, колода и запас здоровья. Собирайте цепочки от младших рангов к старшим, завершайте их арте или передавайте ход Эстафетой. В забеге выбирайте маршрут и меняйте колоду, а между забегами изучайте Музей и открытые варианты старта.
+Signalbreak — ролевая игра с колодой и боями в реальном времени. У Хессы, Корвина и Пина общие рука, колода и запас здоровья. Обычные атаки бывают слабые, средние и сильные, мастей A и B. Начать цепочку можно с любого из трёх рангов. Повышайте ранг, завершайте цепочку арте или передавайте Эстафету. Чтобы вылечить отряд, коснитесь ремкомплекта и выберите готового героя. В забеге выбирайте маршрут и меняйте колоду, а между забегами изучайте Музей и открытые варианты старта.
 
 **Запуск.** Откройте сборку в браузере горизонтально. Для проверки без сети дождитесь надписи **«Доступно офлайн»**, отключите сеть и заново откройте тот же адрес. Хранилище привязано к браузеру и адресу. «Продолжить» перезапускает текущий незаконченный бой. Установка на экран «Домой» и запуск проекта в Swift Playgrounds проверяются отдельно на устройстве. Качество звука и удобство управления на реальных телефонах и планшетах предстоит проверить.
 

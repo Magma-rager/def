@@ -1,3 +1,23 @@
+# 0.2.13 combat refinement · development preview
+
+- Six standard neutral attacks form equal A/B pairs at ranks 1, 2 and 3. Specialized
+  basics retain real build choices. The starting deck's size and rank distribution stay the same.
+- A neutral Repair Kit replaces Mend Circuit. Choose a Ready hero to restore shared HP.
+  Existing costs, upgrades, support Recovery and persistent campaign damage are unchanged.
+- Abbreviated combos and flexible Relay remain legal. The help explains the existing
+  Straight Circuit and Tandem Signal rewards.
+- Historical runs migrate to v8 and keep their card instances and progression.
+  [Combat refinement evidence](COMBAT_REFINEMENT.md)
+
+## Русский
+
+У обычных атак есть пары A/B на рангах 1, 2 и 3. Особые атаки по-прежнему дают
+тактические эффекты. Ремкомплект заменяет «Ремонт цепи»: выберите готового героя,
+чтобы восстановить здоровье отряда. Короткие комбо и гибкая Эстафета сохранены.
+Сохранения старых версий переходят на v8 с картами и прогрессом.
+
+---
+
 # 0.2.12 pre-beta release notes · draft
 
 SIGNAL//BREAK is a single-player roguelite deckbuilding RPG. Lead three heroes through a failing signal network, stitch attacks together in real time, and pass the chain between fighters. Campaign paths, rewards and bosses vary between runs. Discover EX sequences and unlock alternative starting relics through the Museum.

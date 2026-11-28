@@ -36,11 +36,21 @@ const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: +W, height: +H }, hasTouch: true });
 await ctx.addInitScript((l) => { if (!localStorage.getItem('signalbreak.settings.v1')) localStorage.setItem('signalbreak.settings.v1', JSON.stringify({ lang: l })); }, LANG);
 const p = await ctx.newPage();
+await p.clock.install();
 const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));
 p.on('console', (m) => { if (m.type() === 'error' && !m.text().includes('404')) errors.push(m.text()); });
 const shot = (name) => p.screenshot({ path: `${outDir}/${LANG}-${W}-${name}.png` });
 const wait = (ms) => p.waitForTimeout(ms);
+let scriptedClock = false;
+async function holdInputWindow() {
+  await p.clock.pauseAt(await p.evaluate(() => Date.now() + 180));
+  scriptedClock = true;
+}
+async function releaseInputWindow() {
+  scriptedClock = false;
+  await p.clock.resume();
+}
 
 // ── read-only views ──
 const S = () => p.evaluate(() => {
@@ -103,7 +113,8 @@ const lessonShots = new Set();
 let stored = null; // the card swiped into Reserve right after the Reserve lesson (a player following the tip)
 async function dismissLesson(s) {
   lessonLog.push({ key: s.lesson, t: s.t, battle: battleNo, tutorial: s.tutorial, cards: s.stats.cards, artes: s.stats.artes, relays: s.stats.relays, churns: s.stats.churns, stashes: s.stats.stashes, supports: s.stats.supports, anchor: s.anchor, hand: s.hand, combo: s.combo });
-  await wait(470); // the lesson card ignores input for its first moment (and has faded in)
+  if (scriptedClock) await p.clock.runFor(470);
+  else await wait(470); // the lesson card ignores input for its first moment
   if (!lessonShots.has(s.lesson)) { lessonShots.add(s.lesson); await shot(`lesson-${String(lessonShots.size).padStart(2, '0')}-${s.lesson}`); }
   await tapSel('.tut-layer:not([hidden]) .btn.primary');
   await wait(60);
@@ -134,7 +145,7 @@ async function until(pred, ms = 10000) {
     const s = await S();
     if (!s) return null;
     if (s.lesson) { await dismissLesson(s); continue; }
-    if (pred(s)) return s;
+    if (await pred(s)) return s;
     await wait(40);
   }
   return null;
@@ -202,6 +213,8 @@ await tapHero('V');
 s = await S();
 check(4, 'Selecting a Ready hero with the hero buttons', selC === 'C' && s.selected === 'V' && !s.combo, `Corvin → ${selC}, Hessa → ${s.selected}`);
 // 17. targeting: tap the second enemy, then hold it to read it
+// The automatic enemy lesson can otherwise appear during the hold gesture and take its input.
+if (!lessonLog.some((entry) => entry.key === 'enemies')) await waitLesson('enemies', 9000);
 s = await S();
 const other = s.enemies.find((e) => e.alive && e.uid !== s.target);
 if (other) {
@@ -211,16 +224,20 @@ if (other) {
   const t1 = (await S()).target;
   await p.mouse.move(rect[0], rect[1]);
   await p.mouse.down();
-  await wait(650);
+  await p.locator('.modal .enemy-detail').waitFor({ timeout: 2400 }).catch(() => {});
   await p.mouse.up();
   await wait(200);
   const detail = await p.evaluate(() => { const m = document.querySelector('.modal .enemy-detail'); return m ? m.textContent : ''; });
   await shot('17-enemy-detail');
   check(17, 'Tapping an enemy targets it; holding it shows its next move', t1 === other.uid && detail.length > 10, `target ${other.id}; "${detail.slice(0, 80)}"`);
   await tapSel('.modal .btn.primary');
-  await wait(150);
+  await p.locator('.modal').waitFor({ state: 'hidden' });
 } else check(17, 'Tapping an enemy targets it; holding it shows its next move', false, 'only one enemy left');
 // 5. a neutral basic attack
+await until(() => p.evaluate(() => {
+  const c = window.__sb.battle.combat;
+  return c.hand.some((uid) => uid && c.def(uid).id === 'scrapline' && c.check(uid).ok);
+}));
 await tapCard('scrapline');
 s = await S();
 check(5, 'Playing a neutral basic attack starts Hessa\'s combo', s.combo && s.combo.hero === 'V' && (s.exec === 'card' || s.combo.cards === 1), `combo by ${s.combo && s.combo.hero}`);
@@ -274,6 +291,7 @@ let chips = { exec: 0, wait: 0, held: 0 };
 let q1;
 for (let attempt = 0; attempt < 4; attempt++) {
   await quiet();
+  await holdInputWindow();
   await tapCard(await legal('basic'));
   q1 = shown('queue');
   const follow = await legal('basic') || await legal('arte', (await S()).combo?.hero);
@@ -287,6 +305,7 @@ for (let attempt = 0; attempt < 4; attempt++) {
     wait: document.querySelectorAll('.chip.q.wait').length,
     held: document.querySelectorAll('.slot.held').length,
   }));
+  await releaseInputWindow();
   if (q1 && s.queue.length && chips.exec && chips.wait && chips.held) break;
   await endChain();
 }
@@ -300,8 +319,9 @@ await endChain();
 let cl = null, waiting = null, s12 = null;
 for (let attempt = 0; attempt < 4 && !s12; attempt++) {
   await quiet();
+  await holdInputWindow();
   await tapCard(await legal('basic'));
-  const c2b = await legal('basic');
+  const c2b = await legal('basic') || await legal('arte', (await S()).combo?.hero);
   if (c2b) await tapCard(c2b);
   const c3b = await legal('basic');
   if (c3b) await tapCard(c3b);
@@ -314,6 +334,7 @@ for (let attempt = 0; attempt < 4 && !s12; attempt++) {
     s12 = await S();
     s12.back = await p.evaluate((u) => window.__sb.battle.combat.hand.includes(u), waiting.uid);
   }
+  await releaseInputWindow();
   await endChain();
 }
 check(12, 'Cancelling an unstarted command returns its card, after the lesson', cl && waiting && s12 && !s12.queue.some((q) => q.id === waiting.id) && s12.back, `lesson ${cl ? 'shown first' : 'missing'}; ${waiting ? waiting.card : 'nothing'} back in its hand slot ${s12 && s12.back}`);

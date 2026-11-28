@@ -17,6 +17,7 @@ try {
     await ctx.addInitScript((l) => localStorage.setItem('signalbreak.settings.v1',
       JSON.stringify({ lang: l, hints: false, reducedMotion: l === 'ru', muted: true })), lang);
     const p = await ctx.newPage();
+    await p.clock.install();
     const errors = [];
     p.on('pageerror', (err) => errors.push(err.message));
     await p.goto(url);
@@ -45,6 +46,12 @@ try {
       c.enemies[0].hp = c.enemies[0].maxHp = 500;
       const emit = c.emit.bind(c);
       window.__kitEvents = [];
+      window.__kitSignals = [];
+      const signal = bs.view.signal.bind(bs.view);
+      bs.view.signal = (cue, ...args) => {
+        signal(cue, ...args);
+        if (cue.shape === 'kit') window.__kitSignals.push({ t: c.t, notes: cue.notes });
+      };
       c.emit = (ev) => {
         emit(ev);
         if (ev.type === 'execResolve' || ev.type === 'heal') {
@@ -86,7 +93,15 @@ try {
     if (hero !== 'V') assert.ok(await heroButton('V').isDisabled(), 'the attacking hero cannot use the kit');
     const tag = `${lang}-${width}-${hero}`;
     await p.screenshot({ path: `${out}/${tag}-choose.png` });
+    // Advance a fixed capture window, so the compositor captures the passing contact cue.
+    await p.clock.pauseAt(await p.evaluate(() => Date.now() + 180));
     await heroButton(hero).tap();
+    await p.clock.runFor(500);
+    const cues = await p.evaluate(() => window.__kitSignals);
+    assert.equal(cues.length, 1);
+    assert.equal(cues[0].notes.length, 3);
+    await p.screenshot({ path: `${out}/${tag}-contact.png` });
+    await p.clock.resume();
     await p.waitForFunction((who) => window.__sb.battle.combat.heroState(who) === 'RECOVERING', hero);
     const actual = await live();
     assert.equal(actual.hp, before.hp + 14);
@@ -97,7 +112,6 @@ try {
     assert.equal(events[0].hero, hero);
     assert.equal(events[0].t, events[1].t);
     assert.equal(events[0].clip, clip);
-    const cues = await p.evaluate(() => window.__sb.battle.view.fx.filter((f) => f.shape === 'kit').length);
     await p.screenshot({ path: `${out}/${tag}-restored.png` });
     assert.deepEqual(errors, []);
     results.push({ lang,width,height,hero,size,events,expectedClip:clip,cues });

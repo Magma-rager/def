@@ -29,6 +29,7 @@ const b = await chromium.launch();
 const ctx = await b.newContext({ viewport: { width: W, height: H }, hasTouch: true });
 await ctx.addInitScript((l) => { if (!localStorage.getItem('signalbreak.settings.v1')) localStorage.setItem('signalbreak.settings.v1', JSON.stringify({ lang: l, hints: false })); }, LANG);
 const p = await ctx.newPage();
+await p.clock.install();
 const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));
 const shot = (name) => p.screenshot({ path: `${out}/${LANG}-${W}-${name}.png` });
@@ -64,6 +65,9 @@ const S = () => p.evaluate(() => {
 const tapCard = async (uid) => {
   const played = await p.evaluate(() => window.__sb.battle.combat.stats.cardsPlayed);
   await p.locator(`.hand .slot .card[data-uid="${uid}"]:not(.leaving), .reserve .res-card[data-uid="${uid}"]`).tap();
+  if (await p.locator('.pick-cancel').isVisible()) {
+    await p.locator('.hero-btn.pick:enabled').first().tap();
+  }
   await p.waitForFunction((n) => {
     const c = window.__sb.battle?.combat;
     return c && c.stats.cardsPlayed > n && !c.executing;
@@ -147,6 +151,9 @@ check('9. a support card plays on its own: no combo starts', s.stats.supports ==
 await shot('09-support');
 
 // 10 + 12. Churn exactly one card; the slot gets the previewed card
+// Preserve the visible preview from the start of each real swipe through the input.
+await p.clock.pauseAt(await p.evaluate(() => Date.now() + 180));
+s = await S();
 const before10 = s.hand.map((x) => x && x.uid);
 const victimIdx = s.hand.findIndex((x) => x && x.cat === 'arte' && !x.ok) >= 0 ? s.hand.findIndex((x) => x && x.cat === 'arte' && !x.ok) : s.hand.findIndex(Boolean);
 const preview10 = s.next;
@@ -154,7 +161,8 @@ await swipe(before10[victimIdx], 60);
 s = await S();
 const changed10 = s.hand.map((x, i) => (x && x.uid) !== before10[i]);
 check('10. Churn replaced exactly one hand card', changed10.filter(Boolean).length === 1 && changed10[victimIdx], `slot ${victimIdx}`);
-check('12a. the replacement is the card the preview showed', s.hand[victimIdx] && s.hand[victimIdx].uid === preview10);
+check('12a. the replacement is the card the preview showed', s.hand[victimIdx] && s.hand[victimIdx].uid === preview10,
+  `preview ${preview10}, drawn ${s.hand[victimIdx]?.uid}`);
 
 // 11 + 12. stash a basic attack into Reserve; its slot refills with the previewed card
 const basicIdx = s.hand.findIndex((x) => x && x.cat === 'basic');
@@ -180,6 +188,7 @@ check('11a. a card swiped up went to Reserve', s.reserve.some((x) => x.uid === s
 const events11 = await p.evaluate(() => { const recording=window.phase4Stash; recording.restore(); return recording.trace; });
 check('12b. its slot refilled from the preview', s.hand[basicIdx] && s.hand[basicIdx].uid === preview11,
   JSON.stringify({ preview11, beforeSwipe:stashTrace, now:s.hand[basicIdx]?.uid, events:events11 }));
+await p.clock.resume();
 await shot('11-reserve');
 
 // 13. Corvin or Pin starts a combo (with the Reserve card when it fits)
