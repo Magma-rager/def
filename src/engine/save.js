@@ -1,5 +1,6 @@
 // Local persistence. An active-run write is the recovery checkpoint for profile updates.
 import { normalizeCombos } from '../data/recipes.js';
+import { refineDiscoveries } from '../data/cards.js';
 import { applyCheckpoint, assignRunId, awardAchievements, count, counters, ids, normalizeProgress, object, settleRun } from './progression.js';
 
 const KEYS = { run: 'signalbreak.run.v3', meta: 'signalbreak.meta.v1', settings: 'signalbreak.settings.v1' };
@@ -156,6 +157,7 @@ export function normalizeMeta(raw) {
   const m = { ...defaultMeta(), ...source };
   m.runs = Array.isArray(source.runs) ? source.runs.filter((r) => r && typeof r === 'object' && !Array.isArray(r)).slice(0, 30) : [];
   for (const k of ['relicsFound', 'cardsSeen', 'endings']) m[k] = ids(source[k]);
+  m.cardsSeen = refineDiscoveries(m.cardsSeen);
   for (const k of ['bossesDefeated', 'enemiesSeen', 'archetypes']) m[k] = counters(source[k]);
   for (const k of ['totalRuns', 'wins', 'bestCombo', 'maxHit', 'bestScore', 'defeats', 'devTrust']) m[k] = count(source[k]);
   m.wins = Math.max(m.wins, m.runs.filter((r) => r.result === 'victory').length);

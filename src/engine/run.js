@@ -1,7 +1,7 @@
 // Run state machine: map, nodes, rewards, shops, events, rest, surgery, bosses, mutations, saving.
 // All run data lives in the plain object `this.d` so it serializes to localStorage verbatim.
 import { RNG, seedFrom } from '../core/rng.js';
-import { CARDS, STARTER_DECK, rewardPool, graftPool, ARCHETYPES, MIGRATE_CARDS, UNKNOWN_CARD_FALLBACK, isOffensive, RANK_RANGE, gaugedRank, graftFits } from '../data/cards.js';
+import { CARDS, STARTER_DECK, rewardPool, graftPool, ARCHETYPES, MIGRATE_CARDS, RETIRED_ATTACKS, UNKNOWN_CARD_FALLBACK, isOffensive, RANK_RANGE, gaugedRank, graftFits, refineCardSpec, refineDiscoveries } from '../data/cards.js';
 import { RELICS, relicPool } from '../data/relics.js';
 import { ENEMIES, FORMATIONS, ELITES, BOSSES } from '../data/enemies.js';
 import { EVENTS, EVENT_MAP } from '../data/events.js';
@@ -17,7 +17,7 @@ export const PARTY_BASE = { V: 46, C: 34, S: 38 };
 export const PARTY_HP_BONUS = 12;
 export const PARTY_MAX_HP = PARTY_BASE.V + PARTY_BASE.C + PARTY_BASE.S + PARTY_HP_BONUS;
 export const MAP_DEPTHS = 8; // depths 0..7, boss at depth 8
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 
 // Save version 5 (docs/COMBAT_SPEC.md §19): card ids of the old Opener/Converter/Closer catalogue that
 // Phase 4 withholds (they need Relays) become a converted card of the same hero and rarity; unknown ids
@@ -25,13 +25,13 @@ export const SAVE_VERSION = 7;
 // kept, and the number of cards does not change. A suit set by an earlier recut is marked as such.
 export function migrateCardId(id) {
   if (MIGRATE_CARDS[id]) return MIGRATE_CARDS[id];
-  return CARDS[id] ? id : UNKNOWN_CARD_FALLBACK;
+  return Object.hasOwn(CARDS, id) || Object.hasOwn(RETIRED_ATTACKS, id) ? id : UNKNOWN_CARD_FALLBACK;
 }
 function migrateCard(c) {
   const id = migrateCardId(c.id);
   const out = { ...c, id };
   if (id !== c.id) out.was = c.id;
-  if (out.variant && out.variant !== CARDS[id].variant && out.recut === undefined) out.recut = true;
+  if (out.variant && out.variant !== (CARDS[id]?.variant || RETIRED_ATTACKS[id]?.[1]) && out.recut === undefined) out.recut = true;
   return out;
 }
 const migrateSpec = (spec) => (spec && spec.id ? { ...spec, id: migrateCardId(spec.id) } : spec);
@@ -76,6 +76,17 @@ function migrate(obj) {
     // the starting relic separately or remember cards already removed from the deck.
     obj.progress = { cards: [...new Set((obj.deck || []).map((c) => c.id))], recipes: {}, proofs: {} };
     obj.version = 7;
+  }
+  if (obj.version === 7) {
+    obj.deck = (obj.deck || []).map(refineCardSpec);
+    const p = obj.pending;
+    if (Array.isArray(p?.cards)) p.cards = p.cards.map(refineCardSpec);
+    if (Array.isArray(p?.stock?.cards)) p.stock.cards = p.stock.cards.map((x) => ({ ...x, spec: refineCardSpec(x.spec) }));
+    if (Array.isArray(p?.result?.offer)) p.result.offer = p.result.offer.map(refineCardSpec);
+    if (Array.isArray(obj.progress?.cards)) {
+      obj.progress.cards = [...new Set([...refineDiscoveries(obj.progress.cards), ...obj.deck.map((c) => c.id)])];
+    }
+    obj.version = 8;
   }
   return obj;
 }
@@ -631,7 +642,17 @@ export class Run {
       else if (i === 0 && openingSignal && rng.chance(0.4)) want = openingSignal;
       else if (i === 1 && second && rng.chance(0.4)) want = second;
       else if (i === 1 && lead && !second && rng.chance(0.3)) want = lead;
-      if (want) {
+      // Foundation cards fill gaps in the deck without competing for a named
+      // archetype's reward, the opening hand tools, a pivot, or a rarity promise.
+      const standardSlot = !tag && rarity === 'common' &&
+        ((i === 0 && needBasic && !lead) || (i === 0 && !want && rng.chance(0.20)) || (n === 5 && i === 3));
+      const standard = standardSlot && cands.filter((c) => c.standard);
+      if (standard?.length) {
+        const countsByRank = [0, 0, 0, 0];
+        for (const inst of this.d.deck) if (CARDS[inst.id].category === 'basic') countsByRank[this.effRank(inst)]++;
+        const minimum = Math.min(...standard.map((c) => countsByRank[c.rank]));
+        cands = standard.filter((c) => countsByRank[c.rank] === minimum);
+      } else if (want) {
         let t = cands.filter((c) => c.tags.includes(want));
         // If the style is unavailable at the rolled rarity, try its nearest permitted rarities.
         if (!t.length && !(i === 0 && needBasic)) {

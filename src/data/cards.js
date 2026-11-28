@@ -68,22 +68,24 @@ function card(def) {
 }
 
 // ───────────────────────────── BASIC ATTACKS (neutral) ─────────────────────────────
-// Weak (rank 1)
-card({
-  id: 'scrapline', name: 'Scrapline', category: 'basic', rank: 1, variant: 'A', rarity: 'starter', anim: 'shoot', glyph: 'arrow',
-  v: { d: [5, 7] }, text: 'Deal {d}.',
-  fx: (A) => A.dmg(A.v('d')),
-});
-card({
-  id: 'spark_primer', name: 'Spark Primer', category: 'basic', rank: 1, variant: 'EX', rarity: 'common', anim: 'cast', glyph: 'star',
-  v: { d: [3, 4], b: [5, 7] }, text: 'Deal {d}. The next card this combo deals +{b}.', tags: ['flow'],
-  fx: (A) => { A.dmg(A.v('d')); A.nextBonus(A.v('b')); },
-});
-card({
-  id: 'pinprick', name: 'Pinprick', category: 'basic', rank: 1, variant: 'A', rarity: 'common', anim: 'shoot', glyph: 'arrow',
-  v: { d: [3, 4] }, text: 'Deal {d} twice.',
-  fx: (A) => A.dmg(A.v('d'), { hits: 2 }),
-});
+// The standard pair at each rank has the same power and execution rules. The suit is the choice.
+const standard = [
+  ['scrapline', 'Weak Attack A', 1, 'A', 5, 7],
+  ['scrapline_b', 'Weak Attack B', 1, 'B', 5, 7],
+  ['rivet_jab', 'Medium Attack A', 2, 'A', 7, 9],
+  ['hotwire', 'Medium Attack B', 2, 'B', 7, 9],
+  ['piston_strike', 'Strong Attack A', 3, 'A', 10, 13],
+  ['piston_strike_b', 'Strong Attack B', 3, 'B', 10, 13],
+];
+for (const [id, name, rank, variant, base, upgraded] of standard) {
+  card({
+    id, name, rank, variant, category: 'basic', standard: true, rarity: 'common',
+    anim: 'shoot', glyph: 'arrow', v: { d: [base, upgraded] }, text: 'Deal {d}.',
+    fx: (A) => A.dmg(A.v('d')),
+  });
+}
+
+// Specialized Weak (rank 1)
 card({
   id: 'first_rung', name: 'First Rung', category: 'basic', rank: 1, variant: 'A', rarity: 'uncommon', anim: 'shoot', glyph: 'ladder',
   v: { d: [3, 4], b: [2, 3] }, text: 'Deal {d}. This combo, every Step deals +{b} bonus damage.', tags: ['ladder'],
@@ -104,37 +106,7 @@ card({
   v: { d: [2, 3] }, text: 'Deal {d} to ALL. Unlock every Locked hand card; +1 Momentum for each.', tags: ['interference'],
   fx: (A) => { A.dmg(A.v('d'), { all: true }); const n = A.unlockAll(); A.mom(n); },
 });
-card({
-  id: 'open_ledger', name: 'Open Ledger', category: 'basic', rank: 1, variant: 'A', rarity: 'uncommon', anim: 'melee', glyph: 'coin',
-  v: { d: [3, 4], p: [50, 75] }, text: 'Deal {d}. If this combo Cashes Out, payout +{p}%.', tags: ['cashout'],
-  fx: (A) => { A.dmg(A.v('d')); A.ctxAdd('cashPct', A.v('p') / 100); },
-});
-// Medium (rank 2)
-card({
-  id: 'rivet_jab', name: 'Rivet Jab', category: 'basic', rank: 2, variant: 'A', rarity: 'starter', anim: 'melee', glyph: 'hammer',
-  v: { d: [7, 9] }, text: 'Deal {d}.',
-  fx: (A) => A.dmg(A.v('d')),
-});
-card({
-  id: 'hotwire', name: 'Hotwire', category: 'basic', rank: 2, variant: 'B', rarity: 'starter', anim: 'cast', glyph: 'bolt',
-  v: { d: [4, 5], m: [1, 2] }, text: 'Deal {d}. Gain {m} Momentum.', tags: ['momentum'],
-  fx: (A) => { A.dmg(A.v('d')); A.mom(A.v('m')); },
-});
-card({
-  id: 'step_up', name: 'Step Up', category: 'basic', rank: 2, variant: 'A', rarity: 'common', anim: 'shoot', glyph: 'ladder',
-  v: { d: [4, 5], b: [3, 4] }, text: 'Deal {d}. As a Step: +{b} damage and +1 Momentum.', tags: ['ladder'],
-  fx: (A) => { const st = A.step; A.dmg(A.v('d') + (st ? A.v('b') : 0)); if (st) A.mom(1); },
-});
-card({
-  id: 'tinder_toss', name: 'Tinder Toss', category: 'basic', rank: 2, variant: 'A', rarity: 'common', anim: 'cast', glyph: 'flame',
-  v: { s: [3, 5] }, text: 'Apply {s} Scorch.', tags: ['interference'],
-  fx: (A) => A.status('scorch', A.v('s')),
-});
-card({
-  id: 'gauge_read', name: 'Gauge Read', category: 'basic', rank: 2, variant: 'EX', rarity: 'uncommon', anim: 'shoot', glyph: 'eye',
-  v: { d: [4, 6] }, text: 'Deal {d}. If Reserve holds a card: +1 Momentum and +0.3s Flow.', tags: ['reserve'],
-  fx: (A) => { A.dmg(A.v('d')); if (A.c.reserve.length > 0) { A.mom(1); A.flow(0.3); } },
-});
+// Specialized Medium (rank 2)
 card({
   id: 'junk_toss', name: 'Junk Toss', category: 'basic', rank: 2, variant: 'B', rarity: 'common', anim: 'melee', glyph: 'box',
   v: { d: [8, 10], b: [11, 13] }, text: 'Deal {d}. If you played a Churn draw this combo: +{b} damage.', tags: ['churn'],
@@ -146,30 +118,15 @@ card({
   fx: (A) => { A.dmg(A.v('d') + (A.disruptedCount() > 0 ? A.v('b') : 0)); A.status('exposed', 4); },
 });
 card({
-  id: 'polarity_shift', name: 'Polarity Shift', category: 'basic', rank: 2, variant: 'A', rarity: 'uncommon', anim: 'cast', glyph: 'wave',
-  v: { d: [4, 5] }, text: "Deal {d}. The combo's suit becomes B.", tags: ['variant'],
-  fx: (A) => { A.dmg(A.v('d')); A.setVariant('B'); },
-});
-card({
   id: 'tally_mark', name: 'Tally Mark', category: 'basic', rank: 2, variant: 'A', rarity: 'uncommon', anim: 'melee', glyph: 'coin',
   v: { d: [3, 4], b: [3, 4] }, text: 'Deal {d}. If this combo Cashes Out, payout +{b} per card.', tags: ['cashout'],
   fx: (A) => { A.dmg(A.v('d')); A.ctxAdd('cashPerCard', A.v('b')); },
 });
-// Strong (rank 3)
-card({
-  id: 'piston_strike', name: 'Piston Strike', category: 'basic', rank: 3, variant: 'A', rarity: 'starter', anim: 'melee', glyph: 'hammer',
-  v: { d: [10, 13] }, text: 'Deal {d}.',
-  fx: (A) => A.dmg(A.v('d')),
-});
+// Specialized Strong (rank 3)
 card({
   id: 'quickdraw', name: 'Quickdraw', category: 'basic', rank: 3, variant: 'B', rarity: 'common', anim: 'shoot', glyph: 'clock',
   v: { d: [8, 10] }, text: 'Deal {d}. Later cards this combo refund +0.3s more Flow.', tags: ['flow'],
   fx: (A) => { A.dmg(A.v('d')); A.ctxAdd('refundBonus', 0.3); },
-});
-card({
-  id: 'tripwire', name: 'Tripwire', category: 'basic', rank: 3, variant: 'A', rarity: 'common', anim: 'shoot', glyph: 'hook',
-  v: { d: [6, 8] }, text: 'Deal {d}. Apply 4s Weak (target deals -25%).', tags: ['guard'],
-  fx: (A) => { A.dmg(A.v('d')); A.status('weak', 4); },
 });
 card({
   id: 'shield_bash', name: 'Shield Bash', category: 'basic', rank: 3, variant: 'B', rarity: 'common', anim: 'melee', glyph: 'shield',
@@ -567,9 +524,9 @@ export function graftFits(g, def) {
 // Starter deck (docs/COMBAT_SPEC.md §18.1, prototype): 3 Weak, 3 Medium, 2 Strong with mixed suits,
 // one rank-4 arte per hero, Corvin's heal and Hessa's Guard/Cover support.
 export const STARTER_DECK = [
-  { id: 'scrapline', variant: 'A' }, { id: 'scrapline', variant: 'B' }, { id: 'scrapline', variant: 'A' },
-  { id: 'rivet_jab', variant: 'A' }, { id: 'rivet_jab', variant: 'B' }, { id: 'hotwire', variant: 'B' },
-  { id: 'piston_strike', variant: 'A' }, { id: 'piston_strike', variant: 'B' },
+  { id: 'scrapline' }, { id: 'scrapline_b' }, { id: 'scrapline' },
+  { id: 'rivet_jab' }, { id: 'hotwire' }, { id: 'hotwire' },
+  { id: 'piston_strike' }, { id: 'piston_strike_b' },
   { id: 'scrapfall' }, { id: 'thermal_lance' }, { id: 'bolt_volley' },
   { id: 'mend_circuit' }, { id: 'salvage' },
 ];
@@ -588,6 +545,35 @@ export const MIGRATE_CARDS = {
   chorus_break: 'feedback_loop', grand_relay: 'ladder_peak', pressure_valve: 'overpressure',
 };
 export const UNKNOWN_CARD_FALLBACK = 'rivet_jab';
+
+// Retired attacks become a reliable card of the same printed rank. An old EX suit
+// survives on the instance even though an unmodified standard attack has an A or B suit.
+export const RETIRED_ATTACKS = Object.freeze({
+  spark_primer: ['scrapline', 'EX'],
+  pinprick: ['scrapline', 'A'],
+  open_ledger: ['scrapline', 'A'],
+  step_up: ['rivet_jab', 'A'],
+  tinder_toss: ['rivet_jab', 'A'],
+  gauge_read: ['rivet_jab', 'EX'],
+  polarity_shift: ['rivet_jab', 'A'],
+  tripwire: ['piston_strike', 'A'],
+});
+
+const STANDARD_B = { scrapline: 'scrapline_b', rivet_jab: 'hotwire', piston_strike: 'piston_strike_b' };
+
+export function refineCardSpec(spec) {
+  if (!spec?.id) return spec;
+  const previous = Object.hasOwn(RETIRED_ATTACKS, spec.id) ? RETIRED_ATTACKS[spec.id] : null;
+  const [base, suit] = previous || [spec.id, CARDS[spec.id]?.variant];
+  const variant = spec.variant || suit;
+  const id = variant === 'B' && !spec.recut && Object.hasOwn(STANDARD_B, base) ? STANDARD_B[base] : base;
+  if (id === spec.id) return spec;
+  return { ...spec, id, ...(previous && !spec.variant && suit !== CARDS[id].variant ? { variant: suit } : {}) };
+}
+
+export function refineDiscoveries(ids) {
+  return [...new Set(ids.flatMap((id) => [id, refineCardSpec({ id }).id]))];
+}
 
 export function cardValue(def, up, key) {
   const pair = def.v[key];
